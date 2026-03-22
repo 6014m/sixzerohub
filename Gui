@@ -22,8 +22,9 @@ local COLORS = {
     border = Color3.fromRGB(40, 43, 48),
 }
 
-local SIDEBAR_WIDTH = 56
-local TOPBAR_HEIGHT = 56
+local BAR_THICKNESS = 4
+local SIDEBAR_WIDTH = BAR_THICKNESS
+local TOPBAR_HEIGHT = BAR_THICKNESS
 local TWEEN_SPEED = 0.3
 local guiVisible = true
 
@@ -56,48 +57,42 @@ topBar.BackgroundColor3 = COLORS.darker
 topBar.BorderSizePixel = 0
 topBar.Parent = screenGui
 
-local topBarBorder = Instance.new("Frame")
-topBarBorder.Size = UDim2.new(1, 0, 0, 1)
-topBarBorder.Position = UDim2.new(0, 0, 1, 0)
-topBarBorder.BackgroundColor3 = COLORS.border
-topBarBorder.BorderSizePixel = 0
-topBarBorder.Parent = topBar
 
--- diagonal slant bridging the inner corner of the L shape
--- clip container sits at the corner, only reveals the triangle that fills the gap
-local SLANT_SIZE = 70
+-- diagonal slant in the top-left corner bridging the two bars
+-- this is the main visual feature — big triangle with the title text on it
+local SLANT_REACH = 140 -- how far the diagonal extends from the corner
 local slantClip = Instance.new("Frame")
 slantClip.Name = "SlantClip"
-slantClip.Size = UDim2.new(0, SLANT_SIZE, 0, SLANT_SIZE)
-slantClip.Position = UDim2.new(0, SIDEBAR_WIDTH, 0, TOPBAR_HEIGHT)
+slantClip.Size = UDim2.new(0, SLANT_REACH, 0, SLANT_REACH)
+slantClip.Position = UDim2.new(0, 0, 0, 0)
 slantClip.BackgroundTransparency = 1
 slantClip.ClipsDescendants = true
 slantClip.Parent = screenGui
 
--- rotated square inside the clip — centered at clip's top-left corner
--- only the bottom-right quarter of the diamond is visible = triangle
 local slant = Instance.new("Frame")
 slant.Name = "Slant"
 slant.AnchorPoint = Vector2.new(0.5, 0.5)
-slant.Size = UDim2.new(0, SLANT_SIZE * 1.42, 0, SLANT_SIZE * 1.42) -- side * sqrt(2) to fill
+slant.Size = UDim2.new(0, SLANT_REACH * 1.5, 0, SLANT_REACH * 1.5)
 slant.Position = UDim2.new(0, 0, 0, 0)
 slant.BackgroundColor3 = COLORS.darker
 slant.BorderSizePixel = 0
 slant.Rotation = 45
 slant.Parent = slantClip
 
--- title in top bar
+-- title text on the diagonal slant, rotated -45 to follow the angle
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
-titleLabel.Size = UDim2.new(0, 200, 1, 0)
-titleLabel.Position = UDim2.new(0, 12, 0, 0)
+titleLabel.Size = UDim2.new(0, 160, 0, 24)
+titleLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+titleLabel.Position = UDim2.new(0, SLANT_REACH * 0.38, 0, SLANT_REACH * 0.38)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Text = "Six Zero Hub"
 titleLabel.TextColor3 = COLORS.text
 titleLabel.TextSize = 14
 titleLabel.Font = Enum.Font.GothamBold
-titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.Parent = topBar
+titleLabel.Rotation = -45
+titleLabel.ZIndex = 3
+titleLabel.Parent = screenGui
 
 -- eye toggle button — lives in its own ScreenGui so it's always clickable
 local eyeBtn = Instance.new("TextButton")
@@ -134,39 +129,7 @@ sidebar.BackgroundColor3 = COLORS.background
 sidebar.BorderSizePixel = 0
 sidebar.Parent = screenGui
 
-local sidebarBorder = Instance.new("Frame")
-sidebarBorder.Size = UDim2.new(0, 1, 1, 0)
-sidebarBorder.Position = UDim2.new(1, 0, 0, 0)
-sidebarBorder.BackgroundColor3 = COLORS.border
-sidebarBorder.BorderSizePixel = 0
-sidebarBorder.Parent = sidebar
-
-local sidebarGradient = Instance.new("UIGradient")
-sidebarGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(220, 220, 220)),
-})
-sidebarGradient.Rotation = 90
-sidebarGradient.Parent = sidebar
-
----------- CONTENT AREA ----------
-
-local contentArea = Instance.new("ScrollingFrame")
-contentArea.Name = "Content"
-contentArea.Size = UDim2.new(1, -10, 1, -80)
-contentArea.Position = UDim2.new(0, 5, 0, 5)
-contentArea.BackgroundTransparency = 1
-contentArea.BorderSizePixel = 0
-contentArea.ScrollBarThickness = 3
-contentArea.ScrollBarImageColor3 = COLORS.textMuted
-contentArea.CanvasSize = UDim2.new(0, 0, 0, 0)
-contentArea.AutomaticCanvasSize = Enum.AutomaticSize.Y
-contentArea.Parent = sidebar
-
-local contentLayout = Instance.new("UIListLayout")
-contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-contentLayout.Padding = UDim.new(0, 4)
-contentLayout.Parent = contentArea
+sidebar.BackgroundColor3 = COLORS.darker
 
 ---------- ACTIVE SCRIPTS SYSTEM ----------
 
@@ -448,8 +411,8 @@ activeCloseBtn.MouseButton1Click:Connect(closeActiveMenu)
 
 local activeBtn = Instance.new("TextButton")
 activeBtn.Name = "ActiveButton"
-activeBtn.Size = UDim2.new(0, 50, 0, 30)
-activeBtn.Position = UDim2.new(1, -58, 1, -74)
+activeBtn.Size = UDim2.new(0, 50, 0, 26)
+activeBtn.Position = UDim2.new(0, 6, 1, -64)
 activeBtn.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
 activeBtn.BorderSizePixel = 0
 activeBtn.Text = "Active"
@@ -457,13 +420,13 @@ activeBtn.TextColor3 = COLORS.darker
 activeBtn.TextSize = 12
 activeBtn.Font = Enum.Font.GothamBold
 activeBtn.AutoButtonColor = false
-activeBtn.Parent = sidebar
+activeBtn.Parent = screenGui
 
 Instance.new("UICorner", activeBtn).CornerRadius = UDim.new(0, 6)
 
 local activeTooltip = Instance.new("Frame")
 activeTooltip.Size = UDim2.new(0, 110, 0, 28)
-activeTooltip.Position = UDim2.new(0, -115, 0.5, -14)
+activeTooltip.Position = UDim2.new(1, 5, 0.5, -14)
 activeTooltip.BackgroundColor3 = COLORS.darker
 activeTooltip.BorderSizePixel = 0
 activeTooltip.Visible = false
@@ -494,8 +457,8 @@ activeBtn.MouseButton1Click:Connect(toggleActiveMenu)
 
 local uniBtn = Instance.new("TextButton")
 uniBtn.Name = "UniButton"
-uniBtn.Size = UDim2.new(0, 50, 0, 30)
-uniBtn.Position = UDim2.new(1, -58, 1, -38)
+uniBtn.Size = UDim2.new(0, 50, 0, 26)
+uniBtn.Position = UDim2.new(0, 6, 1, -34)
 uniBtn.BackgroundColor3 = COLORS.accent
 uniBtn.BorderSizePixel = 0
 uniBtn.Text = "Uni"
@@ -503,13 +466,13 @@ uniBtn.TextColor3 = COLORS.text
 uniBtn.TextSize = 14
 uniBtn.Font = Enum.Font.GothamBold
 uniBtn.AutoButtonColor = false
-uniBtn.Parent = sidebar
+uniBtn.Parent = screenGui
 
 Instance.new("UICorner", uniBtn).CornerRadius = UDim.new(0, 6)
 
 local uniTooltip = Instance.new("Frame")
 uniTooltip.Size = UDim2.new(0, 130, 0, 28)
-uniTooltip.Position = UDim2.new(0, -135, 0.5, -14)
+uniTooltip.Position = UDim2.new(1, 5, 0.5, -14)
 uniTooltip.BackgroundColor3 = COLORS.darker
 uniTooltip.BorderSizePixel = 0
 uniTooltip.Visible = false
@@ -793,6 +756,9 @@ local function toggleGuiVisibility()
         topBar.Visible = true
         sidebar.Visible = true
         slantClip.Visible = true
+        titleLabel.Visible = true
+        activeBtn.Visible = true
+        uniBtn.Visible = true
         TweenService:Create(topBar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
             Position = UDim2.new(0, 0, 0, 0)
         }):Play()
@@ -814,6 +780,9 @@ local function toggleGuiVisibility()
                 topBar.Visible = false
                 sidebar.Visible = false
                 slantClip.Visible = false
+                titleLabel.Visible = false
+                activeBtn.Visible = false
+                uniBtn.Visible = false
             end
         end)
         moveChat(false)
