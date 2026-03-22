@@ -22,9 +22,7 @@ local COLORS = {
     border = Color3.fromRGB(40, 43, 48),
 }
 
-local BAR_THICKNESS = 4
-local SIDEBAR_WIDTH = BAR_THICKNESS
-local TOPBAR_HEIGHT = BAR_THICKNESS
+local SLANT_REACH = 140 -- how far the corner triangle extends
 local TWEEN_SPEED = 0.3
 local guiVisible = true
 
@@ -36,7 +34,14 @@ screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 999
 screenGui.IgnoreGuiInset = true
-screenGui.Parent = playerGui
+
+-- try CoreGui first so it renders above Roblox default GUIs, fall back to PlayerGui
+local ok = pcall(function()
+    screenGui.Parent = game:GetService("CoreGui")
+end)
+if not ok then
+    screenGui.Parent = playerGui
+end
 
 -- separate always-visible ScreenGui for the eye toggle so it persists when main GUI is hidden
 local toggleGui = Instance.new("ScreenGui")
@@ -46,21 +51,9 @@ toggleGui.DisplayOrder = 1000
 toggleGui.IgnoreGuiInset = true
 toggleGui.Parent = playerGui
 
----------- INVERTED L SHAPE ----------
+---------- CORNER BAR ----------
 
--- top bar (full width)
-local topBar = Instance.new("Frame")
-topBar.Name = "TopBar"
-topBar.Size = UDim2.new(1, 0, 0, TOPBAR_HEIGHT)
-topBar.Position = UDim2.new(0, 0, 0, 0)
-topBar.BackgroundColor3 = COLORS.darker
-topBar.BorderSizePixel = 0
-topBar.Parent = screenGui
-
-
--- diagonal slant in the top-left corner bridging the two bars
--- this is the main visual feature — big triangle with the title text on it
-local SLANT_REACH = 140 -- how far the diagonal extends from the corner
+-- diagonal corner bar in the top-left — the main visual element
 local slantClip = Instance.new("Frame")
 slantClip.Name = "SlantClip"
 slantClip.Size = UDim2.new(0, SLANT_REACH, 0, SLANT_REACH)
@@ -120,16 +113,6 @@ eyeBtn.MouseLeave:Connect(function()
     TweenService:Create(eyeBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
 end)
 
--- left sidebar (below top bar)
-local sidebar = Instance.new("Frame")
-sidebar.Name = "Sidebar"
-sidebar.Size = UDim2.new(0, SIDEBAR_WIDTH, 1, -TOPBAR_HEIGHT)
-sidebar.Position = UDim2.new(0, 0, 0, TOPBAR_HEIGHT + 1)
-sidebar.BackgroundColor3 = COLORS.background
-sidebar.BorderSizePixel = 0
-sidebar.Parent = screenGui
-
-sidebar.BackgroundColor3 = COLORS.darker
 
 ---------- ACTIVE SCRIPTS SYSTEM ----------
 
@@ -667,7 +650,7 @@ rebuildSortOrder()
 ---------- GUI OFFSET MANAGEMENT ----------
 
 local movedScreenGuis = {}
-local GUI_OFFSET = SIDEBAR_WIDTH + 16
+local GUI_OFFSET = 10
 
 local function shiftGameGuis(show)
     for _, gui in ipairs(playerGui:GetChildren()) do
@@ -753,38 +736,17 @@ local function toggleGuiVisibility()
     eyeBtn.TextTransparency = guiVisible and 0 or 0.5
 
     if guiVisible then
-        topBar.Visible = true
-        sidebar.Visible = true
         slantClip.Visible = true
         titleLabel.Visible = true
         activeBtn.Visible = true
         uniBtn.Visible = true
-        TweenService:Create(topBar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Position = UDim2.new(0, 0, 0, 0)
-        }):Play()
-        TweenService:Create(sidebar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Position = UDim2.new(0, 0, 0, TOPBAR_HEIGHT + 1)
-        }):Play()
         moveChat(true)
         shiftGameGuis(true)
     else
-        TweenService:Create(topBar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-            Position = UDim2.new(0, 0, 0, -TOPBAR_HEIGHT)
-        }):Play()
-        local t = TweenService:Create(sidebar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-            Position = UDim2.new(0, -SIDEBAR_WIDTH, 0, TOPBAR_HEIGHT + 1)
-        })
-        t:Play()
-        t.Completed:Connect(function()
-            if not guiVisible then
-                topBar.Visible = false
-                sidebar.Visible = false
-                slantClip.Visible = false
-                titleLabel.Visible = false
-                activeBtn.Visible = false
-                uniBtn.Visible = false
-            end
-        end)
+        slantClip.Visible = false
+        titleLabel.Visible = false
+        activeBtn.Visible = false
+        uniBtn.Visible = false
         moveChat(false)
         shiftGameGuis(false)
         closeUniMenu()
