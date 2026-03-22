@@ -1,28 +1,30 @@
 -- Six Zero Hub GUI
--- Left sidebar panel with Discord grey theme, toggle visibility, Uni scripts menu
+-- Inverted L shape: top bar + left sidebar, Discord grey theme
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 -- Discord grey palette
 local COLORS = {
-    background = Color3.fromRGB(47, 49, 54),      -- #2f3136
-    sidebar = Color3.fromRGB(54, 57, 63),          -- #36393f
-    darker = Color3.fromRGB(32, 34, 37),           -- #202225
-    accent = Color3.fromRGB(88, 101, 242),         -- blurple
-    text = Color3.fromRGB(220, 221, 222),          -- #dcddde
-    textMuted = Color3.fromRGB(142, 146, 151),     -- #8e9297
-    hover = Color3.fromRGB(64, 68, 75),            -- #40444b
-    border = Color3.fromRGB(40, 43, 48),           -- subtle border
+    background = Color3.fromRGB(47, 49, 54),
+    sidebar = Color3.fromRGB(54, 57, 63),
+    darker = Color3.fromRGB(32, 34, 37),
+    accent = Color3.fromRGB(88, 101, 242),
+    text = Color3.fromRGB(220, 221, 222),
+    textMuted = Color3.fromRGB(142, 146, 151),
+    hover = Color3.fromRGB(64, 68, 75),
+    border = Color3.fromRGB(40, 43, 48),
 }
 
-local PANEL_WIDTH = 160
+local SIDEBAR_WIDTH = 140
+local TOPBAR_HEIGHT = 36
 local TWEEN_SPEED = 0.3
 local guiVisible = true
 
@@ -32,59 +34,32 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SixZeroHub"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.DisplayOrder = -1 -- render below default Roblox GUIs
-screenGui.IgnoreGuiInset = true -- extend panel up behind the top bar
+screenGui.DisplayOrder = -1
+screenGui.IgnoreGuiInset = true
 screenGui.Parent = playerGui
 
----------- MAIN PANEL ----------
+---------- INVERTED L SHAPE ----------
 
-local panel = Instance.new("Frame")
-panel.Name = "Panel"
-panel.Size = UDim2.new(0, PANEL_WIDTH, 1, 0)
-panel.Position = UDim2.new(0, 0, 0, 0)
-panel.BackgroundColor3 = COLORS.background
-panel.BorderSizePixel = 0
-panel.Parent = screenGui
+-- top bar (full width)
+local topBar = Instance.new("Frame")
+topBar.Name = "TopBar"
+topBar.Size = UDim2.new(1, 0, 0, TOPBAR_HEIGHT)
+topBar.Position = UDim2.new(0, 0, 0, 0)
+topBar.BackgroundColor3 = COLORS.darker
+topBar.BorderSizePixel = 0
+topBar.Parent = screenGui
 
--- right edge border
-local panelBorder = Instance.new("Frame")
-panelBorder.Name = "Border"
-panelBorder.Size = UDim2.new(0, 1, 1, 0)
-panelBorder.Position = UDim2.new(1, 0, 0, 0)
-panelBorder.BackgroundColor3 = COLORS.border
-panelBorder.BorderSizePixel = 0
-panelBorder.Parent = panel
+local topBarBorder = Instance.new("Frame")
+topBarBorder.Size = UDim2.new(1, 0, 0, 1)
+topBarBorder.Position = UDim2.new(0, 0, 1, 0)
+topBarBorder.BackgroundColor3 = COLORS.border
+topBarBorder.BorderSizePixel = 0
+topBarBorder.Parent = topBar
 
--- subtle gradient overlay
-local gradient = Instance.new("UIGradient")
-gradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(220, 220, 220)),
-})
-gradient.Rotation = 90
-gradient.Parent = panel
-
----------- HEADER ----------
-
-local header = Instance.new("Frame")
-header.Name = "Header"
-header.Size = UDim2.new(1, 0, 0, 36)
-header.Position = UDim2.new(0, 0, 0, 0)
-header.BackgroundColor3 = COLORS.darker
-header.BorderSizePixel = 0
-header.Parent = panel
-
-local headerBorder = Instance.new("Frame")
-headerBorder.Name = "HeaderBorder"
-headerBorder.Size = UDim2.new(1, 0, 0, 1)
-headerBorder.Position = UDim2.new(0, 0, 1, 0)
-headerBorder.BackgroundColor3 = COLORS.border
-headerBorder.BorderSizePixel = 0
-headerBorder.Parent = header
-
+-- title in top bar
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
-titleLabel.Size = UDim2.new(1, -40, 1, 0)
+titleLabel.Size = UDim2.new(0, 200, 1, 0)
 titleLabel.Position = UDim2.new(0, 12, 0, 0)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Text = "Six Zero Hub"
@@ -92,61 +67,71 @@ titleLabel.TextColor3 = COLORS.text
 titleLabel.TextSize = 15
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.Parent = header
+titleLabel.Parent = topBar
 
----------- TOP BAR TOGGLE ----------
+-- eye toggle button in top bar, far right
+local eyeBtn = Instance.new("TextButton")
+eyeBtn.Name = "EyeToggle"
+eyeBtn.Size = UDim2.new(0, 32, 0, 26)
+eyeBtn.Position = UDim2.new(1, -42, 0.5, -13)
+eyeBtn.BackgroundColor3 = COLORS.hover
+eyeBtn.BackgroundTransparency = 0.5
+eyeBtn.BorderSizePixel = 0
+eyeBtn.AutoButtonColor = false
+eyeBtn.Font = Enum.Font.GothamBold
+eyeBtn.TextSize = 16
+eyeBtn.Text = "\xF0\x9F\x91\x81"
+eyeBtn.TextColor3 = COLORS.text
+eyeBtn.Parent = topBar
 
--- eye toggle button in the top right corner of the screen
-local topbarGui = Instance.new("ScreenGui")
-topbarGui.Name = "SixZeroTopbar"
-topbarGui.ResetOnSpawn = false
-topbarGui.DisplayOrder = 100
-topbarGui.IgnoreGuiInset = true
-topbarGui.Parent = playerGui
+local eyeBtnCorner = Instance.new("UICorner")
+eyeBtnCorner.CornerRadius = UDim.new(0, 6)
+eyeBtnCorner.Parent = eyeBtn
 
-local topBtn = Instance.new("TextButton")
-topBtn.Name = "SixZeroToggle"
-topBtn.Size = UDim2.new(0, 32, 0, 32)
-topBtn.Position = UDim2.new(1, -42, 0, 4)
-topBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-topBtn.BackgroundTransparency = 0.5
-topBtn.BorderSizePixel = 0
-topBtn.AutoButtonColor = false
-topBtn.Font = Enum.Font.GothamBold
-topBtn.TextSize = 18
-topBtn.Text = "\xF0\x9F\x91\x81" -- eye emoji
-topBtn.TextColor3 = COLORS.text
-topBtn.Parent = topbarGui
-
-local topBtnCorner = Instance.new("UICorner")
-topBtnCorner.CornerRadius = UDim.new(1, 0)
-topBtnCorner.Parent = topBtn
-
-local topbarEyeLabel = topBtn -- reference for toggling text
-
-topBtn.MouseEnter:Connect(function()
-    TweenService:Create(topBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.3}):Play()
+eyeBtn.MouseEnter:Connect(function()
+    TweenService:Create(eyeBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.2}):Play()
 end)
-topBtn.MouseLeave:Connect(function()
-    TweenService:Create(topBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
+eyeBtn.MouseLeave:Connect(function()
+    TweenService:Create(eyeBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
 end)
-topBtn.MouseButton1Click:Connect(function()
-    toggleGui()
-end)
+
+-- left sidebar (below top bar)
+local sidebar = Instance.new("Frame")
+sidebar.Name = "Sidebar"
+sidebar.Size = UDim2.new(0, SIDEBAR_WIDTH, 1, -TOPBAR_HEIGHT)
+sidebar.Position = UDim2.new(0, 0, 0, TOPBAR_HEIGHT + 1)
+sidebar.BackgroundColor3 = COLORS.background
+sidebar.BorderSizePixel = 0
+sidebar.Parent = screenGui
+
+local sidebarBorder = Instance.new("Frame")
+sidebarBorder.Size = UDim2.new(0, 1, 1, 0)
+sidebarBorder.Position = UDim2.new(1, 0, 0, 0)
+sidebarBorder.BackgroundColor3 = COLORS.border
+sidebarBorder.BorderSizePixel = 0
+sidebarBorder.Parent = sidebar
+
+local sidebarGradient = Instance.new("UIGradient")
+sidebarGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(220, 220, 220)),
+})
+sidebarGradient.Rotation = 90
+sidebarGradient.Parent = sidebar
 
 ---------- CONTENT AREA ----------
 
 local contentArea = Instance.new("ScrollingFrame")
 contentArea.Name = "Content"
-contentArea.Size = UDim2.new(1, -10, 1, -86)
-contentArea.Position = UDim2.new(0, 5, 0, 40)
+contentArea.Size = UDim2.new(1, -10, 1, -80)
+contentArea.Position = UDim2.new(0, 5, 0, 5)
 contentArea.BackgroundTransparency = 1
 contentArea.BorderSizePixel = 0
 contentArea.ScrollBarThickness = 3
 contentArea.ScrollBarImageColor3 = COLORS.textMuted
 contentArea.CanvasSize = UDim2.new(0, 0, 0, 0)
 contentArea.AutomaticCanvasSize = Enum.AutomaticSize.Y
-contentArea.Parent = panel
+contentArea.Parent = sidebar
 
 local contentLayout = Instance.new("UIListLayout")
 contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -156,17 +141,15 @@ contentLayout.Parent = contentArea
 ---------- ACTIVE SCRIPTS SYSTEM ----------
 
 local loadedScripts = {}
-local activeScripts = {} -- { [fileKey] = { name, cleanup, row } }
+local activeScripts = {}
 local activeMenuOpen = false
 
--- global registration function for scripts to call
 _G.SixZeroHubRegister = function(displayName, fileKey, cleanupFn)
     activeScripts[fileKey] = {
         name = displayName,
         cleanup = cleanupFn,
-        row = nil, -- set when active menu builds rows
+        row = nil,
     }
-    -- refresh active menu if open
     if activeMenuOpen then
         refreshActiveList()
     end
@@ -218,7 +201,6 @@ activeHeaderFill.BackgroundColor3 = COLORS.darker
 activeHeaderFill.BorderSizePixel = 0
 activeHeaderFill.Parent = activeMenuHeader
 
--- close button (top left)
 local activeCloseBtn = Instance.new("TextButton")
 activeCloseBtn.Name = "Close"
 activeCloseBtn.Size = UDim2.new(0, 30, 0, 30)
@@ -275,8 +257,10 @@ activeEmptyLabel.TextSize = 14
 activeEmptyLabel.Font = Enum.Font.Gotham
 activeEmptyLabel.Parent = activeContent
 
+-- forward declare
+local uniContent
+
 function refreshActiveList()
-    -- clear existing rows
     for _, child in ipairs(activeContent:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
@@ -332,28 +316,21 @@ function refreshActiveList()
         end)
 
         deactivateBtn.MouseButton1Click:Connect(function()
-            -- run cleanup
             if data.cleanup then
                 pcall(data.cleanup)
             end
-            -- remove from active list and loaded list
             activeScripts[fileKey] = nil
-            if loadedScripts then
-                loadedScripts[fileKey] = nil
-            end
-            -- update the uni menu status if it exists
-            local uniBtn_ref = uniContent:FindFirstChild(fileKey)
-            if uniBtn_ref then
-                local statusLabel = uniBtn_ref:FindFirstChild("Status")
-                if statusLabel then
-                    statusLabel.Text = ""
+            loadedScripts[fileKey] = nil
+            -- reset uni menu status
+            if uniContent then
+                local uniBtn_ref = uniContent:FindFirstChild(fileKey)
+                if uniBtn_ref then
+                    local statusLabel = uniBtn_ref:FindFirstChild("Status")
+                    if statusLabel then statusLabel.Text = "" end
                 end
             end
-            -- refresh
             refreshActiveList()
         end)
-
-        data.row = row
     end
 
     activeEmptyLabel.Visible = (count == 0)
@@ -407,7 +384,7 @@ activeCloseBtn.MouseButton1Click:Connect(function()
     if activeMenuOpen then toggleActiveMenu() end
 end)
 
----------- ACTIVE BUTTON (bottom right, above Uni) ----------
+---------- ACTIVE BUTTON (bottom right of sidebar, above Uni) ----------
 
 local activeBtn = Instance.new("TextButton")
 activeBtn.Name = "ActiveButton"
@@ -420,13 +397,12 @@ activeBtn.TextColor3 = COLORS.darker
 activeBtn.TextSize = 12
 activeBtn.Font = Enum.Font.GothamBold
 activeBtn.AutoButtonColor = false
-activeBtn.Parent = panel
+activeBtn.Parent = sidebar
 
 local activeBtnCorner = Instance.new("UICorner")
 activeBtnCorner.CornerRadius = UDim.new(0, 6)
 activeBtnCorner.Parent = activeBtn
 
--- tooltip for Active button
 local activeTooltip = Instance.new("Frame")
 activeTooltip.Name = "ActiveTooltip"
 activeTooltip.Size = UDim2.new(0, 110, 0, 28)
@@ -460,7 +436,7 @@ end)
 
 activeBtn.MouseButton1Click:Connect(toggleActiveMenu)
 
----------- UNI BUTTON (bottom right of panel) ----------
+---------- UNI BUTTON (bottom right of sidebar) ----------
 
 local uniBtn = Instance.new("TextButton")
 uniBtn.Name = "UniButton"
@@ -473,13 +449,12 @@ uniBtn.TextColor3 = COLORS.text
 uniBtn.TextSize = 14
 uniBtn.Font = Enum.Font.GothamBold
 uniBtn.AutoButtonColor = false
-uniBtn.Parent = panel
+uniBtn.Parent = sidebar
 
 local uniBtnCorner = Instance.new("UICorner")
 uniBtnCorner.CornerRadius = UDim.new(0, 6)
 uniBtnCorner.Parent = uniBtn
 
--- tooltip for Uni button
 local uniTooltip = Instance.new("Frame")
 uniTooltip.Name = "UniTooltip"
 uniTooltip.Size = UDim2.new(0, 130, 0, 28)
@@ -503,12 +478,10 @@ tooltipText.TextSize = 12
 tooltipText.Font = Enum.Font.Gotham
 tooltipText.Parent = uniTooltip
 
--- Uni hover effects
 uniBtn.MouseEnter:Connect(function()
     uniTooltip.Visible = true
     TweenService:Create(uniBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(71, 82, 196)}):Play()
 end)
-
 uniBtn.MouseLeave:Connect(function()
     uniTooltip.Visible = false
     TweenService:Create(uniBtn, TweenInfo.new(0.15), {BackgroundColor3 = COLORS.accent}):Play()
@@ -544,7 +517,6 @@ uniMenuShadow.SliceCenter = Rect.new(23, 23, 277, 277)
 uniMenuShadow.ZIndex = -1
 uniMenuShadow.Parent = uniMenu
 
--- uni menu header
 local uniMenuHeader = Instance.new("Frame")
 uniMenuHeader.Name = "Header"
 uniMenuHeader.Size = UDim2.new(1, 0, 0, 40)
@@ -556,7 +528,6 @@ local uniMenuHeaderCorner = Instance.new("UICorner")
 uniMenuHeaderCorner.CornerRadius = UDim.new(0, 8)
 uniMenuHeaderCorner.Parent = uniMenuHeader
 
--- square off bottom corners of header
 local headerFill = Instance.new("Frame")
 headerFill.Size = UDim2.new(1, 0, 0, 10)
 headerFill.Position = UDim2.new(0, 0, 1, -10)
@@ -575,7 +546,6 @@ uniMenuTitle.Font = Enum.Font.GothamBold
 uniMenuTitle.TextXAlignment = Enum.TextXAlignment.Left
 uniMenuTitle.Parent = uniMenuHeader
 
--- close button for uni menu (top left)
 local uniCloseBtn = Instance.new("TextButton")
 uniCloseBtn.Name = "Close"
 uniCloseBtn.Size = UDim2.new(0, 30, 0, 30)
@@ -594,8 +564,7 @@ uniCloseBtn.MouseLeave:Connect(function()
     uniCloseBtn.TextColor3 = COLORS.textMuted
 end)
 
--- uni menu content
-local uniContent = Instance.new("ScrollingFrame")
+uniContent = Instance.new("ScrollingFrame")
 uniContent.Name = "Content"
 uniContent.Size = UDim2.new(1, -16, 1, -52)
 uniContent.Position = UDim2.new(0, 8, 0, 44)
@@ -612,7 +581,8 @@ uniContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 uniContentLayout.Padding = UDim.new(0, 4)
 uniContentLayout.Parent = uniContent
 
--- script entries (name, GitHub raw URL)
+---------- SCRIPT ENTRIES ----------
+
 local REPO_BASE = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
 local SCRIPTS = {
     { name = "Horizontal Density", file = "[Uni]horizontal_density" },
@@ -620,14 +590,13 @@ local SCRIPTS = {
     { name = "Lock-On Shiftlock", url = "https://raw.githubusercontent.com/6014m/roblox-lockon-shiftlock/main/The%20Actual%20Script" },
 }
 
--- favorites persist to file across sessions
+-- favorites persist to file
 local FAVORITES_FILE = "SixZeroHub_favorites.json"
 
 local function loadFavorites()
     local ok, data = pcall(function()
         if isfile and isfile(FAVORITES_FILE) then
-            local raw = readfile(FAVORITES_FILE)
-            return game:GetService("HttpService"):JSONDecode(raw)
+            return HttpService:JSONDecode(readfile(FAVORITES_FILE))
         end
     end)
     return (ok and data) or {}
@@ -635,21 +604,17 @@ end
 
 local function saveFavorites(favs)
     pcall(function()
-        local raw = game:GetService("HttpService"):JSONEncode(favs)
-        writefile(FAVORITES_FILE, raw)
+        writefile(FAVORITES_FILE, HttpService:JSONEncode(favs))
     end)
 end
 
 local favorites = loadFavorites()
-
-local scriptButtons = {} -- { [file] = { btn, favBtn, status, info } }
+local scriptButtons = {}
 
 local function getLayoutOrder(info)
     local key = info.file or info.url
     local isFav = favorites[key] or false
-    -- favorited: 0-999 (alphabetical), unfavorited: 1000+ (alphabetical)
     local base = isFav and 0 or 1000
-    -- use byte values of name for alphabetical sorting
     local nameOrder = 0
     for i = 1, math.min(#info.name, 4) do
         nameOrder = nameOrder + string.byte(info.name, i) * (256 ^ (4 - i))
@@ -659,22 +624,23 @@ end
 
 local function updateFavIcon(favBtn, fileKey)
     if favorites[fileKey] then
-        favBtn.Text = "\226\152\133" -- filled star
+        favBtn.Text = "\226\152\133"
         favBtn.TextColor3 = Color3.fromRGB(255, 200, 50)
     else
-        favBtn.Text = "\226\152\134" -- empty star
+        favBtn.Text = "\226\152\134"
         favBtn.TextColor3 = COLORS.textMuted
     end
 end
 
 local function createScriptButton(info)
-    local btn = Instance.new("TextButton")
     local fileKey = info.file or info.url
+
+    local btn = Instance.new("TextButton")
     btn.Name = fileKey
     btn.Size = UDim2.new(1, -8, 0, 36)
     btn.BackgroundColor3 = COLORS.hover
     btn.BorderSizePixel = 0
-    btn.Text = "     " .. info.name
+    btn.Text = "  " .. info.name
     btn.TextColor3 = COLORS.text
     btn.TextSize = 14
     btn.Font = Enum.Font.Gotham
@@ -687,11 +653,24 @@ local function createScriptButton(info)
     btnCorner.CornerRadius = UDim.new(0, 6)
     btnCorner.Parent = btn
 
-    -- favorite star button (left side)
+    -- status indicator (right side, before star)
+    local status = Instance.new("TextLabel")
+    status.Name = "Status"
+    status.Size = UDim2.new(0, 55, 1, 0)
+    status.Position = UDim2.new(1, -90, 0, 0)
+    status.BackgroundTransparency = 1
+    status.Text = ""
+    status.TextColor3 = COLORS.textMuted
+    status.TextSize = 11
+    status.Font = Enum.Font.Gotham
+    status.TextXAlignment = Enum.TextXAlignment.Right
+    status.Parent = btn
+
+    -- favorite star button (far right)
     local favBtn = Instance.new("TextButton")
     favBtn.Name = "Favorite"
     favBtn.Size = UDim2.new(0, 28, 0, 28)
-    favBtn.Position = UDim2.new(0, 4, 0.5, -14)
+    favBtn.Position = UDim2.new(1, -30, 0.5, -14)
     favBtn.BackgroundTransparency = 1
     favBtn.TextSize = 16
     favBtn.Font = Enum.Font.Gotham
@@ -703,24 +682,10 @@ local function createScriptButton(info)
         if not favorites[fileKey] then favorites[fileKey] = nil end
         saveFavorites(favorites)
         updateFavIcon(favBtn, fileKey)
-        -- update sort order for all buttons
-        for fileKey, data in pairs(scriptButtons) do
+        for _, data in pairs(scriptButtons) do
             data.btn.LayoutOrder = getLayoutOrder(data.info)
         end
     end)
-
-    -- status indicator (right side)
-    local status = Instance.new("TextLabel")
-    status.Name = "Status"
-    status.Size = UDim2.new(0, 60, 1, 0)
-    status.Position = UDim2.new(1, -65, 0, 0)
-    status.BackgroundTransparency = 1
-    status.Text = ""
-    status.TextColor3 = COLORS.textMuted
-    status.TextSize = 11
-    status.Font = Enum.Font.Gotham
-    status.TextXAlignment = Enum.TextXAlignment.Right
-    status.Parent = btn
 
     btn.MouseEnter:Connect(function()
         TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.sidebar}):Play()
@@ -748,10 +713,17 @@ local function createScriptButton(info)
             if ok then
                 loadedScripts[fileKey] = true
                 status.Text = "running"
-                status.TextColor3 = Color3.fromRGB(87, 242, 135) -- green
+                status.TextColor3 = Color3.fromRGB(87, 242, 135)
+
+                -- if script didn't self-register, register it from here
+                task.delay(1, function()
+                    if not activeScripts[fileKey] then
+                        _G.SixZeroHubRegister(info.name, fileKey, nil)
+                    end
+                end)
             else
                 status.Text = "error"
-                status.TextColor3 = Color3.fromRGB(237, 66, 69) -- red
+                status.TextColor3 = Color3.fromRGB(237, 66, 69)
                 warn("[SixZeroHub] Failed to load " .. info.name .. ": " .. tostring(err))
             end
         end)
@@ -773,13 +745,11 @@ uniMenuHeader.InputBegan:Connect(function(input)
         startPos = uniMenu.Position
     end
 end)
-
 uniMenuHeader.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = false
     end
 end)
-
 UserInputService.InputChanged:Connect(function(input)
     if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
@@ -790,7 +760,6 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- toggle uni menu
 local function toggleUniMenu()
     uniMenuOpen = not uniMenuOpen
     if uniMenuOpen then
@@ -817,16 +786,18 @@ end)
 
 ---------- GUI OFFSET MANAGEMENT ----------
 
-local movedScreenGuis = {} -- { [ScreenGui] = originalPosition }
+local movedScreenGuis = {}
 
 local function shiftGameGuis(show)
+    -- offset = sidebar width + a bit extra so roblox GUI text doesn't overlap
+    local offset = SIDEBAR_WIDTH + 8
     for _, gui in ipairs(playerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") and gui ~= screenGui and gui.Name ~= "SixZeroHub" and gui.Name ~= "SixZeroTopbar" then
+        if gui:IsA("ScreenGui") and gui ~= screenGui and gui.Name ~= "SixZeroHub" then
             if show then
                 if not movedScreenGuis[gui] then
                     movedScreenGuis[gui] = gui.Position or UDim2.new(0, 0, 0, 0)
                 end
-                gui.Position = UDim2.new(0, PANEL_WIDTH, 0, 0)
+                gui.Position = UDim2.new(0, offset, 0, 0)
             else
                 if movedScreenGuis[gui] then
                     gui.Position = movedScreenGuis[gui]
@@ -842,7 +813,7 @@ local function moveChat(show)
         for i = 1, 20 do
             local ok = pcall(function()
                 if show then
-                    StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, PANEL_WIDTH + 4, 0, 0))
+                    StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, SIDEBAR_WIDTH + 8, 0, 4))
                 else
                     StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, 0, 0, 0))
                 end
@@ -858,59 +829,62 @@ end
 local function toggleGui()
     guiVisible = not guiVisible
 
-    -- update eye icon: open when visible, closed when hidden
-    if topbarEyeLabel then
-        if guiVisible then
-            topbarEyeLabel.Text = "\xF0\x9F\x91\x81" -- open eye
-            topbarEyeLabel.TextTransparency = 0
-        else
-            topbarEyeLabel.Text = "\xF0\x9F\x91\x81" -- eye with dimmed look
-            topbarEyeLabel.TextTransparency = 0.5
-        end
+    -- update eye icon
+    if guiVisible then
+        eyeBtn.TextTransparency = 0
+    else
+        eyeBtn.TextTransparency = 0.5
     end
 
     if guiVisible then
-        -- show panel
-        panel.Visible = true
-        TweenService:Create(panel, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        topBar.Visible = true
+        sidebar.Visible = true
+        TweenService:Create(topBar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
             Position = UDim2.new(0, 0, 0, 0)
+        }):Play()
+        TweenService:Create(sidebar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Position = UDim2.new(0, 0, 0, TOPBAR_HEIGHT + 1)
         }):Play()
         moveChat(true)
         shiftGameGuis(true)
     else
-        -- hide panel
-        local tween = TweenService:Create(panel, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-            Position = UDim2.new(0, -PANEL_WIDTH, 0, 0)
+        local t1 = TweenService:Create(topBar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+            Position = UDim2.new(0, 0, 0, -TOPBAR_HEIGHT)
         })
-        tween:Play()
-        tween.Completed:Connect(function()
+        local t2 = TweenService:Create(sidebar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+            Position = UDim2.new(0, -SIDEBAR_WIDTH, 0, TOPBAR_HEIGHT + 1)
+        })
+        t1:Play()
+        t2:Play()
+        t2.Completed:Connect(function()
             if not guiVisible then
-                panel.Visible = false
+                topBar.Visible = false
+                sidebar.Visible = false
             end
         end)
         moveChat(false)
         shiftGameGuis(false)
-        -- close uni menu if open
         if uniMenuOpen then toggleUniMenu() end
+        if activeMenuOpen then toggleActiveMenu() end
     end
 end
 
+eyeBtn.MouseButton1Click:Connect(toggleGui)
+
 ---------- INIT ----------
 
--- initial chat + gui offset
 task.defer(function()
     task.wait(1)
     moveChat(true)
     shiftGameGuis(true)
 end)
 
--- watch for new game ScreenGuis being added
 playerGui.ChildAdded:Connect(function(child)
-    if child:IsA("ScreenGui") and child ~= screenGui and child.Name ~= "SixZeroTopbar" and guiVisible then
+    if child:IsA("ScreenGui") and child ~= screenGui and guiVisible then
         task.wait(0.1)
         if not movedScreenGuis[child] then
             movedScreenGuis[child] = child.Position or UDim2.new(0, 0, 0, 0)
         end
-        child.Position = UDim2.new(0, PANEL_WIDTH, 0, 0)
+        child.Position = UDim2.new(0, SIDEBAR_WIDTH + 8, 0, 0)
     end
 end)
