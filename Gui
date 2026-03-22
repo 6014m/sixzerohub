@@ -650,11 +650,27 @@ local SCRIPTS = {
     { name = "Lock-On Shiftlock", url = "https://raw.githubusercontent.com/6014m/roblox-lockon-shiftlock/main/The%20Actual%20Script" },
 }
 
--- favorites persist in _G so they survive re-execution within the same session
-if not _G.SixZeroHubFavorites then
-    _G.SixZeroHubFavorites = {}
+-- favorites persist to file across sessions
+local FAVORITES_FILE = "SixZeroHub_favorites.json"
+
+local function loadFavorites()
+    local ok, data = pcall(function()
+        if isfile and isfile(FAVORITES_FILE) then
+            local raw = readfile(FAVORITES_FILE)
+            return game:GetService("HttpService"):JSONDecode(raw)
+        end
+    end)
+    return (ok and data) or {}
 end
-local favorites = _G.SixZeroHubFavorites
+
+local function saveFavorites(favs)
+    pcall(function()
+        local raw = game:GetService("HttpService"):JSONEncode(favs)
+        writefile(FAVORITES_FILE, raw)
+    end)
+end
+
+local favorites = loadFavorites()
 
 local scriptButtons = {} -- { [file] = { btn, favBtn, status, info } }
 
@@ -715,6 +731,7 @@ local function createScriptButton(info)
     favBtn.MouseButton1Click:Connect(function()
         favorites[fileKey] = not favorites[fileKey]
         if not favorites[fileKey] then favorites[fileKey] = nil end
+        saveFavorites(favorites)
         updateFavIcon(favBtn, fileKey)
         -- update sort order for all buttons
         for fileKey, data in pairs(scriptButtons) do
