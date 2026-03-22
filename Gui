@@ -649,23 +649,75 @@ local SCRIPTS = {
     { name = "Damage Block Dodger", file = "[Uni]damage_block_dodger" },
 }
 
+-- favorites persist in _G so they survive re-execution within the same session
+if not _G.SixZeroHubFavorites then
+    _G.SixZeroHubFavorites = {}
+end
+local favorites = _G.SixZeroHubFavorites
+
+local scriptButtons = {} -- { [file] = { btn, favBtn, status, info } }
+
+local function getLayoutOrder(info)
+    local isFav = favorites[info.file] or false
+    -- favorited: 0-999 (alphabetical), unfavorited: 1000+ (alphabetical)
+    local base = isFav and 0 or 1000
+    -- use byte values of name for alphabetical sorting
+    local nameOrder = 0
+    for i = 1, math.min(#info.name, 4) do
+        nameOrder = nameOrder + string.byte(info.name, i) * (256 ^ (4 - i))
+    end
+    return base + nameOrder
+end
+
+local function updateFavIcon(favBtn, fileKey)
+    if favorites[fileKey] then
+        favBtn.Text = "\226\152\133" -- filled star
+        favBtn.TextColor3 = Color3.fromRGB(255, 200, 50)
+    else
+        favBtn.Text = "\226\152\134" -- empty star
+        favBtn.TextColor3 = COLORS.textMuted
+    end
+end
+
 local function createScriptButton(info)
     local btn = Instance.new("TextButton")
     btn.Name = info.file
     btn.Size = UDim2.new(1, -8, 0, 36)
     btn.BackgroundColor3 = COLORS.hover
     btn.BorderSizePixel = 0
-    btn.Text = "  " .. info.name
+    btn.Text = "     " .. info.name
     btn.TextColor3 = COLORS.text
     btn.TextSize = 14
     btn.Font = Enum.Font.Gotham
     btn.TextXAlignment = Enum.TextXAlignment.Left
     btn.AutoButtonColor = false
+    btn.LayoutOrder = getLayoutOrder(info)
     btn.Parent = uniContent
 
     local btnCorner = Instance.new("UICorner")
     btnCorner.CornerRadius = UDim.new(0, 6)
     btnCorner.Parent = btn
+
+    -- favorite star button (left side)
+    local favBtn = Instance.new("TextButton")
+    favBtn.Name = "Favorite"
+    favBtn.Size = UDim2.new(0, 28, 0, 28)
+    favBtn.Position = UDim2.new(0, 4, 0.5, -14)
+    favBtn.BackgroundTransparency = 1
+    favBtn.TextSize = 16
+    favBtn.Font = Enum.Font.Gotham
+    favBtn.Parent = btn
+    updateFavIcon(favBtn, info.file)
+
+    favBtn.MouseButton1Click:Connect(function()
+        favorites[info.file] = not favorites[info.file]
+        if not favorites[info.file] then favorites[info.file] = nil end
+        updateFavIcon(favBtn, info.file)
+        -- update sort order for all buttons
+        for fileKey, data in pairs(scriptButtons) do
+            data.btn.LayoutOrder = getLayoutOrder(data.info)
+        end
+    end)
 
     -- status indicator (right side)
     local status = Instance.new("TextLabel")
@@ -713,6 +765,8 @@ local function createScriptButton(info)
             end
         end)
     end)
+
+    scriptButtons[info.file] = { btn = btn, favBtn = favBtn, status = status, info = info }
 end
 
 for _, scriptInfo in ipairs(SCRIPTS) do
