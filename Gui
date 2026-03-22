@@ -185,6 +185,313 @@ contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 contentLayout.Padding = UDim.new(0, 4)
 contentLayout.Parent = contentArea
 
+---------- ACTIVE SCRIPTS SYSTEM ----------
+
+local loadedScripts = {}
+local activeScripts = {} -- { [fileKey] = { name, cleanup, row } }
+local activeMenuOpen = false
+
+-- global registration function for scripts to call
+_G.SixZeroHubRegister = function(displayName, fileKey, cleanupFn)
+    activeScripts[fileKey] = {
+        name = displayName,
+        cleanup = cleanupFn,
+        row = nil, -- set when active menu builds rows
+    }
+    -- refresh active menu if open
+    if activeMenuOpen then
+        refreshActiveList()
+    end
+end
+
+---------- ACTIVE SCRIPTS MENU ----------
+
+local activeMenu = Instance.new("Frame")
+activeMenu.Name = "ActiveScriptsMenu"
+activeMenu.Size = UDim2.new(0, 400, 0, 300)
+activeMenu.Position = UDim2.new(0.5, -200, 0.5, -150)
+activeMenu.BackgroundColor3 = COLORS.sidebar
+activeMenu.BorderSizePixel = 0
+activeMenu.Visible = false
+activeMenu.Parent = screenGui
+
+local activeMenuCorner = Instance.new("UICorner")
+activeMenuCorner.CornerRadius = UDim.new(0, 8)
+activeMenuCorner.Parent = activeMenu
+
+local activeMenuShadow = Instance.new("ImageLabel")
+activeMenuShadow.Name = "Shadow"
+activeMenuShadow.Size = UDim2.new(1, 20, 1, 20)
+activeMenuShadow.Position = UDim2.new(0, -10, 0, -10)
+activeMenuShadow.BackgroundTransparency = 1
+activeMenuShadow.Image = "rbxassetid://5554236805"
+activeMenuShadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+activeMenuShadow.ImageTransparency = 0.6
+activeMenuShadow.ScaleType = Enum.ScaleType.Slice
+activeMenuShadow.SliceCenter = Rect.new(23, 23, 277, 277)
+activeMenuShadow.ZIndex = -1
+activeMenuShadow.Parent = activeMenu
+
+local activeMenuHeader = Instance.new("Frame")
+activeMenuHeader.Name = "Header"
+activeMenuHeader.Size = UDim2.new(1, 0, 0, 40)
+activeMenuHeader.BackgroundColor3 = COLORS.darker
+activeMenuHeader.BorderSizePixel = 0
+activeMenuHeader.Parent = activeMenu
+
+local activeMenuHeaderCorner = Instance.new("UICorner")
+activeMenuHeaderCorner.CornerRadius = UDim.new(0, 8)
+activeMenuHeaderCorner.Parent = activeMenuHeader
+
+local activeHeaderFill = Instance.new("Frame")
+activeHeaderFill.Size = UDim2.new(1, 0, 0, 10)
+activeHeaderFill.Position = UDim2.new(0, 0, 1, -10)
+activeHeaderFill.BackgroundColor3 = COLORS.darker
+activeHeaderFill.BorderSizePixel = 0
+activeHeaderFill.Parent = activeMenuHeader
+
+-- close button (top left)
+local activeCloseBtn = Instance.new("TextButton")
+activeCloseBtn.Name = "Close"
+activeCloseBtn.Size = UDim2.new(0, 30, 0, 30)
+activeCloseBtn.Position = UDim2.new(0, 5, 0, 5)
+activeCloseBtn.BackgroundTransparency = 1
+activeCloseBtn.Text = "X"
+activeCloseBtn.TextColor3 = COLORS.textMuted
+activeCloseBtn.TextSize = 16
+activeCloseBtn.Font = Enum.Font.GothamBold
+activeCloseBtn.Parent = activeMenuHeader
+
+activeCloseBtn.MouseEnter:Connect(function()
+    activeCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+end)
+activeCloseBtn.MouseLeave:Connect(function()
+    activeCloseBtn.TextColor3 = COLORS.textMuted
+end)
+
+local activeMenuTitle = Instance.new("TextLabel")
+activeMenuTitle.Size = UDim2.new(1, -50, 1, 0)
+activeMenuTitle.Position = UDim2.new(0, 38, 0, 0)
+activeMenuTitle.BackgroundTransparency = 1
+activeMenuTitle.Text = "Active Scripts"
+activeMenuTitle.TextColor3 = COLORS.text
+activeMenuTitle.TextSize = 16
+activeMenuTitle.Font = Enum.Font.GothamBold
+activeMenuTitle.TextXAlignment = Enum.TextXAlignment.Left
+activeMenuTitle.Parent = activeMenuHeader
+
+local activeContent = Instance.new("ScrollingFrame")
+activeContent.Name = "Content"
+activeContent.Size = UDim2.new(1, -16, 1, -52)
+activeContent.Position = UDim2.new(0, 8, 0, 44)
+activeContent.BackgroundTransparency = 1
+activeContent.BorderSizePixel = 0
+activeContent.ScrollBarThickness = 3
+activeContent.ScrollBarImageColor3 = COLORS.textMuted
+activeContent.CanvasSize = UDim2.new(0, 0, 0, 0)
+activeContent.AutomaticCanvasSize = Enum.AutomaticSize.Y
+activeContent.Parent = activeMenu
+
+local activeContentLayout = Instance.new("UIListLayout")
+activeContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+activeContentLayout.Padding = UDim.new(0, 4)
+activeContentLayout.Parent = activeContent
+
+local activeEmptyLabel = Instance.new("TextLabel")
+activeEmptyLabel.Name = "Empty"
+activeEmptyLabel.Size = UDim2.new(1, 0, 0, 40)
+activeEmptyLabel.BackgroundTransparency = 1
+activeEmptyLabel.Text = "No active scripts"
+activeEmptyLabel.TextColor3 = COLORS.textMuted
+activeEmptyLabel.TextSize = 14
+activeEmptyLabel.Font = Enum.Font.Gotham
+activeEmptyLabel.Parent = activeContent
+
+function refreshActiveList()
+    -- clear existing rows
+    for _, child in ipairs(activeContent:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    local count = 0
+    for fileKey, data in pairs(activeScripts) do
+        count = count + 1
+
+        local row = Instance.new("Frame")
+        row.Name = fileKey
+        row.Size = UDim2.new(1, -8, 0, 36)
+        row.BackgroundColor3 = COLORS.hover
+        row.BorderSizePixel = 0
+        row.Parent = activeContent
+
+        local rowCorner = Instance.new("UICorner")
+        rowCorner.CornerRadius = UDim.new(0, 6)
+        rowCorner.Parent = row
+
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, -90, 1, 0)
+        nameLabel.Position = UDim2.new(0, 10, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = data.name
+        nameLabel.TextColor3 = Color3.fromRGB(87, 242, 135)
+        nameLabel.TextSize = 14
+        nameLabel.Font = Enum.Font.Gotham
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = row
+
+        local deactivateBtn = Instance.new("TextButton")
+        deactivateBtn.Name = "Deactivate"
+        deactivateBtn.Size = UDim2.new(0, 75, 0, 24)
+        deactivateBtn.Position = UDim2.new(1, -82, 0.5, -12)
+        deactivateBtn.BackgroundColor3 = Color3.fromRGB(237, 66, 69)
+        deactivateBtn.BorderSizePixel = 0
+        deactivateBtn.Text = "Deactivate"
+        deactivateBtn.TextColor3 = COLORS.text
+        deactivateBtn.TextSize = 11
+        deactivateBtn.Font = Enum.Font.GothamBold
+        deactivateBtn.AutoButtonColor = false
+        deactivateBtn.Parent = row
+
+        local deactivateCorner = Instance.new("UICorner")
+        deactivateCorner.CornerRadius = UDim.new(0, 4)
+        deactivateCorner.Parent = deactivateBtn
+
+        deactivateBtn.MouseEnter:Connect(function()
+            TweenService:Create(deactivateBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(200, 50, 50)}):Play()
+        end)
+        deactivateBtn.MouseLeave:Connect(function()
+            TweenService:Create(deactivateBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(237, 66, 69)}):Play()
+        end)
+
+        deactivateBtn.MouseButton1Click:Connect(function()
+            -- run cleanup
+            if data.cleanup then
+                pcall(data.cleanup)
+            end
+            -- remove from active list and loaded list
+            activeScripts[fileKey] = nil
+            if loadedScripts then
+                loadedScripts[fileKey] = nil
+            end
+            -- update the uni menu status if it exists
+            local uniBtn_ref = uniContent:FindFirstChild(fileKey)
+            if uniBtn_ref then
+                local statusLabel = uniBtn_ref:FindFirstChild("Status")
+                if statusLabel then
+                    statusLabel.Text = ""
+                end
+            end
+            -- refresh
+            refreshActiveList()
+        end)
+
+        data.row = row
+    end
+
+    activeEmptyLabel.Visible = (count == 0)
+end
+
+-- make active menu draggable
+local activeDragging, activeDragStart, activeStartPos
+activeMenuHeader.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        activeDragging = true
+        activeDragStart = input.Position
+        activeStartPos = activeMenu.Position
+    end
+end)
+activeMenuHeader.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        activeDragging = false
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if activeDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - activeDragStart
+        activeMenu.Position = UDim2.new(
+            activeStartPos.X.Scale, activeStartPos.X.Offset + delta.X,
+            activeStartPos.Y.Scale, activeStartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+local function toggleActiveMenu()
+    activeMenuOpen = not activeMenuOpen
+    if activeMenuOpen then
+        refreshActiveList()
+        activeMenu.Visible = true
+        activeMenu.Size = UDim2.new(0, 400, 0, 0)
+        TweenService:Create(activeMenu, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 400, 0, 300)
+        }):Play()
+    else
+        local tween = TweenService:Create(activeMenu, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+            Size = UDim2.new(0, 400, 0, 0)
+        })
+        tween:Play()
+        tween.Completed:Connect(function()
+            activeMenu.Visible = false
+        end)
+    end
+end
+
+activeCloseBtn.MouseButton1Click:Connect(function()
+    if activeMenuOpen then toggleActiveMenu() end
+end)
+
+---------- ACTIVE BUTTON (bottom right, above Uni) ----------
+
+local activeBtn = Instance.new("TextButton")
+activeBtn.Name = "ActiveButton"
+activeBtn.Size = UDim2.new(0, 50, 0, 30)
+activeBtn.Position = UDim2.new(1, -58, 1, -74)
+activeBtn.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
+activeBtn.BorderSizePixel = 0
+activeBtn.Text = "Active"
+activeBtn.TextColor3 = COLORS.darker
+activeBtn.TextSize = 12
+activeBtn.Font = Enum.Font.GothamBold
+activeBtn.AutoButtonColor = false
+activeBtn.Parent = panel
+
+local activeBtnCorner = Instance.new("UICorner")
+activeBtnCorner.CornerRadius = UDim.new(0, 6)
+activeBtnCorner.Parent = activeBtn
+
+-- tooltip for Active button
+local activeTooltip = Instance.new("Frame")
+activeTooltip.Name = "ActiveTooltip"
+activeTooltip.Size = UDim2.new(0, 110, 0, 28)
+activeTooltip.Position = UDim2.new(0, -115, 0.5, -14)
+activeTooltip.BackgroundColor3 = COLORS.darker
+activeTooltip.BorderSizePixel = 0
+activeTooltip.Visible = false
+activeTooltip.Parent = activeBtn
+
+local activeTooltipCorner = Instance.new("UICorner")
+activeTooltipCorner.CornerRadius = UDim.new(0, 6)
+activeTooltipCorner.Parent = activeTooltip
+
+local activeTooltipText = Instance.new("TextLabel")
+activeTooltipText.Size = UDim2.new(1, 0, 1, 0)
+activeTooltipText.BackgroundTransparency = 1
+activeTooltipText.Text = "Active Scripts"
+activeTooltipText.TextColor3 = COLORS.text
+activeTooltipText.TextSize = 12
+activeTooltipText.Font = Enum.Font.Gotham
+activeTooltipText.Parent = activeTooltip
+
+activeBtn.MouseEnter:Connect(function()
+    activeTooltip.Visible = true
+    TweenService:Create(activeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(70, 200, 110)}):Play()
+end)
+activeBtn.MouseLeave:Connect(function()
+    activeTooltip.Visible = false
+    TweenService:Create(activeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(87, 242, 135)}):Play()
+end)
+
+activeBtn.MouseButton1Click:Connect(toggleActiveMenu)
+
 ---------- UNI BUTTON (bottom right of panel) ----------
 
 local uniBtn = Instance.new("TextButton")
@@ -343,8 +650,6 @@ local SCRIPTS = {
     { name = "Horizontal Density", file = "horizontal_density" },
     { name = "Damage Block Dodger", file = "damage_block_dodger" },
 }
-
-local loadedScripts = {}
 
 local function createScriptButton(info)
     local btn = Instance.new("TextButton")

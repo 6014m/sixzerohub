@@ -9,11 +9,18 @@ local STRENGTH = 1 -- 0 to 1, how much horizontal push to cancel
 
 local player = Players.LocalPlayer
 local connections = {}
+local instances = {}
 
 local function cleanup()
     for _, conn in pairs(connections) do conn:Disconnect() end
     connections = {}
+    for _, inst in pairs(instances) do
+        if inst and inst.Parent then inst:Destroy() end
+    end
+    instances = {}
 end
+
+local charAddedConn
 
 local function onCharacterAdded(character)
     cleanup()
@@ -25,6 +32,7 @@ local function onCharacterAdded(character)
     local attachment = Instance.new("Attachment")
     attachment.Name = "HDensityAttach"
     attachment.Parent = hrp
+    table.insert(instances, attachment)
 
     local linVel = Instance.new("LinearVelocity")
     linVel.Name = "HDensityForce"
@@ -37,6 +45,7 @@ local function onCharacterAdded(character)
     linVel.MaxForce = math.huge
     linVel.PlaneVelocity = Vector2.new(0, 0)
     linVel.Parent = hrp
+    table.insert(instances, linVel)
 
     local lastCFrame = hrp.CFrame
     local lastTick = tick()
@@ -95,12 +104,18 @@ local function onCharacterAdded(character)
 
     connections[#connections + 1] = humanoid.Died:Connect(function()
         cleanup()
-        linVel:Destroy()
-        attachment:Destroy()
     end)
 end
 
 if player.Character then
     onCharacterAdded(player.Character)
 end
-player.CharacterAdded:Connect(onCharacterAdded)
+charAddedConn = player.CharacterAdded:Connect(onCharacterAdded)
+
+-- register with SixZeroHub for deactivation
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Horizontal Density", "horizontal_density", function()
+        if charAddedConn then charAddedConn:Disconnect() end
+        cleanup()
+    end)
+end
