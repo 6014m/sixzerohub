@@ -761,6 +761,11 @@ local function toggleGuiVisibility()
         closeUniMenu()
         closeActiveMenu()
     end
+
+    -- notify compat modules of visibility change
+    if _G.SixZeroHubOnToggle then
+        pcall(_G.SixZeroHubOnToggle, guiVisible)
+    end
 end
 
 eyeBtn.MouseButton1Click:Connect(toggleGuiVisibility)
