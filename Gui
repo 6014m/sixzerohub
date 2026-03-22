@@ -22,8 +22,8 @@ local COLORS = {
     border = Color3.fromRGB(40, 43, 48),
 }
 
-local SIDEBAR_WIDTH = 46
-local TOPBAR_HEIGHT = 46
+local SIDEBAR_WIDTH = 56
+local TOPBAR_HEIGHT = 56
 local TWEEN_SPEED = 0.3
 local guiVisible = true
 
@@ -41,7 +41,7 @@ screenGui.Parent = playerGui
 local toggleGui = Instance.new("ScreenGui")
 toggleGui.Name = "SixZeroHubToggle"
 toggleGui.ResetOnSpawn = false
-toggleGui.DisplayOrder = 100
+toggleGui.DisplayOrder = 1000
 toggleGui.IgnoreGuiInset = true
 toggleGui.Parent = playerGui
 
@@ -63,27 +63,27 @@ topBarBorder.BackgroundColor3 = COLORS.border
 topBarBorder.BorderSizePixel = 0
 topBarBorder.Parent = topBar
 
--- slant in corner where top bar meets sidebar — big visible diagonal
+-- diagonal slant bridging the inner corner of the L shape
+-- clip container sits at the corner, only reveals the triangle that fills the gap
+local SLANT_SIZE = 70
+local slantClip = Instance.new("Frame")
+slantClip.Name = "SlantClip"
+slantClip.Size = UDim2.new(0, SLANT_SIZE, 0, SLANT_SIZE)
+slantClip.Position = UDim2.new(0, SIDEBAR_WIDTH, 0, TOPBAR_HEIGHT)
+slantClip.BackgroundTransparency = 1
+slantClip.ClipsDescendants = true
+slantClip.Parent = screenGui
+
+-- rotated square inside the clip — centered at clip's top-left corner
+-- only the bottom-right quarter of the diamond is visible = triangle
 local slant = Instance.new("Frame")
 slant.Name = "Slant"
-slant.Size = UDim2.new(0, 90, 0, 90)
-slant.Position = UDim2.new(0, SIDEBAR_WIDTH - 20, 0, TOPBAR_HEIGHT - 20)
+slant.AnchorPoint = Vector2.new(0.5, 0.5)
+slant.Size = UDim2.new(0, SLANT_SIZE * 1.42, 0, SLANT_SIZE * 1.42) -- side * sqrt(2) to fill
+slant.Position = UDim2.new(0, 0, 0, 0)
 slant.BackgroundColor3 = COLORS.darker
 slant.BorderSizePixel = 0
 slant.Rotation = 45
-slant.ZIndex = 2
-slant.Parent = screenGui
-
--- clip the slant so it doesn't bleed into game area — cover bottom-right half
-local slantClip = Instance.new("Frame")
-slantClip.Name = "SlantClip"
-slantClip.Size = UDim2.new(0, SIDEBAR_WIDTH + 45, 0, TOPBAR_HEIGHT + 45)
-slantClip.Position = UDim2.new(0, 0, 0, 0)
-slantClip.BackgroundTransparency = 1
-slantClip.ClipsDescendants = true
-slantClip.ZIndex = 2
-slantClip.Parent = screenGui
-
 slant.Parent = slantClip
 
 -- title in top bar
