@@ -291,7 +291,7 @@ headerFill.Parent = uniMenuHeader
 
 local uniMenuTitle = Instance.new("TextLabel")
 uniMenuTitle.Size = UDim2.new(1, -50, 1, 0)
-uniMenuTitle.Position = UDim2.new(0, 12, 0, 0)
+uniMenuTitle.Position = UDim2.new(0, 38, 0, 0)
 uniMenuTitle.BackgroundTransparency = 1
 uniMenuTitle.Text = "Universal Scripts"
 uniMenuTitle.TextColor3 = COLORS.text
@@ -300,11 +300,11 @@ uniMenuTitle.Font = Enum.Font.GothamBold
 uniMenuTitle.TextXAlignment = Enum.TextXAlignment.Left
 uniMenuTitle.Parent = uniMenuHeader
 
--- close button for uni menu
+-- close button for uni menu (top left)
 local uniCloseBtn = Instance.new("TextButton")
 uniCloseBtn.Name = "Close"
 uniCloseBtn.Size = UDim2.new(0, 30, 0, 30)
-uniCloseBtn.Position = UDim2.new(1, -35, 0, 5)
+uniCloseBtn.Position = UDim2.new(0, 5, 0, 5)
 uniCloseBtn.BackgroundTransparency = 1
 uniCloseBtn.Text = "X"
 uniCloseBtn.TextColor3 = COLORS.textMuted
@@ -337,15 +337,84 @@ uniContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 uniContentLayout.Padding = UDim.new(0, 4)
 uniContentLayout.Parent = uniContent
 
--- placeholder text
-local uniPlaceholder = Instance.new("TextLabel")
-uniPlaceholder.Size = UDim2.new(1, 0, 0, 40)
-uniPlaceholder.BackgroundTransparency = 1
-uniPlaceholder.Text = "No scripts loaded yet"
-uniPlaceholder.TextColor3 = COLORS.textMuted
-uniPlaceholder.TextSize = 14
-uniPlaceholder.Font = Enum.Font.Gotham
-uniPlaceholder.Parent = uniContent
+-- script entries (name, GitHub raw URL)
+local REPO_BASE = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
+local SCRIPTS = {
+    { name = "Horizontal Density", file = "horizontal_density" },
+    { name = "Damage Block Dodger", file = "damage_block_dodger" },
+}
+
+local loadedScripts = {}
+
+local function createScriptButton(info)
+    local btn = Instance.new("TextButton")
+    btn.Name = info.file
+    btn.Size = UDim2.new(1, -8, 0, 36)
+    btn.BackgroundColor3 = COLORS.hover
+    btn.BorderSizePixel = 0
+    btn.Text = "  " .. info.name
+    btn.TextColor3 = COLORS.text
+    btn.TextSize = 14
+    btn.Font = Enum.Font.Gotham
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.AutoButtonColor = false
+    btn.Parent = uniContent
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = btn
+
+    -- status indicator (right side)
+    local status = Instance.new("TextLabel")
+    status.Name = "Status"
+    status.Size = UDim2.new(0, 60, 1, 0)
+    status.Position = UDim2.new(1, -65, 0, 0)
+    status.BackgroundTransparency = 1
+    status.Text = ""
+    status.TextColor3 = COLORS.textMuted
+    status.TextSize = 11
+    status.Font = Enum.Font.Gotham
+    status.TextXAlignment = Enum.TextXAlignment.Right
+    status.Parent = btn
+
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.sidebar}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.hover}):Play()
+    end)
+
+    btn.MouseButton1Click:Connect(function()
+        if loadedScripts[info.file] then
+            status.Text = "already loaded"
+            status.TextColor3 = COLORS.textMuted
+            return
+        end
+
+        status.Text = "loading..."
+        status.TextColor3 = Color3.fromRGB(255, 200, 50)
+
+        task.spawn(function()
+            local ok, err = pcall(function()
+                loadstring(game:HttpGet(REPO_BASE .. info.file))()
+            end)
+
+            if ok then
+                loadedScripts[info.file] = true
+                status.Text = "running"
+                status.TextColor3 = Color3.fromRGB(87, 242, 135) -- green
+            else
+                status.Text = "error"
+                status.TextColor3 = Color3.fromRGB(237, 66, 69) -- red
+                warn("[SixZeroHub] Failed to load " .. info.name .. ": " .. tostring(err))
+            end
+        end)
+    end)
+end
+
+for _, scriptInfo in ipairs(SCRIPTS) do
+    createScriptButton(scriptInfo)
+end
 
 -- make uni menu draggable
 local dragging, dragStart, startPos

@@ -1,0 +1,382 @@
+-- Damage Block Dodger
+-- Detects nearby damage blocks and naturally avoids them
+-- Jumps over short ones, walks around taller ones
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local DETECTION_RADIUS = 24 -- how far ahead to scan
+local REACT_RADIUS = 14 -- distance to start dodging
+local JUMP_MAX_HEIGHT = 6 -- max block height to jump over instead of walking around
+local DODGE_STRENGTH = 0.7 -- how aggressively to steer
+local SCAN_INTERVAL = 0.1 -- seconds between full scans
+
+local player = Players.LocalPlayer
+local connection
+
+-- keywords that suggest a part deals damage
+local DAMAGE_NAMES = {
+    "kill", "damage", "hurt", "lava", "death", "trap", "hazard",
+    "fire", "spike", "acid", "poison", "harmful", "deadly", "die",
+    "burn", "shock", "zap", "neon", "laser", "blade", "saw",
+    "obstacle", "danger", "pain", "oof", "brick", "block",
+    "touch", "hit", "harm", "red", "hot", "electric", "volt",
+    "boom", "explode", "mine", "bomb", "crush", "smash",
+    "spinning", "spin", "rotate", "moving", "swing", "pendulum",
+    "wall", "barrier", "blocker", "crusher", "grinder",
+    "part", "inst", "dmg", "hp", "health", "take"
+}
+
+-- colors commonly used for damage blocks
+local DAMAGE_COLORS = {
+    Color3.fromRGB(255, 0, 0),       -- red
+    Color3.fromRGB(200, 0, 0),       -- dark red
+    Color3.fromRGB(180, 0, 0),       -- darker red
+    Color3.fromRGB(255, 85, 0),      -- orange-red
+    Color3.fromRGB(255, 170, 0),     -- lava orange
+    Color3.fromRGB(255, 50, 0),      -- fire red
+    Color3.fromRGB(255, 0, 50),      -- pinkish red
+    Color3.fromRGB(170, 0, 0),       -- blood red
+    Color3.fromRGB(255, 255, 0),     -- yellow (electric)
+    Color3.fromRGB(0, 255, 0),       -- green (acid/poison)
+    Color3.fromRGB(0, 200, 0),       -- dark green (poison)
+    Color3.fromRGB(128, 0, 255),     -- purple (magic damage)
+    Color3.fromRGB(255, 100, 0),     -- orange
+}
+
+local function colorDistance(c1, c2)
+    return math.sqrt((c1.R - c2.R)^2 + (c1.G - c2.G)^2 + (c1.B - c2.B)^2)
+end
+
+local function hasDamageColor(part)
+    for _, dc in ipairs(DAMAGE_COLORS) do
+        if colorDistance(part.Color, dc) < 0.2 then
+            return true
+        end
+    end
+    return false
+end
+
+local function hasScriptWithDamageLogic(part)
+    for _, child in ipairs(part:GetDescendants()) do
+        if child:IsA("Script") or child:IsA("LocalScript") then
+            local scriptName = child.Name:lower()
+            for _, keyword in ipairs(DAMAGE_NAMES) do
+                if scriptName:find(keyword) then return true end
+            end
+        end
+        -- check for values that might indicate damage amount
+        if child:IsA("NumberValue") or child:IsA("IntValue") or child:IsA("StringValue") then
+            local valName = child.Name:lower()
+            if valName:find("damage") or valName:find("dmg") or valName:find("hurt")
+                or valName:find("kill") or valName:find("health") or valName:find("amount") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local knownDamageCache = {}
+local touchedConnections = {}
+local learnedDamageParts = {} -- parts confirmed to deal damage at runtime
+
+local function isDamageBlock(part)
+    if not part:IsA("BasePart") then return false end
+    if part.Parent == player.Character then return false end
+    if part.Transparency >= 1 then return false end
+
+    -- runtime-learned damage parts always return true
+    if learnedDamageParts[part] then return true end
+
+    -- only use cache for confirmed damage (never cache false)
+    if knownDamageCache[part] then return true end
+
+    local isDamage = false
+
+    -- check name
+    local name = part.Name:lower()
+    for _, keyword in ipairs(DAMAGE_NAMES) do
+        if name:find(keyword) then isDamage = true break end
+    end
+
+    -- check parent/model name
+    if not isDamage and part.Parent then
+        local parentName = part.Parent.Name:lower()
+        for _, keyword in ipairs(DAMAGE_NAMES) do
+            if parentName:find(keyword) then isDamage = true break end
+        end
+    end
+
+    -- check for damage scripts/values inside
+    if not isDamage then
+        isDamage = hasScriptWithDamageLogic(part)
+    end
+
+    -- check for suspicious color + CanTouch + has a script (likely a kill brick)
+    if not isDamage and part.CanTouch and hasDamageColor(part) then
+        local hasAnyScript = false
+        for _, child in ipairs(part:GetChildren()) do
+            if child:IsA("Script") or child:IsA("LocalScript") then
+                hasAnyScript = true
+                break
+            end
+        end
+        if not hasAnyScript and part.Parent then
+            for _, sibling in ipairs(part.Parent:GetChildren()) do
+                if sibling:IsA("Script") or sibling:IsA("LocalScript") then
+                    hasAnyScript = true
+                    break
+                end
+            end
+        end
+        if hasAnyScript then isDamage = true end
+    end
+
+    -- parts with Neon material + script are often damage blocks
+    if not isDamage and part.Material == Enum.Material.Neon and part.CanTouch then
+        local hasScript = false
+        for _, child in ipairs(part:GetChildren()) do
+            if child:IsA("Script") then hasScript = true break end
+        end
+        if hasScript then isDamage = true end
+    end
+
+    -- any part with a script inside it and CanTouch
+    if not isDamage and part.CanTouch then
+        for _, child in ipairs(part:GetChildren()) do
+            if child:IsA("Script") or child:IsA("LocalScript") then
+                isDamage = true
+                break
+            end
+        end
+    end
+
+    -- check grandparent too
+    if not isDamage and part.Parent and part.Parent.Parent then
+        local gpName = part.Parent.Parent.Name:lower()
+        for _, keyword in ipairs(DAMAGE_NAMES) do
+            if gpName:find(keyword) then isDamage = true break end
+        end
+    end
+
+    -- anchored + CanTouch + has a script anywhere in ancestry
+    if not isDamage and part.Anchored and part.CanTouch and part.Name ~= "Baseplate" and part.Name ~= "Terrain" then
+        local ancestor = part.Parent
+        while ancestor and ancestor ~= Workspace do
+            for _, child in ipairs(ancestor:GetChildren()) do
+                if child:IsA("Script") then
+                    local sName = child.Name:lower()
+                    for _, keyword in ipairs(DAMAGE_NAMES) do
+                        if sName:find(keyword) then
+                            isDamage = true
+                            break
+                        end
+                    end
+                    if isDamage then break end
+                end
+            end
+            if isDamage then break end
+            ancestor = ancestor.Parent
+        end
+    end
+
+    if isDamage then
+        knownDamageCache[part] = true
+    end
+    return isDamage
+end
+
+-- runtime health monitor: learns which parts deal damage by watching health
+local function setupHealthMonitor(character)
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    local lastHealth = humanoid.Health
+    local nearbyParts = {}
+
+    -- track what parts are touching the character at any moment
+    for _, bodyPart in ipairs(character:GetChildren()) do
+        if bodyPart:IsA("BasePart") then
+            bodyPart.Touched:Connect(function(hit)
+                if hit.Parent ~= character and hit:IsA("BasePart") then
+                    nearbyParts[hit] = tick()
+                end
+            end)
+            bodyPart.TouchEnded:Connect(function(hit)
+                task.delay(0.2, function()
+                    nearbyParts[hit] = nil
+                end)
+            end)
+        end
+    end
+
+    -- when health drops, mark whatever we're touching as a damage block
+    humanoid.HealthChanged:Connect(function(newHealth)
+        if newHealth < lastHealth then
+            local now = tick()
+            for part, touchTime in pairs(nearbyParts) do
+                if now - touchTime < 0.5 and part and part.Parent then
+                    learnedDamageParts[part] = true
+                    knownDamageCache[part] = true
+                    -- also mark siblings with same name (common pattern: duplicated kill bricks)
+                    if part.Parent then
+                        for _, sibling in ipairs(part.Parent:GetChildren()) do
+                            if sibling:IsA("BasePart") and sibling.Name == part.Name
+                                and sibling.Size == part.Size and sibling.Color == part.Color then
+                                learnedDamageParts[sibling] = true
+                                knownDamageCache[sibling] = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        lastHealth = newHealth
+    end)
+end
+
+-- get closest point on a block's surface to the player (not just center)
+local function closestPointOnPart(part, point)
+    local cf = part.CFrame
+    local size = part.Size / 2
+    local localPoint = cf:PointToObjectSpace(point)
+
+    local clampedX = math.clamp(localPoint.X, -size.X, size.X)
+    local clampedY = math.clamp(localPoint.Y, -size.Y, size.Y)
+    local clampedZ = math.clamp(localPoint.Z, -size.Z, size.Z)
+
+    return cf:PointToWorldSpace(Vector3.new(clampedX, clampedY, clampedZ))
+end
+
+-- check if the player's path will intersect the block
+local function willCollide(pos, moveDir, block, lookAhead)
+    local futurePos = pos + moveDir * lookAhead
+    local closest = closestPointOnPart(block, futurePos)
+    local dist = (closest - futurePos).Magnitude
+    return dist < 4 -- player radius buffer
+end
+
+local function onCharacterAdded(character)
+    if connection then connection:Disconnect() end
+    -- keep learned damage parts across respawns, only clear heuristic cache
+    knownDamageCache = {}
+    for part, _ in pairs(learnedDamageParts) do
+        knownDamageCache[part] = true
+    end
+    setupHealthMonitor(character)
+
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    local humanoid = character:WaitForChild("Humanoid")
+
+    local dangerBlocks = {}
+    local lastScan = 0
+
+    connection = RunService.Heartbeat:Connect(function()
+        if not hrp or not hrp.Parent then return end
+        if humanoid.Health <= 0 then return end
+
+        local now = tick()
+        local pos = hrp.Position
+
+        -- periodic scan for damage blocks
+        if now - lastScan >= SCAN_INTERVAL then
+            lastScan = now
+            dangerBlocks = {}
+
+            local region = Workspace:GetPartBoundsInRadius(pos, DETECTION_RADIUS)
+            for _, part in ipairs(region) do
+                if isDamageBlock(part) then
+                    table.insert(dangerBlocks, part)
+                end
+            end
+        end
+
+        if #dangerBlocks == 0 then return end
+
+        local moveDir = humanoid.MoveDirection
+        if moveDir.Magnitude < 0.1 then return end
+
+        -- check ALL nearby threats, not just the closest
+        local totalNudge = Vector3.new(0, 0, 0)
+        local shouldJump = false
+        local threatCount = 0
+
+        for _, block in ipairs(dangerBlocks) do
+            if not block or not block.Parent then continue end
+
+            -- use closest surface point, not center
+            local closestPoint = closestPointOnPart(block, pos)
+            local toBlock = closestPoint - pos
+            local horizontalDist = Vector3.new(toBlock.X, 0, toBlock.Z).Magnitude
+
+            if horizontalDist > REACT_RADIUS then continue end
+
+            -- check if we're heading toward it or if our path intersects
+            local horizontalToBlock = Vector3.new(toBlock.X, 0, toBlock.Z)
+            if horizontalToBlock.Magnitude > 0.01 then
+                horizontalToBlock = horizontalToBlock.Unit
+            end
+            local dot = moveDir:Dot(horizontalToBlock)
+
+            local onCollisionPath = willCollide(pos, moveDir, block, humanoid.WalkSpeed * 0.5)
+
+            if dot < 0.1 and not onCollisionPath then continue end
+
+            threatCount = threatCount + 1
+
+            -- check if jumpable
+            local blockTop = block.Position.Y + (block.Size.Y / 2)
+            local playerFeet = pos.Y - 3
+            local heightAbovePlayer = blockTop - playerFeet
+
+            if heightAbovePlayer <= JUMP_MAX_HEIGHT and horizontalDist < REACT_RADIUS * 0.5 then
+                shouldJump = true
+            end
+
+            -- calculate dodge direction using surface point
+            local cross = moveDir:Cross(Vector3.new(0, 1, 0))
+            if cross.Magnitude < 0.01 then
+                cross = Vector3.new(1, 0, 0)
+            else
+                cross = cross.Unit
+            end
+
+            -- pick the side that moves us away from the block fastest
+            local sideCheck = cross:Dot(horizontalToBlock)
+            local dodgeDir = sideCheck > 0 and -cross or cross
+
+            -- urgency scales with proximity (inverse square for sharper reaction up close)
+            local normalizedDist = horizontalDist / REACT_RADIUS
+            local urgency = (1 - normalizedDist) ^ 2
+
+            -- stronger dodge if directly heading at the block
+            local headingFactor = math.max(dot, 0.3)
+
+            totalNudge = totalNudge + dodgeDir * urgency * headingFactor
+        end
+
+        if threatCount == 0 then return end
+
+        if shouldJump then
+            humanoid.Jump = true
+        end
+
+        -- apply combined dodge from all threats
+        if totalNudge.Magnitude > 0.01 then
+            local nudge = totalNudge.Unit * DODGE_STRENGTH * humanoid.WalkSpeed * 0.6
+
+            hrp.AssemblyLinearVelocity = Vector3.new(
+                hrp.AssemblyLinearVelocity.X + nudge.X,
+                hrp.AssemblyLinearVelocity.Y,
+                hrp.AssemblyLinearVelocity.Z + nudge.Z
+            )
+        end
+    end)
+end
+
+if player.Character then
+    onCharacterAdded(player.Character)
+end
+player.CharacterAdded:Connect(onCharacterAdded)

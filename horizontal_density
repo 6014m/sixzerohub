@@ -1,0 +1,106 @@
+-- Horizontal Density
+-- Resists all types of horizontal pushing while leaving vertical physics unaffected
+-- Handles: physics forces, collisions, explosions, velocity sets, CFrame pushes
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local STRENGTH = 1 -- 0 to 1, how much horizontal push to cancel
+
+local player = Players.LocalPlayer
+local connections = {}
+
+local function cleanup()
+    for _, conn in pairs(connections) do conn:Disconnect() end
+    connections = {}
+end
+
+local function onCharacterAdded(character)
+    cleanup()
+
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    local humanoid = character:WaitForChild("Humanoid")
+
+    -- LinearVelocity constraint to resist physics-based horizontal forces
+    local attachment = Instance.new("Attachment")
+    attachment.Name = "HDensityAttach"
+    attachment.Parent = hrp
+
+    local linVel = Instance.new("LinearVelocity")
+    linVel.Name = "HDensityForce"
+    linVel.Attachment0 = attachment
+    linVel.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
+    linVel.PrimaryTangentAxis = Vector3.new(1, 0, 0)
+    linVel.SecondaryTangentAxis = Vector3.new(0, 0, 1)
+    linVel.RelativeTo = Enum.ActuatorRelativeTo.World
+    linVel.ForceLimitMode = Enum.ForceLimitMode.Magnitude
+    linVel.MaxForce = math.huge
+    linVel.PlaneVelocity = Vector2.new(0, 0)
+    linVel.Parent = hrp
+
+    local lastCFrame = hrp.CFrame
+    local lastTick = tick()
+
+    connections[#connections + 1] = RunService.Heartbeat:Connect(function()
+        if not hrp or not hrp.Parent then return end
+
+        local moveDir = humanoid.MoveDirection
+        local walkSpeed = humanoid.WalkSpeed
+
+        local intendedX = moveDir.X * walkSpeed
+        local intendedZ = moveDir.Z * walkSpeed
+
+        -- set the constraint to drive toward intended horizontal velocity
+        linVel.PlaneVelocity = Vector2.new(intendedX, intendedZ)
+
+        -- also correct direct velocity manipulation
+        local vel = hrp.AssemblyLinearVelocity
+        local pushX = vel.X - intendedX
+        local pushZ = vel.Z - intendedZ
+
+        hrp.AssemblyLinearVelocity = Vector3.new(
+            vel.X - (pushX * STRENGTH),
+            vel.Y,
+            vel.Z - (pushZ * STRENGTH)
+        )
+
+        -- detect and revert CFrame-based horizontal pushing
+        local now = tick()
+        local dt = now - lastTick
+        if dt > 0 and lastCFrame then
+            local posDelta = hrp.CFrame.Position - lastCFrame.Position
+            local expectedX = intendedX * dt
+            local expectedZ = intendedZ * dt
+
+            local cframePushX = posDelta.X - expectedX
+            local cframePushZ = posDelta.Z - expectedZ
+
+            -- if theres a big unexpected horizontal shift, revert it
+            -- but allow real game teleports (large distances)
+            local threshold = walkSpeed * dt * 1.5
+            local pushDist = math.sqrt(cframePushX * cframePushX + cframePushZ * cframePushZ)
+            local teleportThreshold = 50
+            if pushDist > threshold and pushDist < teleportThreshold then
+                hrp.CFrame = hrp.CFrame - Vector3.new(
+                    cframePushX * STRENGTH,
+                    0,
+                    cframePushZ * STRENGTH
+                )
+            end
+        end
+
+        lastCFrame = hrp.CFrame
+        lastTick = now
+    end)
+
+    connections[#connections + 1] = humanoid.Died:Connect(function()
+        cleanup()
+        linVel:Destroy()
+        attachment:Destroy()
+    end)
+end
+
+if player.Character then
+    onCharacterAdded(player.Character)
+end
+player.CharacterAdded:Connect(onCharacterAdded)
