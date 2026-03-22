@@ -647,8 +647,8 @@ uniContentLayout.Parent = uniContent
 -- script entries (name, GitHub raw URL)
 local REPO_BASE = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
 local SCRIPTS = {
-    { name = "Horizontal Density", file = "horizontal_density" },
-    { name = "Damage Block Dodger", file = "damage_block_dodger" },
+    { name = "Horizontal Density", file = "[Uni]horizontal_density" },
+    { name = "Damage Block Dodger", file = "[Uni]damage_block_dodger" },
 }
 
 local function createScriptButton(info)
