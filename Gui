@@ -4,7 +4,6 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
-local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 
@@ -38,6 +37,14 @@ screenGui.DisplayOrder = -1
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = playerGui
 
+-- separate always-visible ScreenGui for the eye toggle so it persists when main GUI is hidden
+local toggleGui = Instance.new("ScreenGui")
+toggleGui.Name = "SixZeroHubToggle"
+toggleGui.ResetOnSpawn = false
+toggleGui.DisplayOrder = 100
+toggleGui.IgnoreGuiInset = true
+toggleGui.Parent = playerGui
+
 ---------- INVERTED L SHAPE ----------
 
 -- top bar (full width)
@@ -69,11 +76,11 @@ titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = topBar
 
--- eye toggle button in top bar, far right
+-- eye toggle button — lives in its own ScreenGui so it's always clickable
 local eyeBtn = Instance.new("TextButton")
 eyeBtn.Name = "EyeToggle"
 eyeBtn.Size = UDim2.new(0, 32, 0, 26)
-eyeBtn.Position = UDim2.new(1, -42, 0.5, -13)
+eyeBtn.Position = UDim2.new(1, -42, 0, 5)
 eyeBtn.BackgroundColor3 = COLORS.hover
 eyeBtn.BackgroundTransparency = 0.5
 eyeBtn.BorderSizePixel = 0
@@ -82,7 +89,7 @@ eyeBtn.Font = Enum.Font.GothamBold
 eyeBtn.TextSize = 16
 eyeBtn.Text = "\xF0\x9F\x91\x81"
 eyeBtn.TextColor3 = COLORS.text
-eyeBtn.Parent = topBar
+eyeBtn.Parent = toggleGui
 
 local eyeBtnCorner = Instance.new("UICorner")
 eyeBtnCorner.CornerRadius = UDim.new(0, 6)
@@ -143,109 +150,186 @@ contentLayout.Parent = contentArea
 local loadedScripts = {}
 local activeScripts = {}
 local activeMenuOpen = false
+local uniContent -- forward declare
+
+local function refreshActiveList() end -- forward declare, defined below
 
 _G.SixZeroHubRegister = function(displayName, fileKey, cleanupFn)
     activeScripts[fileKey] = {
         name = displayName,
         cleanup = cleanupFn,
-        row = nil,
     }
     if activeMenuOpen then
         refreshActiveList()
     end
 end
 
+---------- HELPER: DRAGGABLE ----------
+
+local function makeDraggable(header, frame)
+    local isDragging, dragStart, frameStart
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+            dragStart = input.Position
+            frameStart = frame.Position
+        end
+    end)
+    header.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                frameStart.X.Scale, frameStart.X.Offset + delta.X,
+                frameStart.Y.Scale, frameStart.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+---------- HELPER: POPUP MENU ----------
+
+local function createPopupMenu(name, title)
+    local menu = Instance.new("Frame")
+    menu.Name = name
+    menu.Size = UDim2.new(0, 400, 0, 300)
+    menu.Position = UDim2.new(0.5, -200, 0.5, -150)
+    menu.BackgroundColor3 = COLORS.sidebar
+    menu.BorderSizePixel = 0
+    menu.Visible = false
+    menu.Parent = screenGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = menu
+
+    local shadow = Instance.new("ImageLabel")
+    shadow.Name = "Shadow"
+    shadow.Size = UDim2.new(1, 20, 1, 20)
+    shadow.Position = UDim2.new(0, -10, 0, -10)
+    shadow.BackgroundTransparency = 1
+    shadow.Image = "rbxassetid://5554236805"
+    shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    shadow.ImageTransparency = 0.6
+    shadow.ScaleType = Enum.ScaleType.Slice
+    shadow.SliceCenter = Rect.new(23, 23, 277, 277)
+    shadow.ZIndex = -1
+    shadow.Parent = menu
+
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 40)
+    header.BackgroundColor3 = COLORS.darker
+    header.BorderSizePixel = 0
+    header.Parent = menu
+
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 8)
+    headerCorner.Parent = header
+
+    local headerFill = Instance.new("Frame")
+    headerFill.Size = UDim2.new(1, 0, 0, 10)
+    headerFill.Position = UDim2.new(0, 0, 1, -10)
+    headerFill.BackgroundColor3 = COLORS.darker
+    headerFill.BorderSizePixel = 0
+    headerFill.Parent = header
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Name = "Close"
+    closeBtn.Size = UDim2.new(0, 30, 0, 30)
+    closeBtn.Position = UDim2.new(0, 5, 0, 5)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = COLORS.textMuted
+    closeBtn.TextSize = 16
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.Parent = header
+
+    closeBtn.MouseEnter:Connect(function()
+        closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end)
+    closeBtn.MouseLeave:Connect(function()
+        closeBtn.TextColor3 = COLORS.textMuted
+    end)
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, -50, 1, 0)
+    titleLbl.Position = UDim2.new(0, 38, 0, 0)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = title
+    titleLbl.TextColor3 = COLORS.text
+    titleLbl.TextSize = 16
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.Parent = header
+
+    local content = Instance.new("ScrollingFrame")
+    content.Name = "Content"
+    content.Size = UDim2.new(1, -16, 1, -52)
+    content.Position = UDim2.new(0, 8, 0, 44)
+    content.BackgroundTransparency = 1
+    content.BorderSizePixel = 0
+    content.ScrollBarThickness = 3
+    content.ScrollBarImageColor3 = COLORS.textMuted
+    content.CanvasSize = UDim2.new(0, 0, 0, 0)
+    content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    content.Parent = menu
+
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 4)
+    layout.Parent = content
+
+    makeDraggable(header, menu)
+
+    return menu, header, content, closeBtn
+end
+
+---------- HELPER: TOGGLE POPUP ----------
+
+local function createPopupToggle(menu, targetSize)
+    targetSize = targetSize or UDim2.new(0, 400, 0, 300)
+    local isOpen = false
+
+    local function toggle()
+        isOpen = not isOpen
+        if isOpen then
+            menu.Visible = true
+            menu.Size = UDim2.new(0, targetSize.X.Offset, 0, 0)
+            TweenService:Create(menu, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                Size = targetSize
+            }):Play()
+        else
+            local tween = TweenService:Create(menu, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+                Size = UDim2.new(0, targetSize.X.Offset, 0, 0)
+            })
+            tween:Play()
+            tween.Completed:Connect(function()
+                if not isOpen then menu.Visible = false end
+            end)
+        end
+        return isOpen
+    end
+
+    local function close()
+        if isOpen then toggle() end
+    end
+
+    local function getIsOpen()
+        return isOpen
+    end
+
+    return toggle, close, getIsOpen
+end
+
 ---------- ACTIVE SCRIPTS MENU ----------
 
-local activeMenu = Instance.new("Frame")
-activeMenu.Name = "ActiveScriptsMenu"
-activeMenu.Size = UDim2.new(0, 400, 0, 300)
-activeMenu.Position = UDim2.new(0.5, -200, 0.5, -150)
-activeMenu.BackgroundColor3 = COLORS.sidebar
-activeMenu.BorderSizePixel = 0
-activeMenu.Visible = false
-activeMenu.Parent = screenGui
-
-local activeMenuCorner = Instance.new("UICorner")
-activeMenuCorner.CornerRadius = UDim.new(0, 8)
-activeMenuCorner.Parent = activeMenu
-
-local activeMenuShadow = Instance.new("ImageLabel")
-activeMenuShadow.Name = "Shadow"
-activeMenuShadow.Size = UDim2.new(1, 20, 1, 20)
-activeMenuShadow.Position = UDim2.new(0, -10, 0, -10)
-activeMenuShadow.BackgroundTransparency = 1
-activeMenuShadow.Image = "rbxassetid://5554236805"
-activeMenuShadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-activeMenuShadow.ImageTransparency = 0.6
-activeMenuShadow.ScaleType = Enum.ScaleType.Slice
-activeMenuShadow.SliceCenter = Rect.new(23, 23, 277, 277)
-activeMenuShadow.ZIndex = -1
-activeMenuShadow.Parent = activeMenu
-
-local activeMenuHeader = Instance.new("Frame")
-activeMenuHeader.Name = "Header"
-activeMenuHeader.Size = UDim2.new(1, 0, 0, 40)
-activeMenuHeader.BackgroundColor3 = COLORS.darker
-activeMenuHeader.BorderSizePixel = 0
-activeMenuHeader.Parent = activeMenu
-
-local activeMenuHeaderCorner = Instance.new("UICorner")
-activeMenuHeaderCorner.CornerRadius = UDim.new(0, 8)
-activeMenuHeaderCorner.Parent = activeMenuHeader
-
-local activeHeaderFill = Instance.new("Frame")
-activeHeaderFill.Size = UDim2.new(1, 0, 0, 10)
-activeHeaderFill.Position = UDim2.new(0, 0, 1, -10)
-activeHeaderFill.BackgroundColor3 = COLORS.darker
-activeHeaderFill.BorderSizePixel = 0
-activeHeaderFill.Parent = activeMenuHeader
-
-local activeCloseBtn = Instance.new("TextButton")
-activeCloseBtn.Name = "Close"
-activeCloseBtn.Size = UDim2.new(0, 30, 0, 30)
-activeCloseBtn.Position = UDim2.new(0, 5, 0, 5)
-activeCloseBtn.BackgroundTransparency = 1
-activeCloseBtn.Text = "X"
-activeCloseBtn.TextColor3 = COLORS.textMuted
-activeCloseBtn.TextSize = 16
-activeCloseBtn.Font = Enum.Font.GothamBold
-activeCloseBtn.Parent = activeMenuHeader
-
-activeCloseBtn.MouseEnter:Connect(function()
-    activeCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-end)
-activeCloseBtn.MouseLeave:Connect(function()
-    activeCloseBtn.TextColor3 = COLORS.textMuted
-end)
-
-local activeMenuTitle = Instance.new("TextLabel")
-activeMenuTitle.Size = UDim2.new(1, -50, 1, 0)
-activeMenuTitle.Position = UDim2.new(0, 38, 0, 0)
-activeMenuTitle.BackgroundTransparency = 1
-activeMenuTitle.Text = "Active Scripts"
-activeMenuTitle.TextColor3 = COLORS.text
-activeMenuTitle.TextSize = 16
-activeMenuTitle.Font = Enum.Font.GothamBold
-activeMenuTitle.TextXAlignment = Enum.TextXAlignment.Left
-activeMenuTitle.Parent = activeMenuHeader
-
-local activeContent = Instance.new("ScrollingFrame")
-activeContent.Name = "Content"
-activeContent.Size = UDim2.new(1, -16, 1, -52)
-activeContent.Position = UDim2.new(0, 8, 0, 44)
-activeContent.BackgroundTransparency = 1
-activeContent.BorderSizePixel = 0
-activeContent.ScrollBarThickness = 3
-activeContent.ScrollBarImageColor3 = COLORS.textMuted
-activeContent.CanvasSize = UDim2.new(0, 0, 0, 0)
-activeContent.AutomaticCanvasSize = Enum.AutomaticSize.Y
-activeContent.Parent = activeMenu
-
-local activeContentLayout = Instance.new("UIListLayout")
-activeContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-activeContentLayout.Padding = UDim.new(0, 4)
-activeContentLayout.Parent = activeContent
+local activeMenu, activeHeader, activeContent, activeCloseBtn = createPopupMenu("ActiveScriptsMenu", "Active Scripts")
+local toggleActiveMenu, closeActiveMenu, isActiveMenuOpen = createPopupToggle(activeMenu)
 
 local activeEmptyLabel = Instance.new("TextLabel")
 activeEmptyLabel.Name = "Empty"
@@ -256,9 +340,6 @@ activeEmptyLabel.TextColor3 = COLORS.textMuted
 activeEmptyLabel.TextSize = 14
 activeEmptyLabel.Font = Enum.Font.Gotham
 activeEmptyLabel.Parent = activeContent
-
--- forward declare
-local uniContent
 
 function refreshActiveList()
     for _, child in ipairs(activeContent:GetChildren()) do
@@ -276,9 +357,7 @@ function refreshActiveList()
         row.BorderSizePixel = 0
         row.Parent = activeContent
 
-        local rowCorner = Instance.new("UICorner")
-        rowCorner.CornerRadius = UDim.new(0, 6)
-        rowCorner.Parent = row
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
 
         local nameLabel = Instance.new("TextLabel")
         nameLabel.Size = UDim2.new(1, -90, 1, 0)
@@ -304,9 +383,7 @@ function refreshActiveList()
         deactivateBtn.AutoButtonColor = false
         deactivateBtn.Parent = row
 
-        local deactivateCorner = Instance.new("UICorner")
-        deactivateCorner.CornerRadius = UDim.new(0, 4)
-        deactivateCorner.Parent = deactivateBtn
+        Instance.new("UICorner", deactivateBtn).CornerRadius = UDim.new(0, 4)
 
         deactivateBtn.MouseEnter:Connect(function()
             TweenService:Create(deactivateBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(200, 50, 50)}):Play()
@@ -321,12 +398,11 @@ function refreshActiveList()
             end
             activeScripts[fileKey] = nil
             loadedScripts[fileKey] = nil
-            -- reset uni menu status
             if uniContent then
-                local uniBtn_ref = uniContent:FindFirstChild(fileKey)
-                if uniBtn_ref then
-                    local statusLabel = uniBtn_ref:FindFirstChild("Status")
-                    if statusLabel then statusLabel.Text = "" end
+                local ref = uniContent:FindFirstChild(fileKey)
+                if ref then
+                    local s = ref:FindFirstChild("Status")
+                    if s then s.Text = "" end
                 end
             end
             refreshActiveList()
@@ -336,53 +412,14 @@ function refreshActiveList()
     activeEmptyLabel.Visible = (count == 0)
 end
 
--- make active menu draggable
-local activeDragging, activeDragStart, activeStartPos
-activeMenuHeader.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        activeDragging = true
-        activeDragStart = input.Position
-        activeStartPos = activeMenu.Position
-    end
-end)
-activeMenuHeader.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        activeDragging = false
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if activeDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - activeDragStart
-        activeMenu.Position = UDim2.new(
-            activeStartPos.X.Scale, activeStartPos.X.Offset + delta.X,
-            activeStartPos.Y.Scale, activeStartPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
-local function toggleActiveMenu()
-    activeMenuOpen = not activeMenuOpen
-    if activeMenuOpen then
-        refreshActiveList()
-        activeMenu.Visible = true
-        activeMenu.Size = UDim2.new(0, 400, 0, 0)
-        TweenService:Create(activeMenu, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Size = UDim2.new(0, 400, 0, 300)
-        }):Play()
-    else
-        local tween = TweenService:Create(activeMenu, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-            Size = UDim2.new(0, 400, 0, 0)
-        })
-        tween:Play()
-        tween.Completed:Connect(function()
-            activeMenu.Visible = false
-        end)
-    end
+-- wrap toggleActiveMenu to refresh on open
+local _rawToggleActive = toggleActiveMenu
+toggleActiveMenu = function()
+    local nowOpen = _rawToggleActive()
+    if nowOpen then refreshActiveList() end
 end
 
-activeCloseBtn.MouseButton1Click:Connect(function()
-    if activeMenuOpen then toggleActiveMenu() end
-end)
+activeCloseBtn.MouseButton1Click:Connect(closeActiveMenu)
 
 ---------- ACTIVE BUTTON (bottom right of sidebar, above Uni) ----------
 
@@ -399,12 +436,9 @@ activeBtn.Font = Enum.Font.GothamBold
 activeBtn.AutoButtonColor = false
 activeBtn.Parent = sidebar
 
-local activeBtnCorner = Instance.new("UICorner")
-activeBtnCorner.CornerRadius = UDim.new(0, 6)
-activeBtnCorner.Parent = activeBtn
+Instance.new("UICorner", activeBtn).CornerRadius = UDim.new(0, 6)
 
 local activeTooltip = Instance.new("Frame")
-activeTooltip.Name = "ActiveTooltip"
 activeTooltip.Size = UDim2.new(0, 110, 0, 28)
 activeTooltip.Position = UDim2.new(0, -115, 0.5, -14)
 activeTooltip.BackgroundColor3 = COLORS.darker
@@ -412,9 +446,7 @@ activeTooltip.BorderSizePixel = 0
 activeTooltip.Visible = false
 activeTooltip.Parent = activeBtn
 
-local activeTooltipCorner = Instance.new("UICorner")
-activeTooltipCorner.CornerRadius = UDim.new(0, 6)
-activeTooltipCorner.Parent = activeTooltip
+Instance.new("UICorner", activeTooltip).CornerRadius = UDim.new(0, 6)
 
 local activeTooltipText = Instance.new("TextLabel")
 activeTooltipText.Size = UDim2.new(1, 0, 1, 0)
@@ -433,7 +465,6 @@ activeBtn.MouseLeave:Connect(function()
     activeTooltip.Visible = false
     TweenService:Create(activeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(87, 242, 135)}):Play()
 end)
-
 activeBtn.MouseButton1Click:Connect(toggleActiveMenu)
 
 ---------- UNI BUTTON (bottom right of sidebar) ----------
@@ -451,12 +482,9 @@ uniBtn.Font = Enum.Font.GothamBold
 uniBtn.AutoButtonColor = false
 uniBtn.Parent = sidebar
 
-local uniBtnCorner = Instance.new("UICorner")
-uniBtnCorner.CornerRadius = UDim.new(0, 6)
-uniBtnCorner.Parent = uniBtn
+Instance.new("UICorner", uniBtn).CornerRadius = UDim.new(0, 6)
 
 local uniTooltip = Instance.new("Frame")
-uniTooltip.Name = "UniTooltip"
 uniTooltip.Size = UDim2.new(0, 130, 0, 28)
 uniTooltip.Position = UDim2.new(0, -135, 0.5, -14)
 uniTooltip.BackgroundColor3 = COLORS.darker
@@ -464,12 +492,9 @@ uniTooltip.BorderSizePixel = 0
 uniTooltip.Visible = false
 uniTooltip.Parent = uniBtn
 
-local tooltipCorner = Instance.new("UICorner")
-tooltipCorner.CornerRadius = UDim.new(0, 6)
-tooltipCorner.Parent = uniTooltip
+Instance.new("UICorner", uniTooltip).CornerRadius = UDim.new(0, 6)
 
 local tooltipText = Instance.new("TextLabel")
-tooltipText.Name = "Text"
 tooltipText.Size = UDim2.new(1, 0, 1, 0)
 tooltipText.BackgroundTransparency = 1
 tooltipText.Text = "Universal Scripts"
@@ -489,97 +514,12 @@ end)
 
 ---------- UNIVERSAL SCRIPTS MENU ----------
 
-local uniMenuOpen = false
+local uniMenu, uniHeader, _uniContent, uniCloseBtn = createPopupMenu("UniversalScriptsMenu", "Universal Scripts")
+uniContent = _uniContent
+local toggleUniMenu, closeUniMenu, isUniMenuOpen = createPopupToggle(uniMenu)
 
-local uniMenu = Instance.new("Frame")
-uniMenu.Name = "UniversalScriptsMenu"
-uniMenu.Size = UDim2.new(0, 400, 0, 300)
-uniMenu.Position = UDim2.new(0.5, -200, 0.5, -150)
-uniMenu.BackgroundColor3 = COLORS.sidebar
-uniMenu.BorderSizePixel = 0
-uniMenu.Visible = false
-uniMenu.Parent = screenGui
-
-local uniMenuCorner = Instance.new("UICorner")
-uniMenuCorner.CornerRadius = UDim.new(0, 8)
-uniMenuCorner.Parent = uniMenu
-
-local uniMenuShadow = Instance.new("ImageLabel")
-uniMenuShadow.Name = "Shadow"
-uniMenuShadow.Size = UDim2.new(1, 20, 1, 20)
-uniMenuShadow.Position = UDim2.new(0, -10, 0, -10)
-uniMenuShadow.BackgroundTransparency = 1
-uniMenuShadow.Image = "rbxassetid://5554236805"
-uniMenuShadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-uniMenuShadow.ImageTransparency = 0.6
-uniMenuShadow.ScaleType = Enum.ScaleType.Slice
-uniMenuShadow.SliceCenter = Rect.new(23, 23, 277, 277)
-uniMenuShadow.ZIndex = -1
-uniMenuShadow.Parent = uniMenu
-
-local uniMenuHeader = Instance.new("Frame")
-uniMenuHeader.Name = "Header"
-uniMenuHeader.Size = UDim2.new(1, 0, 0, 40)
-uniMenuHeader.BackgroundColor3 = COLORS.darker
-uniMenuHeader.BorderSizePixel = 0
-uniMenuHeader.Parent = uniMenu
-
-local uniMenuHeaderCorner = Instance.new("UICorner")
-uniMenuHeaderCorner.CornerRadius = UDim.new(0, 8)
-uniMenuHeaderCorner.Parent = uniMenuHeader
-
-local headerFill = Instance.new("Frame")
-headerFill.Size = UDim2.new(1, 0, 0, 10)
-headerFill.Position = UDim2.new(0, 0, 1, -10)
-headerFill.BackgroundColor3 = COLORS.darker
-headerFill.BorderSizePixel = 0
-headerFill.Parent = uniMenuHeader
-
-local uniMenuTitle = Instance.new("TextLabel")
-uniMenuTitle.Size = UDim2.new(1, -50, 1, 0)
-uniMenuTitle.Position = UDim2.new(0, 38, 0, 0)
-uniMenuTitle.BackgroundTransparency = 1
-uniMenuTitle.Text = "Universal Scripts"
-uniMenuTitle.TextColor3 = COLORS.text
-uniMenuTitle.TextSize = 16
-uniMenuTitle.Font = Enum.Font.GothamBold
-uniMenuTitle.TextXAlignment = Enum.TextXAlignment.Left
-uniMenuTitle.Parent = uniMenuHeader
-
-local uniCloseBtn = Instance.new("TextButton")
-uniCloseBtn.Name = "Close"
-uniCloseBtn.Size = UDim2.new(0, 30, 0, 30)
-uniCloseBtn.Position = UDim2.new(0, 5, 0, 5)
-uniCloseBtn.BackgroundTransparency = 1
-uniCloseBtn.Text = "X"
-uniCloseBtn.TextColor3 = COLORS.textMuted
-uniCloseBtn.TextSize = 16
-uniCloseBtn.Font = Enum.Font.GothamBold
-uniCloseBtn.Parent = uniMenuHeader
-
-uniCloseBtn.MouseEnter:Connect(function()
-    uniCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-end)
-uniCloseBtn.MouseLeave:Connect(function()
-    uniCloseBtn.TextColor3 = COLORS.textMuted
-end)
-
-uniContent = Instance.new("ScrollingFrame")
-uniContent.Name = "Content"
-uniContent.Size = UDim2.new(1, -16, 1, -52)
-uniContent.Position = UDim2.new(0, 8, 0, 44)
-uniContent.BackgroundTransparency = 1
-uniContent.BorderSizePixel = 0
-uniContent.ScrollBarThickness = 3
-uniContent.ScrollBarImageColor3 = COLORS.textMuted
-uniContent.CanvasSize = UDim2.new(0, 0, 0, 0)
-uniContent.AutomaticCanvasSize = Enum.AutomaticSize.Y
-uniContent.Parent = uniMenu
-
-local uniContentLayout = Instance.new("UIListLayout")
-uniContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-uniContentLayout.Padding = UDim.new(0, 4)
-uniContentLayout.Parent = uniContent
+uniBtn.MouseButton1Click:Connect(toggleUniMenu)
+uniCloseBtn.MouseButton1Click:Connect(closeUniMenu)
 
 ---------- SCRIPT ENTRIES ----------
 
@@ -590,7 +530,6 @@ local SCRIPTS = {
     { name = "Lock-On Shiftlock", url = "https://raw.githubusercontent.com/6014m/roblox-lockon-shiftlock/main/The%20Actual%20Script" },
 }
 
--- favorites persist to file
 local FAVORITES_FILE = "SixZeroHub_favorites.json"
 
 local function loadFavorites()
@@ -649,11 +588,9 @@ local function createScriptButton(info)
     btn.LayoutOrder = getLayoutOrder(info)
     btn.Parent = uniContent
 
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 6)
-    btnCorner.Parent = btn
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
-    -- status indicator (right side, before star)
+    -- status indicator (before star)
     local status = Instance.new("TextLabel")
     status.Name = "Status"
     status.Size = UDim2.new(0, 55, 1, 0)
@@ -666,7 +603,7 @@ local function createScriptButton(info)
     status.TextXAlignment = Enum.TextXAlignment.Right
     status.Parent = btn
 
-    -- favorite star button (far right)
+    -- favorite star (far right)
     local favBtn = Instance.new("TextButton")
     favBtn.Name = "Favorite"
     favBtn.Size = UDim2.new(0, 28, 0, 28)
@@ -715,7 +652,7 @@ local function createScriptButton(info)
                 status.Text = "running"
                 status.TextColor3 = Color3.fromRGB(87, 242, 135)
 
-                -- if script didn't self-register, register it from here
+                -- auto-register external scripts that don't self-register
                 task.delay(1, function()
                     if not activeScripts[fileKey] then
                         _G.SixZeroHubRegister(info.name, fileKey, nil)
@@ -736,73 +673,22 @@ for _, scriptInfo in ipairs(SCRIPTS) do
     createScriptButton(scriptInfo)
 end
 
--- make uni menu draggable
-local dragging, dragStart, startPos
-uniMenuHeader.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = uniMenu.Position
-    end
-end)
-uniMenuHeader.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart
-        uniMenu.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
-local function toggleUniMenu()
-    uniMenuOpen = not uniMenuOpen
-    if uniMenuOpen then
-        uniMenu.Visible = true
-        uniMenu.Size = UDim2.new(0, 400, 0, 0)
-        TweenService:Create(uniMenu, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Size = UDim2.new(0, 400, 0, 300)
-        }):Play()
-    else
-        local tween = TweenService:Create(uniMenu, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-            Size = UDim2.new(0, 400, 0, 0)
-        })
-        tween:Play()
-        tween.Completed:Connect(function()
-            uniMenu.Visible = false
-        end)
-    end
-end
-
-uniBtn.MouseButton1Click:Connect(toggleUniMenu)
-uniCloseBtn.MouseButton1Click:Connect(function()
-    if uniMenuOpen then toggleUniMenu() end
-end)
-
 ---------- GUI OFFSET MANAGEMENT ----------
 
 local movedScreenGuis = {}
+local GUI_OFFSET = SIDEBAR_WIDTH + 8
 
 local function shiftGameGuis(show)
-    -- offset = sidebar width + a bit extra so roblox GUI text doesn't overlap
-    local offset = SIDEBAR_WIDTH + 8
     for _, gui in ipairs(playerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") and gui ~= screenGui and gui.Name ~= "SixZeroHub" then
+        if gui:IsA("ScreenGui") and gui ~= screenGui and gui ~= toggleGui then
             if show then
                 if not movedScreenGuis[gui] then
-                    movedScreenGuis[gui] = gui.Position or UDim2.new(0, 0, 0, 0)
+                    movedScreenGuis[gui] = gui.Position
                 end
-                gui.Position = UDim2.new(0, offset, 0, 0)
-            else
-                if movedScreenGuis[gui] then
-                    gui.Position = movedScreenGuis[gui]
-                    movedScreenGuis[gui] = nil
-                end
+                gui.Position = UDim2.new(0, GUI_OFFSET, 0, 0)
+            elseif movedScreenGuis[gui] then
+                gui.Position = movedScreenGuis[gui]
+                movedScreenGuis[gui] = nil
             end
         end
     end
@@ -810,10 +696,10 @@ end
 
 local function moveChat(show)
     task.spawn(function()
-        for i = 1, 20 do
+        for _ = 1, 20 do
             local ok = pcall(function()
                 if show then
-                    StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, SIDEBAR_WIDTH + 8, 0, 4))
+                    StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, GUI_OFFSET, 0, 4))
                 else
                     StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, 0, 0, 0))
                 end
@@ -826,15 +712,10 @@ end
 
 ---------- TOGGLE VISIBILITY ----------
 
-local function toggleGui()
+local function toggleGuiVisibility()
     guiVisible = not guiVisible
 
-    -- update eye icon
-    if guiVisible then
-        eyeBtn.TextTransparency = 0
-    else
-        eyeBtn.TextTransparency = 0.5
-    end
+    eyeBtn.TextTransparency = guiVisible and 0 or 0.5
 
     if guiVisible then
         topBar.Visible = true
@@ -848,15 +729,14 @@ local function toggleGui()
         moveChat(true)
         shiftGameGuis(true)
     else
-        local t1 = TweenService:Create(topBar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+        TweenService:Create(topBar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
             Position = UDim2.new(0, 0, 0, -TOPBAR_HEIGHT)
-        })
-        local t2 = TweenService:Create(sidebar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+        }):Play()
+        local t = TweenService:Create(sidebar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
             Position = UDim2.new(0, -SIDEBAR_WIDTH, 0, TOPBAR_HEIGHT + 1)
         })
-        t1:Play()
-        t2:Play()
-        t2.Completed:Connect(function()
+        t:Play()
+        t.Completed:Connect(function()
             if not guiVisible then
                 topBar.Visible = false
                 sidebar.Visible = false
@@ -864,12 +744,12 @@ local function toggleGui()
         end)
         moveChat(false)
         shiftGameGuis(false)
-        if uniMenuOpen then toggleUniMenu() end
-        if activeMenuOpen then toggleActiveMenu() end
+        closeUniMenu()
+        closeActiveMenu()
     end
 end
 
-eyeBtn.MouseButton1Click:Connect(toggleGui)
+eyeBtn.MouseButton1Click:Connect(toggleGuiVisibility)
 
 ---------- INIT ----------
 
@@ -880,11 +760,11 @@ task.defer(function()
 end)
 
 playerGui.ChildAdded:Connect(function(child)
-    if child:IsA("ScreenGui") and child ~= screenGui and guiVisible then
+    if child:IsA("ScreenGui") and child ~= screenGui and child ~= toggleGui and guiVisible then
         task.wait(0.1)
         if not movedScreenGuis[child] then
-            movedScreenGuis[child] = child.Position or UDim2.new(0, 0, 0, 0)
+            movedScreenGuis[child] = child.Position
         end
-        child.Position = UDim2.new(0, SIDEBAR_WIDTH + 8, 0, 0)
+        child.Position = UDim2.new(0, GUI_OFFSET, 0, 0)
     end
 end)

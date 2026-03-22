@@ -51,7 +51,7 @@ local function onCharacterAdded(character)
     local lastTick = tick()
 
     connections[#connections + 1] = RunService.Heartbeat:Connect(function()
-        if not hrp or not hrp.Parent then return end
+        if not hrp or not hrp.Parent or not humanoid or not humanoid.Parent then return end
 
         local moveDir = humanoid.MoveDirection
         local walkSpeed = humanoid.WalkSpeed
@@ -114,7 +114,7 @@ charAddedConn = player.CharacterAdded:Connect(onCharacterAdded)
 
 -- register with SixZeroHub for deactivation
 if _G.SixZeroHubRegister then
-    _G.SixZeroHubRegister("Horizontal Density", "horizontal_density", function()
+    _G.SixZeroHubRegister("Horizontal Density", "[Uni]horizontal_density", function()
         if charAddedConn then charAddedConn:Disconnect() end
         cleanup()
     end)

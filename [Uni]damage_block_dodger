@@ -246,6 +246,11 @@ local charAddedConn
 
 local function onCharacterAdded(character)
     if connection then connection:Disconnect() end
+    -- disconnect old character connections but keep learned parts
+    for _, conn in pairs(allConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    allConnections = {}
     knownDamageCache = {}
     for part, _ in pairs(learnedDamageParts) do
         knownDamageCache[part] = true
@@ -356,7 +361,7 @@ charAddedConn = player.CharacterAdded:Connect(onCharacterAdded)
 
 -- register with SixZeroHub for deactivation
 if _G.SixZeroHubRegister then
-    _G.SixZeroHubRegister("Damage Block Dodger", "damage_block_dodger", function()
+    _G.SixZeroHubRegister("Damage Block Dodger", "[Uni]damage_block_dodger", function()
         if charAddedConn then charAddedConn:Disconnect() end
         if connection then connection:Disconnect() end
         for _, conn in pairs(allConnections) do
