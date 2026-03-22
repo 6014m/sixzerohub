@@ -96,22 +96,19 @@ titleLabel.Parent = header
 ---------- TOP BAR TOGGLE ----------
 
 -- add eyeball toggle to the Roblox top bar (next to chat, leaderboard, etc.)
+local EYE_OPEN = "rbxassetid://7072706620"
+local EYE_CLOSED = "rbxassetid://7072718338"
 local topbarBtn
-task.defer(function()
-    -- create the icon for the top bar
-    local icon = Instance.new("ImageLabel")
-    icon.Name = "SixZeroToggle"
-    icon.Size = UDim2.new(0, 32, 0, 32)
-    icon.BackgroundTransparency = 1
-    icon.Image = "rbxassetid://7072706620" -- eye icon
+local topbarEyeLabel -- reference to update icon on toggle
 
+task.defer(function()
     -- use SetCore to register as a top bar button
     local success = false
     for i = 1, 30 do
         success = pcall(function()
             StarterGui:SetCore("AddTopbarButton", {
                 Name = "SixZeroHub",
-                Icon = "rbxassetid://7072706620",
+                Icon = EYE_OPEN,
                 Callback = function()
                     toggleGui()
                 end
@@ -148,7 +145,7 @@ task.defer(function()
         eyeLabel.Size = UDim2.new(0, 20, 0, 20)
         eyeLabel.Position = UDim2.new(0.5, -10, 0.5, -10)
         eyeLabel.BackgroundTransparency = 1
-        eyeLabel.Image = "rbxassetid://7072706620"
+        eyeLabel.Image = EYE_OPEN
         eyeLabel.ImageColor3 = COLORS.text
         eyeLabel.Parent = topBtn
 
@@ -163,6 +160,7 @@ task.defer(function()
         end)
 
         topbarBtn = topBtn
+        topbarEyeLabel = eyeLabel
     end
 end)
 
@@ -847,6 +845,11 @@ end
 
 local function toggleGui()
     guiVisible = not guiVisible
+
+    -- update eye icon
+    if topbarEyeLabel then
+        topbarEyeLabel.Image = guiVisible and EYE_OPEN or EYE_CLOSED
+    end
 
     if guiVisible then
         -- show panel
