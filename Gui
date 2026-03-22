@@ -22,8 +22,8 @@ local COLORS = {
     border = Color3.fromRGB(40, 43, 48),
 }
 
-local SIDEBAR_WIDTH = 100
-local TOPBAR_HEIGHT = 36
+local SIDEBAR_WIDTH = 46
+local TOPBAR_HEIGHT = 46
 local TWEEN_SPEED = 0.3
 local guiVisible = true
 
@@ -33,7 +33,7 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SixZeroHub"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.DisplayOrder = 1
+screenGui.DisplayOrder = 999
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = playerGui
 
@@ -63,16 +63,28 @@ topBarBorder.BackgroundColor3 = COLORS.border
 topBarBorder.BorderSizePixel = 0
 topBarBorder.Parent = topBar
 
--- slant in top-left corner where top bar meets sidebar
+-- slant in corner where top bar meets sidebar — big visible diagonal
 local slant = Instance.new("Frame")
 slant.Name = "Slant"
-slant.Size = UDim2.new(0, 50, 0, 50)
-slant.Position = UDim2.new(0, SIDEBAR_WIDTH - 18, 1, -18)
+slant.Size = UDim2.new(0, 90, 0, 90)
+slant.Position = UDim2.new(0, SIDEBAR_WIDTH - 20, 0, TOPBAR_HEIGHT - 20)
 slant.BackgroundColor3 = COLORS.darker
 slant.BorderSizePixel = 0
 slant.Rotation = 45
 slant.ZIndex = 2
 slant.Parent = screenGui
+
+-- clip the slant so it doesn't bleed into game area — cover bottom-right half
+local slantClip = Instance.new("Frame")
+slantClip.Name = "SlantClip"
+slantClip.Size = UDim2.new(0, SIDEBAR_WIDTH + 45, 0, TOPBAR_HEIGHT + 45)
+slantClip.Position = UDim2.new(0, 0, 0, 0)
+slantClip.BackgroundTransparency = 1
+slantClip.ClipsDescendants = true
+slantClip.ZIndex = 2
+slantClip.Parent = screenGui
+
+slant.Parent = slantClip
 
 -- title in top bar
 local titleLabel = Instance.new("TextLabel")
@@ -82,7 +94,7 @@ titleLabel.Position = UDim2.new(0, 12, 0, 0)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Text = "Six Zero Hub"
 titleLabel.TextColor3 = COLORS.text
-titleLabel.TextSize = 15
+titleLabel.TextSize = 14
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = topBar
@@ -710,38 +722,19 @@ local function shiftGameGuis(show)
     end
 end
 
-local function moveChat(show)
-    task.spawn(function()
-        -- legacy chat (SetCore)
-        for _ = 1, 20 do
-            local ok = pcall(function()
-                if show then
-                    StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, GUI_OFFSET, 0, 4))
-                else
-                    StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, 0, 0, 0))
-                end
-            end)
-            if ok then break end
-            task.wait(0.5)
-        end
+local chatMoved = false
 
-        -- TextChatService chat (newer games)
-        pcall(function()
-            local tcs = game:GetService("TextChatService")
-            local chatWindow = tcs:FindFirstChild("ChatWindowConfiguration")
-            if chatWindow then
-                if show then
-                    chatWindow.HorizontalAlignment = Enum.HorizontalAlignment.Left
-                    -- offset by moving the chat gui if accessible
-                end
-            end
-        end)
+local function findAndMoveChat(show)
+    -- search PlayerGui and CoreGui for chat GUIs
+    local searchIn = {playerGui}
+    pcall(function() table.insert(searchIn, game:GetService("CoreGui")) end)
 
-        -- also try to find and move any chat ScreenGui directly
+    for _, parent in ipairs(searchIn) do
         pcall(function()
-            for _, gui in ipairs(playerGui:GetChildren()) do
-                if gui:IsA("ScreenGui") and (gui.Name:lower():find("chat") or gui.Name == "ExperienceChat") then
-                    if gui ~= screenGui and gui ~= toggleGui then
+            for _, gui in ipairs(parent:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui ~= screenGui and gui ~= toggleGui then
+                    local n = gui.Name:lower()
+                    if n:find("chat") or n == "experiencechat" then
                         if show then
                             if not movedScreenGuis[gui] then
                                 movedScreenGuis[gui] = gui.Position
@@ -755,6 +748,37 @@ local function moveChat(show)
                 end
             end
         end)
+    end
+end
+
+local function moveChat(show)
+    task.spawn(function()
+        -- try SetCore first (legacy chat)
+        for _ = 1, 10 do
+            local ok = pcall(function()
+                if show then
+                    StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, GUI_OFFSET, 0, 4))
+                else
+                    StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, 0, 0, 0))
+                end
+            end)
+            if ok then
+                chatMoved = true
+                break
+            end
+            task.wait(0.5)
+        end
+
+        -- also directly move chat ScreenGuis (works for TextChatService)
+        findAndMoveChat(show)
+
+        -- retry a few times in case chat GUI loads late
+        if show then
+            for _ = 1, 5 do
+                task.wait(1)
+                findAndMoveChat(true)
+            end
+        end
     end)
 end
 
@@ -768,7 +792,7 @@ local function toggleGuiVisibility()
     if guiVisible then
         topBar.Visible = true
         sidebar.Visible = true
-        slant.Visible = true
+        slantClip.Visible = true
         TweenService:Create(topBar, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
             Position = UDim2.new(0, 0, 0, 0)
         }):Play()
@@ -789,7 +813,7 @@ local function toggleGuiVisibility()
             if not guiVisible then
                 topBar.Visible = false
                 sidebar.Visible = false
-                slant.Visible = false
+                slantClip.Visible = false
             end
         end)
         moveChat(false)
@@ -812,9 +836,15 @@ end)
 playerGui.ChildAdded:Connect(function(child)
     if child:IsA("ScreenGui") and child ~= screenGui and child ~= toggleGui and guiVisible then
         task.wait(0.1)
-        if not movedScreenGuis[child] then
-            movedScreenGuis[child] = child.Position
+        -- chat GUIs get moved via moveChat, all others get offset
+        local n = child.Name:lower()
+        if n:find("chat") or child.Name == "ExperienceChat" then
+            findAndMoveChat(true)
+        else
+            if not movedScreenGuis[child] then
+                movedScreenGuis[child] = child.Position
+            end
+            child.Position = UDim2.new(0, GUI_OFFSET, 0, 0)
         end
-        child.Position = UDim2.new(0, GUI_OFFSET, 0, 0)
     end
 end)
