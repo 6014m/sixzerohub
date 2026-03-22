@@ -93,24 +93,78 @@ titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = header
 
----------- EYEBALL TOGGLE ----------
+---------- TOP BAR TOGGLE ----------
 
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Name = "ToggleVisibility"
-toggleBtn.Size = UDim2.new(0, 30, 0, 30)
-toggleBtn.Position = UDim2.new(1, -35, 0, 10)
-toggleBtn.BackgroundTransparency = 1
-toggleBtn.Text = ""
-toggleBtn.Parent = header
+-- add eyeball toggle to the Roblox top bar (next to chat, leaderboard, etc.)
+local topbarBtn
+task.defer(function()
+    -- create the icon for the top bar
+    local icon = Instance.new("ImageLabel")
+    icon.Name = "SixZeroToggle"
+    icon.Size = UDim2.new(0, 32, 0, 32)
+    icon.BackgroundTransparency = 1
+    icon.Image = "rbxassetid://7072706620" -- eye icon
 
--- eye icon using text (open eye)
-local eyeIcon = Instance.new("TextLabel")
-eyeIcon.Name = "EyeIcon"
-eyeIcon.Size = UDim2.new(1, 0, 1, 0)
-eyeIcon.BackgroundTransparency = 1
-eyeIcon.Text = "👁"
-eyeIcon.TextSize = 20
-eyeIcon.Parent = toggleBtn
+    -- use SetCore to register as a top bar button
+    local success = false
+    for i = 1, 30 do
+        success = pcall(function()
+            StarterGui:SetCore("AddTopbarButton", {
+                Name = "SixZeroHub",
+                Icon = "rbxassetid://7072706620",
+                Callback = function()
+                    toggleGui()
+                end
+            })
+        end)
+        if success then break end
+        task.wait(0.5)
+    end
+
+    -- fallback: if SetCore doesn't support AddTopbarButton, put it in CoreGui top right area
+    if not success then
+        local topbarGui = Instance.new("ScreenGui")
+        topbarGui.Name = "SixZeroTopbar"
+        topbarGui.ResetOnSpawn = false
+        topbarGui.DisplayOrder = 100 -- above everything
+        topbarGui.Parent = playerGui
+
+        local topBtn = Instance.new("TextButton")
+        topBtn.Name = "SixZeroToggle"
+        topBtn.Size = UDim2.new(0, 32, 0, 32)
+        topBtn.Position = UDim2.new(1, -120, 0, 4)
+        topBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        topBtn.BackgroundTransparency = 0.5
+        topBtn.BorderSizePixel = 0
+        topBtn.Text = ""
+        topBtn.AutoButtonColor = false
+        topBtn.Parent = topbarGui
+
+        local topBtnCorner = Instance.new("UICorner")
+        topBtnCorner.CornerRadius = UDim.new(1, 0)
+        topBtnCorner.Parent = topBtn
+
+        local eyeLabel = Instance.new("ImageLabel")
+        eyeLabel.Size = UDim2.new(0, 20, 0, 20)
+        eyeLabel.Position = UDim2.new(0.5, -10, 0.5, -10)
+        eyeLabel.BackgroundTransparency = 1
+        eyeLabel.Image = "rbxassetid://7072706620"
+        eyeLabel.ImageColor3 = COLORS.text
+        eyeLabel.Parent = topBtn
+
+        topBtn.MouseEnter:Connect(function()
+            TweenService:Create(topBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.3}):Play()
+        end)
+        topBtn.MouseLeave:Connect(function()
+            TweenService:Create(topBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
+        end)
+        topBtn.MouseButton1Click:Connect(function()
+            toggleGui()
+        end)
+
+        topbarBtn = topBtn
+    end
+end)
 
 ---------- CONTENT AREA ----------
 
@@ -417,39 +471,12 @@ end
 
 ---------- TOGGLE VISIBILITY ----------
 
--- persistent toggle button that stays visible even when panel is hidden
-local persistentToggle = Instance.new("TextButton")
-persistentToggle.Name = "PersistentToggle"
-persistentToggle.Size = UDim2.new(0, 30, 0, 30)
-persistentToggle.Position = UDim2.new(0, 5, 0, 5)
-persistentToggle.BackgroundColor3 = COLORS.darker
-persistentToggle.BackgroundTransparency = 0.3
-persistentToggle.BorderSizePixel = 0
-persistentToggle.Text = ""
-persistentToggle.Visible = false
-persistentToggle.ZIndex = 10
-persistentToggle.Parent = screenGui
-
-local persistCorner = Instance.new("UICorner")
-persistCorner.CornerRadius = UDim.new(0, 6)
-persistCorner.Parent = persistentToggle
-
-local persistEye = Instance.new("TextLabel")
-persistEye.Size = UDim2.new(1, 0, 1, 0)
-persistEye.BackgroundTransparency = 1
-persistEye.Text = "👁"
-persistEye.TextSize = 16
-persistEye.TextTransparency = 0.5
-persistEye.ZIndex = 10
-persistEye.Parent = persistentToggle
-
 local function toggleGui()
     guiVisible = not guiVisible
 
     if guiVisible then
         -- show panel
         panel.Visible = true
-        persistentToggle.Visible = false
         TweenService:Create(panel, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
             Position = UDim2.new(0, 0, 0, 0)
         }):Play()
@@ -457,7 +484,6 @@ local function toggleGui()
         shiftGameGuis(PANEL_WIDTH)
     else
         -- hide panel
-        persistentToggle.Visible = true
         local tween = TweenService:Create(panel, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
             Position = UDim2.new(0, -PANEL_WIDTH, 0, 0)
         })
@@ -473,9 +499,6 @@ local function toggleGui()
         if uniMenuOpen then toggleUniMenu() end
     end
 end
-
-toggleBtn.MouseButton1Click:Connect(toggleGui)
-persistentToggle.MouseButton1Click:Connect(toggleGui)
 
 ---------- INIT ----------
 
