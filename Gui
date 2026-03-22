@@ -820,28 +820,16 @@ local function unshiftAllLockOnChildren()
     end
 end
 
--- watch for new LockOn ScreenGuis appearing in PlayerGui/CoreGui/gethui
-local function setupLockOnWatchers()
-    local function onGuiAdded(child)
-        if child:IsA("ScreenGui") and child.Name:find("LockOn") then
-            task.defer(function()
-                watchLockOnGui(child)
-            end)
+-- poll for new LockOn ScreenGuis (ChildAdded on gethui is unreliable on some executors)
+task.spawn(function()
+    while screenGui and screenGui.Parent do
+        if guiVisible then
+            findAndWatchLockOnGuis()
+            shiftAllLockOnChildren()
         end
+        task.wait(2)
     end
-
-    playerGui.ChildAdded:Connect(onGuiAdded)
-    pcall(function()
-        game:GetService("CoreGui").ChildAdded:Connect(onGuiAdded)
-    end)
-    pcall(function()
-        if gethui then
-            gethui().ChildAdded:Connect(onGuiAdded)
-        end
-    end)
-end
-
-setupLockOnWatchers()
+end)
 
 ---------- TOGGLE VISIBILITY ----------
 
