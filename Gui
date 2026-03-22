@@ -96,73 +96,42 @@ titleLabel.Parent = header
 
 ---------- TOP BAR TOGGLE ----------
 
--- add eyeball toggle to the Roblox top bar (next to chat, leaderboard, etc.)
-local EYE_OPEN = "rbxassetid://7072706620"
-local EYE_CLOSED = "rbxassetid://7072718338"
-local topbarBtn
-local topbarEyeLabel -- reference to update icon on toggle
+-- eye toggle button in the top right corner of the screen
+local topbarGui = Instance.new("ScreenGui")
+topbarGui.Name = "SixZeroTopbar"
+topbarGui.ResetOnSpawn = false
+topbarGui.DisplayOrder = 100
+topbarGui.IgnoreGuiInset = true
+topbarGui.Parent = playerGui
 
-task.defer(function()
-    -- use SetCore to register as a top bar button
-    local success = false
-    for i = 1, 30 do
-        success = pcall(function()
-            StarterGui:SetCore("AddTopbarButton", {
-                Name = "SixZeroHub",
-                Icon = EYE_OPEN,
-                Callback = function()
-                    toggleGui()
-                end
-            })
-        end)
-        if success then break end
-        task.wait(0.5)
-    end
+local topBtn = Instance.new("TextButton")
+topBtn.Name = "SixZeroToggle"
+topBtn.Size = UDim2.new(0, 32, 0, 32)
+topBtn.Position = UDim2.new(1, -42, 0, 4)
+topBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+topBtn.BackgroundTransparency = 0.5
+topBtn.BorderSizePixel = 0
+topBtn.AutoButtonColor = false
+topBtn.Font = Enum.Font.GothamBold
+topBtn.TextSize = 18
+topBtn.Text = "\xF0\x9F\x91\x81" -- eye emoji
+topBtn.TextColor3 = COLORS.text
+topBtn.Parent = topbarGui
 
-    -- fallback: if SetCore doesn't support AddTopbarButton, put it in CoreGui top right area
-    if not success then
-        local topbarGui = Instance.new("ScreenGui")
-        topbarGui.Name = "SixZeroTopbar"
-        topbarGui.ResetOnSpawn = false
-        topbarGui.DisplayOrder = 100 -- above everything
-        topbarGui.Parent = playerGui
+local topBtnCorner = Instance.new("UICorner")
+topBtnCorner.CornerRadius = UDim.new(1, 0)
+topBtnCorner.Parent = topBtn
 
-        local topBtn = Instance.new("TextButton")
-        topBtn.Name = "SixZeroToggle"
-        topBtn.Size = UDim2.new(0, 32, 0, 32)
-        topBtn.Position = UDim2.new(1, -120, 0, 4)
-        topBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        topBtn.BackgroundTransparency = 0.5
-        topBtn.BorderSizePixel = 0
-        topBtn.Text = ""
-        topBtn.AutoButtonColor = false
-        topBtn.Parent = topbarGui
+local topbarEyeLabel = topBtn -- reference for toggling text
 
-        local topBtnCorner = Instance.new("UICorner")
-        topBtnCorner.CornerRadius = UDim.new(1, 0)
-        topBtnCorner.Parent = topBtn
-
-        local eyeLabel = Instance.new("ImageLabel")
-        eyeLabel.Size = UDim2.new(0, 20, 0, 20)
-        eyeLabel.Position = UDim2.new(0.5, -10, 0.5, -10)
-        eyeLabel.BackgroundTransparency = 1
-        eyeLabel.Image = EYE_OPEN
-        eyeLabel.ImageColor3 = COLORS.text
-        eyeLabel.Parent = topBtn
-
-        topBtn.MouseEnter:Connect(function()
-            TweenService:Create(topBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.3}):Play()
-        end)
-        topBtn.MouseLeave:Connect(function()
-            TweenService:Create(topBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
-        end)
-        topBtn.MouseButton1Click:Connect(function()
-            toggleGui()
-        end)
-
-        topbarBtn = topBtn
-        topbarEyeLabel = eyeLabel
-    end
+topBtn.MouseEnter:Connect(function()
+    TweenService:Create(topBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.3}):Play()
+end)
+topBtn.MouseLeave:Connect(function()
+    TweenService:Create(topBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
+end)
+topBtn.MouseButton1Click:Connect(function()
+    toggleGui()
 end)
 
 ---------- CONTENT AREA ----------
@@ -889,9 +858,15 @@ end
 local function toggleGui()
     guiVisible = not guiVisible
 
-    -- update eye icon
+    -- update eye icon: open when visible, closed when hidden
     if topbarEyeLabel then
-        topbarEyeLabel.Image = guiVisible and EYE_OPEN or EYE_CLOSED
+        if guiVisible then
+            topbarEyeLabel.Text = "\xF0\x9F\x91\x81" -- open eye
+            topbarEyeLabel.TextTransparency = 0
+        else
+            topbarEyeLabel.Text = "\xF0\x9F\x91\x81" -- eye with dimmed look
+            topbarEyeLabel.TextTransparency = 0.5
+        end
     end
 
     if guiVisible then
