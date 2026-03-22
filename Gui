@@ -762,15 +762,15 @@ local function toggleGuiVisibility()
         closeActiveMenu()
     end
 
-    -- notify compat modules of visibility change
-    if _G.SixZeroHubOnToggle then
-        pcall(_G.SixZeroHubOnToggle, guiVisible)
-    end
+    -- expose visibility state for compat modules
+    _G.SixZeroHubVisible = guiVisible
 end
 
 eyeBtn.MouseButton1Click:Connect(toggleGuiVisibility)
 
 ---------- INIT ----------
+
+_G.SixZeroHubVisible = true
 
 task.defer(function()
     task.wait(1)
