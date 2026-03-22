@@ -737,19 +737,59 @@ local function moveChat(show)
     end)
 end
 
----------- EXTERNAL GUI OFFSET ----------
+---------- EXTERNAL GUI OFFSET (LOCK-ON) ----------
 
 local EXT_OFFSET = 70
+local originalPositions = {} -- [GuiObject] = original UDim2 position
+local watchedLockOnGuis = {} -- [ScreenGui] = ChildAdded connection
 
-local function findExternalGuis()
-    local guis = {}
-    -- search PlayerGui, CoreGui, gethui for lock-on and other script GUIs
+local function shiftChild(child)
+    if not child:IsA("GuiObject") then return end
+    if originalPositions[child] then return end -- already shifted
+    originalPositions[child] = child.Position
+    child.Position = UDim2.new(
+        child.Position.X.Scale,
+        child.Position.X.Offset + EXT_OFFSET,
+        child.Position.Y.Scale,
+        child.Position.Y.Offset
+    )
+end
+
+local function unshiftChild(child)
+    if not child:IsA("GuiObject") then return end
+    if not originalPositions[child] then return end
+    child.Position = originalPositions[child]
+    originalPositions[child] = nil
+end
+
+local function watchLockOnGui(gui)
+    if watchedLockOnGuis[gui] then return end
+
+    -- shift existing children if hub is visible
+    if guiVisible then
+        for _, child in ipairs(gui:GetChildren()) do
+            pcall(function() shiftChild(child) end)
+        end
+    end
+
+    -- watch for new children added later (lock-on builds GUI incrementally)
+    local conn = gui.ChildAdded:Connect(function(child)
+        if guiVisible then
+            task.defer(function()
+                pcall(function() shiftChild(child) end)
+            end)
+        end
+    end)
+    watchedLockOnGuis[gui] = conn
+end
+
+local function findAndWatchLockOnGuis()
     local function searchIn(parent)
         pcall(function()
             for _, child in ipairs(parent:GetChildren()) do
                 if child:IsA("ScreenGui") and child ~= screenGui and child ~= toggleGui then
                     if child.Name:find("LockOn") then
-                        table.insert(guis, child)
+                        watchLockOnGui(child)
                     end
                 end
             end
@@ -758,41 +798,50 @@ local function findExternalGuis()
     searchIn(playerGui)
     pcall(function() searchIn(game:GetService("CoreGui")) end)
     pcall(function() if gethui then searchIn(gethui()) end end)
-    return guis
 end
 
-local function shiftExternalGuis(show)
-    local guis = findExternalGuis()
-    for _, gui in ipairs(guis) do
+local function shiftAllLockOnChildren()
+    for gui, _ in pairs(watchedLockOnGuis) do
         pcall(function()
             for _, child in ipairs(gui:GetChildren()) do
-                pcall(function()
-                    if child:IsA("GuiObject") then
-                        if show then
-                            if child.Position.X.Offset < EXT_OFFSET then
-                                child.Position = UDim2.new(
-                                    child.Position.X.Scale,
-                                    child.Position.X.Offset + EXT_OFFSET,
-                                    child.Position.Y.Scale,
-                                    child.Position.Y.Offset
-                                )
-                            end
-                        else
-                            if child.Position.X.Offset >= EXT_OFFSET then
-                                child.Position = UDim2.new(
-                                    child.Position.X.Scale,
-                                    child.Position.X.Offset - EXT_OFFSET,
-                                    child.Position.Y.Scale,
-                                    child.Position.Y.Offset
-                                )
-                            end
-                        end
-                    end
-                end)
+                pcall(function() shiftChild(child) end)
             end
         end)
     end
 end
+
+local function unshiftAllLockOnChildren()
+    for gui, _ in pairs(watchedLockOnGuis) do
+        pcall(function()
+            for _, child in ipairs(gui:GetChildren()) do
+                pcall(function() unshiftChild(child) end)
+            end
+        end)
+    end
+end
+
+-- watch for new LockOn ScreenGuis appearing in PlayerGui/CoreGui/gethui
+local function setupLockOnWatchers()
+    local function onGuiAdded(child)
+        if child:IsA("ScreenGui") and child.Name:find("LockOn") then
+            task.defer(function()
+                watchLockOnGui(child)
+            end)
+        end
+    end
+
+    playerGui.ChildAdded:Connect(onGuiAdded)
+    pcall(function()
+        game:GetService("CoreGui").ChildAdded:Connect(onGuiAdded)
+    end)
+    pcall(function()
+        if gethui then
+            gethui().ChildAdded:Connect(onGuiAdded)
+        end
+    end)
+end
+
+setupLockOnWatchers()
 
 ---------- TOGGLE VISIBILITY ----------
 
@@ -808,7 +857,8 @@ local function toggleGuiVisibility()
         uniBtn.Visible = true
         moveChat(true)
         shiftGameGuis(true)
-        shiftExternalGuis(true)
+        findAndWatchLockOnGuis()
+        shiftAllLockOnChildren()
     else
         slantClip.Visible = false
         titleLabel.Visible = false
@@ -816,7 +866,7 @@ local function toggleGuiVisibility()
         uniBtn.Visible = false
         moveChat(false)
         shiftGameGuis(false)
-        shiftExternalGuis(false)
+        unshiftAllLockOnChildren()
         closeUniMenu()
         closeActiveMenu()
     end
@@ -834,13 +884,7 @@ task.defer(function()
     task.wait(1)
     moveChat(true)
     shiftGameGuis(true)
-    -- keep retrying external GUI offset in case they load late
-    for _ = 1, 15 do
-        task.wait(2)
-        if guiVisible then
-            shiftExternalGuis(true)
-        end
-    end
+    findAndWatchLockOnGuis()
 end)
 
 playerGui.ChildAdded:Connect(function(child)
