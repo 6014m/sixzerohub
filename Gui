@@ -22,7 +22,7 @@ local COLORS = {
     border = Color3.fromRGB(40, 43, 48),           -- subtle border
 }
 
-local PANEL_WIDTH = 220
+local PANEL_WIDTH = 160
 local TWEEN_SPEED = 0.3
 local guiVisible = true
 
@@ -33,6 +33,7 @@ screenGui.Name = "SixZeroHub"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = -1 -- render below default Roblox GUIs
+screenGui.IgnoreGuiInset = true -- extend panel up behind the top bar
 screenGui.Parent = playerGui
 
 ---------- MAIN PANEL ----------
@@ -67,7 +68,7 @@ gradient.Parent = panel
 
 local header = Instance.new("Frame")
 header.Name = "Header"
-header.Size = UDim2.new(1, 0, 0, 50)
+header.Size = UDim2.new(1, 0, 0, 36)
 header.Position = UDim2.new(0, 0, 0, 0)
 header.BackgroundColor3 = COLORS.darker
 header.BorderSizePixel = 0
@@ -88,7 +89,7 @@ titleLabel.Position = UDim2.new(0, 12, 0, 0)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Text = "Six Zero Hub"
 titleLabel.TextColor3 = COLORS.text
-titleLabel.TextSize = 18
+titleLabel.TextSize = 15
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = header
@@ -168,8 +169,8 @@ end)
 
 local contentArea = Instance.new("ScrollingFrame")
 contentArea.Name = "Content"
-contentArea.Size = UDim2.new(1, -10, 1, -100)
-contentArea.Position = UDim2.new(0, 5, 0, 55)
+contentArea.Size = UDim2.new(1, -10, 1, -86)
+contentArea.Position = UDim2.new(0, 5, 0, 40)
 contentArea.BackgroundTransparency = 1
 contentArea.BorderSizePixel = 0
 contentArea.ScrollBarThickness = 3
@@ -847,59 +848,20 @@ end)
 
 ---------- GUI OFFSET MANAGEMENT ----------
 
-local originalChatPosition = nil
-local movedGameGuis = {} -- {gui = originalPosition}
+local movedScreenGuis = {} -- { [ScreenGui] = originalPosition }
 
-local function getChatFrame()
-    local ok, result = pcall(function()
-        return playerGui:FindFirstChild("Chat") or CoreGui:FindFirstChild("Chat")
-    end)
-    return ok and result or nil
-end
-
-local function offsetGuiElement(gui, offset)
-    if gui:IsA("ScreenGui") then
-        for _, child in ipairs(gui:GetChildren()) do
-            if child:IsA("GuiObject") then
-                if not movedGameGuis[child] then
-                    movedGameGuis[child] = child.Position
-                end
-                child.Position = UDim2.new(
-                    child.Position.X.Scale, child.Position.X.Offset + offset,
-                    child.Position.Y.Scale, child.Position.Y.Offset
-                )
-            end
-        end
-    end
-end
-
-local function restoreGuiElement(child)
-    if movedGameGuis[child] then
-        child.Position = movedGameGuis[child]
-        movedGameGuis[child] = nil
-    end
-end
-
-local function shiftGameGuis(offset)
+local function shiftGameGuis(show)
     for _, gui in ipairs(playerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") and gui ~= screenGui and gui.Name ~= "SixZeroHub" then
-            for _, child in ipairs(gui:GetChildren()) do
-                if child:IsA("GuiObject") then
-                    -- only move elements on the left side of the screen
-                    local absX = child.AbsolutePosition.X
-                    if absX < PANEL_WIDTH then
-                        if offset > 0 then
-                            if not movedGameGuis[child] then
-                                movedGameGuis[child] = child.Position
-                            end
-                            child.Position = UDim2.new(
-                                child.Position.X.Scale, child.Position.X.Offset + offset,
-                                child.Position.Y.Scale, child.Position.Y.Offset
-                            )
-                        else
-                            restoreGuiElement(child)
-                        end
-                    end
+        if gui:IsA("ScreenGui") and gui ~= screenGui and gui.Name ~= "SixZeroHub" and gui.Name ~= "SixZeroTopbar" then
+            if show then
+                if not movedScreenGuis[gui] then
+                    movedScreenGuis[gui] = gui.Position or UDim2.new(0, 0, 0, 0)
+                end
+                gui.Position = UDim2.new(0, PANEL_WIDTH, 0, 0)
+            else
+                if movedScreenGuis[gui] then
+                    gui.Position = movedScreenGuis[gui]
+                    movedScreenGuis[gui] = nil
                 end
             end
         end
@@ -907,11 +869,17 @@ local function shiftGameGuis(offset)
 end
 
 local function moveChat(show)
-    pcall(function()
-        if show then
-            StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, PANEL_WIDTH + 4, 0, 0))
-        else
-            StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, 0, 0, 0))
+    task.spawn(function()
+        for i = 1, 20 do
+            local ok = pcall(function()
+                if show then
+                    StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, PANEL_WIDTH + 4, 0, 0))
+                else
+                    StarterGui:SetCore("ChatWindowPosition", UDim2.new(0, 0, 0, 0))
+                end
+            end)
+            if ok then break end
+            task.wait(0.5)
         end
     end)
 end
@@ -933,7 +901,7 @@ local function toggleGui()
             Position = UDim2.new(0, 0, 0, 0)
         }):Play()
         moveChat(true)
-        shiftGameGuis(PANEL_WIDTH)
+        shiftGameGuis(true)
     else
         -- hide panel
         local tween = TweenService:Create(panel, TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
@@ -946,7 +914,7 @@ local function toggleGui()
             end
         end)
         moveChat(false)
-        shiftGameGuis(-PANEL_WIDTH)
+        shiftGameGuis(false)
         -- close uni menu if open
         if uniMenuOpen then toggleUniMenu() end
     end
@@ -954,27 +922,20 @@ end
 
 ---------- INIT ----------
 
--- initial chat offset
+-- initial chat + gui offset
 task.defer(function()
     task.wait(1)
     moveChat(true)
-    shiftGameGuis(PANEL_WIDTH)
+    shiftGameGuis(true)
 end)
 
--- watch for new game GUIs being added
+-- watch for new game ScreenGuis being added
 playerGui.ChildAdded:Connect(function(child)
-    if child:IsA("ScreenGui") and child ~= screenGui and guiVisible then
+    if child:IsA("ScreenGui") and child ~= screenGui and child.Name ~= "SixZeroTopbar" and guiVisible then
         task.wait(0.1)
-        for _, obj in ipairs(child:GetChildren()) do
-            if obj:IsA("GuiObject") and obj.AbsolutePosition.X < PANEL_WIDTH then
-                if not movedGameGuis[obj] then
-                    movedGameGuis[obj] = obj.Position
-                end
-                obj.Position = UDim2.new(
-                    obj.Position.X.Scale, obj.Position.X.Offset + PANEL_WIDTH,
-                    obj.Position.Y.Scale, obj.Position.Y.Offset
-                )
-            end
+        if not movedScreenGuis[child] then
+            movedScreenGuis[child] = child.Position or UDim2.new(0, 0, 0, 0)
         end
+        child.Position = UDim2.new(0, PANEL_WIDTH, 0, 0)
     end
 end)
