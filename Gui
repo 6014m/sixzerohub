@@ -647,6 +647,7 @@ local REPO_BASE = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
 local SCRIPTS = {
     { name = "Horizontal Density", file = "[Uni]horizontal_density" },
     { name = "Damage Block Dodger", file = "[Uni]damage_block_dodger" },
+    { name = "Lock-On Shiftlock", url = "https://raw.githubusercontent.com/6014m/roblox-lockon-shiftlock/main/The%20Actual%20Script" },
 }
 
 -- favorites persist in _G so they survive re-execution within the same session
@@ -658,7 +659,8 @@ local favorites = _G.SixZeroHubFavorites
 local scriptButtons = {} -- { [file] = { btn, favBtn, status, info } }
 
 local function getLayoutOrder(info)
-    local isFav = favorites[info.file] or false
+    local key = info.file or info.url
+    local isFav = favorites[key] or false
     -- favorited: 0-999 (alphabetical), unfavorited: 1000+ (alphabetical)
     local base = isFav and 0 or 1000
     -- use byte values of name for alphabetical sorting
@@ -681,7 +683,8 @@ end
 
 local function createScriptButton(info)
     local btn = Instance.new("TextButton")
-    btn.Name = info.file
+    local fileKey = info.file or info.url
+    btn.Name = fileKey
     btn.Size = UDim2.new(1, -8, 0, 36)
     btn.BackgroundColor3 = COLORS.hover
     btn.BorderSizePixel = 0
@@ -707,12 +710,12 @@ local function createScriptButton(info)
     favBtn.TextSize = 16
     favBtn.Font = Enum.Font.Gotham
     favBtn.Parent = btn
-    updateFavIcon(favBtn, info.file)
+    updateFavIcon(favBtn, fileKey)
 
     favBtn.MouseButton1Click:Connect(function()
-        favorites[info.file] = not favorites[info.file]
-        if not favorites[info.file] then favorites[info.file] = nil end
-        updateFavIcon(favBtn, info.file)
+        favorites[fileKey] = not favorites[fileKey]
+        if not favorites[fileKey] then favorites[fileKey] = nil end
+        updateFavIcon(favBtn, fileKey)
         -- update sort order for all buttons
         for fileKey, data in pairs(scriptButtons) do
             data.btn.LayoutOrder = getLayoutOrder(data.info)
@@ -740,7 +743,7 @@ local function createScriptButton(info)
     end)
 
     btn.MouseButton1Click:Connect(function()
-        if loadedScripts[info.file] then
+        if loadedScripts[fileKey] then
             status.Text = "already loaded"
             status.TextColor3 = COLORS.textMuted
             return
@@ -751,11 +754,12 @@ local function createScriptButton(info)
 
         task.spawn(function()
             local ok, err = pcall(function()
-                loadstring(game:HttpGet(REPO_BASE .. info.file))()
+                local scriptUrl = info.url or (REPO_BASE .. info.file)
+                loadstring(game:HttpGet(scriptUrl))()
             end)
 
             if ok then
-                loadedScripts[info.file] = true
+                loadedScripts[fileKey] = true
                 status.Text = "running"
                 status.TextColor3 = Color3.fromRGB(87, 242, 135) -- green
             else
@@ -766,7 +770,7 @@ local function createScriptButton(info)
         end)
     end)
 
-    scriptButtons[info.file] = { btn = btn, favBtn = favBtn, status = status, info = info }
+    scriptButtons[fileKey] = { btn = btn, favBtn = favBtn, status = status, info = info }
 end
 
 for _, scriptInfo in ipairs(SCRIPTS) do
