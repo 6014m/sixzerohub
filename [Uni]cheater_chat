@@ -335,11 +335,11 @@ local keybindConn = UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 table.insert(connections, keybindConn)
 
--- register settings with hub
-if _G.SixZeroHubRegisterSettings then
-    local waitingForKey = false
+-- register settings with hub (deferred to ensure hub is fully loaded)
+task.defer(function()
+    if not _G.SixZeroHubRegisterSettings then return end
 
-    _G.SixZeroHubRegisterSettings("[Uni]cheater_chat", {
+    pcall(_G.SixZeroHubRegisterSettings, "[Uni]cheater_chat", {
         _title = "Cheater Chat",
         {
             name = "opacity",
@@ -350,7 +350,7 @@ if _G.SixZeroHubRegisterSettings then
             max = 80,
             step = 5,
             onChange = function(val)
-                applyOpacity(val)
+                pcall(applyOpacity, val)
             end,
         },
         {
@@ -363,12 +363,12 @@ if _G.SixZeroHubRegisterSettings then
                 if val == "None" then
                     focusKeybind = nil
                 else
-                    focusKeybind = Enum.KeyCode[val]
+                    pcall(function() focusKeybind = Enum.KeyCode[val] end)
                 end
             end,
         },
     })
-end
+end)
 
 ---------- SIXZEROHUB REGISTRATION ----------
 
