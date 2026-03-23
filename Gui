@@ -550,6 +550,12 @@ _G.SixZeroHubRegisterSettings = function(fileKey, defs)
             scriptSettingsValues[fileKey][def.name] = def.default
         end
     end
+    -- fire onChange for all current values so scripts apply their saved state
+    for _, def in ipairs(defs) do
+        if def.onChange and scriptSettingsValues[fileKey][def.name] ~= nil then
+            pcall(def.onChange, scriptSettingsValues[fileKey][def.name])
+        end
+    end
     -- show cog button if it exists
     local btnData = scriptButtons[fileKey]
     if btnData and btnData.updateCog then
