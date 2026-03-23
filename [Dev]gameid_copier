@@ -1,0 +1,146 @@
+-- [Dev] Game ID Copier
+-- Simple GUI with a button to copy the current game's PlaceId
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+
+local COLORS = {
+    bg = Color3.fromRGB(32, 34, 37),
+    header = Color3.fromRGB(24, 26, 29),
+    btn = Color3.fromRGB(255, 165, 0),
+    btnHover = Color3.fromRGB(220, 140, 0),
+    text = Color3.fromRGB(220, 221, 222),
+    muted = Color3.fromRGB(142, 146, 151),
+}
+
+local connections = {}
+
+---------- GUI ----------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "GameIdCopier"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 998
+
+pcall(function() gui.Parent = game:GetService("CoreGui") end)
+if not gui.Parent then gui.Parent = playerGui end
+
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 220, 0, 80)
+main.Position = UDim2.new(0.5, -110, 0.5, -40)
+main.BackgroundColor3 = COLORS.bg
+main.BorderSizePixel = 0
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+
+local mainStroke = Instance.new("UIStroke", main)
+mainStroke.Color = COLORS.btn
+mainStroke.Thickness = 1
+mainStroke.Transparency = 0.5
+
+-- header
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 28)
+header.BackgroundColor3 = COLORS.header
+header.BorderSizePixel = 0
+header.Parent = main
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
+
+local headerFill = Instance.new("Frame")
+headerFill.Size = UDim2.new(1, 0, 0, 8)
+headerFill.Position = UDim2.new(0, 0, 1, -8)
+headerFill.BackgroundColor3 = COLORS.header
+headerFill.BorderSizePixel = 0
+headerFill.Parent = header
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(1, -10, 1, 0)
+titleLbl.Position = UDim2.new(0, 10, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "Game ID Copier"
+titleLbl.TextColor3 = COLORS.btn
+titleLbl.TextSize = 12
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Parent = header
+
+-- draggable
+do
+    local dragging, dragStart, frameStart
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            frameStart = main.Position
+        end
+    end)
+    header.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- copy button
+local gameId = tostring(game.PlaceId)
+
+local copyBtn = Instance.new("TextButton")
+copyBtn.Size = UDim2.new(1, -20, 0, 32)
+copyBtn.Position = UDim2.new(0, 10, 0, 36)
+copyBtn.BackgroundColor3 = COLORS.btn
+copyBtn.BorderSizePixel = 0
+copyBtn.Text = "Copy Game ID: " .. gameId
+copyBtn.TextColor3 = COLORS.bg
+copyBtn.TextSize = 13
+copyBtn.Font = Enum.Font.GothamBold
+copyBtn.AutoButtonColor = false
+copyBtn.Parent = main
+Instance.new("UICorner", copyBtn).CornerRadius = UDim.new(0, 6)
+
+copyBtn.MouseEnter:Connect(function()
+    TweenService:Create(copyBtn, TweenInfo.new(0.15), {BackgroundColor3 = COLORS.btnHover}):Play()
+end)
+copyBtn.MouseLeave:Connect(function()
+    TweenService:Create(copyBtn, TweenInfo.new(0.15), {BackgroundColor3 = COLORS.btn}):Play()
+end)
+
+copyBtn.MouseButton1Click:Connect(function()
+    pcall(function()
+        if setclipboard then
+            setclipboard(gameId)
+        elseif toclipboard then
+            toclipboard(gameId)
+        end
+    end)
+    copyBtn.Text = "Copied!"
+    copyBtn.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
+    task.delay(1, function()
+        if copyBtn and copyBtn.Parent then
+            copyBtn.Text = "Copy Game ID: " .. gameId
+            copyBtn.BackgroundColor3 = COLORS.btn
+        end
+    end)
+end)
+
+---------- SIXZEROHUB REGISTRATION ----------
+
+local function cleanup()
+    for _, conn in ipairs(connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    pcall(function() gui:Destroy() end)
+end
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Game ID Copier", "[Dev]gameid_copier", cleanup, "dev")
+end
