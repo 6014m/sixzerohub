@@ -605,11 +605,14 @@ local UNI_SCRIPTS = {
 
 local DEV_SCRIPTS = {
     { name = "Part Monitor", file = "[Dev]part_monitor" },
+    { name = "Game ID Copier", file = "[Dev]gameid_copier" },
 }
 
 local SPEC_SCRIPTS = {
-    -- add game-specific scripts here: { name = "...", file = "..." } or { name = "...", url = "..." }
+    { name = "Laser Jumper", file = "[Spec]evil_plate_laser", gameId = 0 }, -- set gameId once known
 }
+
+local currentGameId = game.PlaceId
 
 local FAVORITES_FILE = "SixZeroHub_favorites.json"
 
@@ -775,8 +778,22 @@ for _, scriptInfo in ipairs(DEV_SCRIPTS) do
 end
 rebuildSortOrder(devContent)
 
+local specEmpty = true
 for _, scriptInfo in ipairs(SPEC_SCRIPTS) do
-    createScriptButton(scriptInfo, specContent, "spec")
+    if scriptInfo.gameId == 0 or scriptInfo.gameId == currentGameId then
+        createScriptButton(scriptInfo, specContent, "spec")
+        specEmpty = false
+    end
+end
+if specEmpty then
+    local noScripts = Instance.new("TextLabel")
+    noScripts.Size = UDim2.new(1, 0, 0, 40)
+    noScripts.BackgroundTransparency = 1
+    noScripts.Text = "No scripts for this game"
+    noScripts.TextColor3 = COLORS.textMuted
+    noScripts.TextSize = 14
+    noScripts.Font = Enum.Font.Gotham
+    noScripts.Parent = specContent
 end
 rebuildSortOrder(specContent)
 
