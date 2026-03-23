@@ -1328,6 +1328,49 @@ task.spawn(function()
     end
 end)
 
+---------- NEW SCRIPT DETECTION ----------
+
+local knownFiles = {}
+local function buildKnownFiles()
+    for _, s in ipairs(UNI_SCRIPTS) do if s.file then knownFiles[s.file] = true end end
+    for _, s in ipairs(DEV_SCRIPTS) do if s.file then knownFiles[s.file] = true end end
+    for _, s in ipairs(SPEC_SCRIPTS) do if s.file then knownFiles[s.file] = true end end
+    knownFiles["Gui"] = true -- hub itself
+end
+buildKnownFiles()
+
+local function getScriptType(fileName)
+    if fileName:sub(1, 5) == "[Uni]" then return "Uni"
+    elseif fileName:sub(1, 5) == "[Dev]" then return "Dev"
+    elseif fileName:sub(1, 6) == "[Spec]" then return "Spec"
+    end
+    return nil
+end
+
+task.spawn(function()
+    task.wait(8)
+    while screenGui and screenGui.Parent do
+        local ok, response = pcall(function()
+            return game:HttpGet("https://api.github.com/repos/6014m/sixzerohub/contents", true)
+        end)
+        if ok and response then
+            for name in response:gmatch('"name"%s*:%s*"([^"]+)"') do
+                if not knownFiles[name] and getScriptType(name) then
+                    local scriptType = getScriptType(name)
+                    local displayName = name:gsub("^%[%w+%]", ""):gsub("_", " ")
+                    knownFiles[name] = true
+                    showNotification(
+                        "Update/Release",
+                        "[" .. scriptType .. "] " .. displayName .. " has been added",
+                        "dismiss"
+                    )
+                end
+            end
+        end
+        task.wait(UPDATE_CHECK_INTERVAL)
+    end
+end)
+
 ---------- TELEPORT RE-QUEUE ----------
 
 player.OnTeleport:Connect(function(state)
