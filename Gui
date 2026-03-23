@@ -46,6 +46,7 @@ do
         local old = genv[SCRIPT_KEY]
         if old.Gui then pcall(function() old.Gui:Destroy() end) end
         if old.ToggleGui then pcall(function() old.ToggleGui:Destroy() end) end
+        if old.NotifGui then pcall(function() old.NotifGui:Destroy() end) end
         if old.Connections then
             for _, conn in ipairs(old.Connections) do
                 pcall(function() conn:Disconnect() end)
@@ -112,7 +113,7 @@ toggleGui.DisplayOrder = 1000
 toggleGui.IgnoreGuiInset = true
 toggleGui.Parent = playerGui
 
--- store refs for cleanup on re-execute
+-- store refs for cleanup on re-execute (notifGui added later)
 genv[SCRIPT_KEY].Gui = screenGui
 genv[SCRIPT_KEY].ToggleGui = toggleGui
 
@@ -1076,6 +1077,228 @@ playerGui.ChildAdded:Connect(function(child)
             end
             child.Position = UDim2.new(0, GUI_OFFSET, 0, 0)
         end
+    end
+end)
+
+---------- NOTIFICATION SYSTEM ----------
+
+local notifGui = Instance.new("ScreenGui")
+notifGui.Name = "SixZeroHubNotifs"
+notifGui.ResetOnSpawn = false
+notifGui.DisplayOrder = 1001
+notifGui.IgnoreGuiInset = true
+pcall(function() notifGui.Parent = game:GetService("CoreGui") end)
+if not notifGui.Parent then notifGui.Parent = playerGui end
+genv[SCRIPT_KEY].NotifGui = notifGui
+
+local notifHolder = Instance.new("Frame")
+notifHolder.Name = "Holder"
+notifHolder.BackgroundTransparency = 1
+notifHolder.AnchorPoint = Vector2.new(1, 1)
+notifHolder.Position = UDim2.new(1, -10, 1, -10)
+notifHolder.Size = UDim2.new(0, 280, 1, -20)
+notifHolder.Parent = notifGui
+
+local notifLayout = Instance.new("UIListLayout")
+notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
+notifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+notifLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+notifLayout.Padding = UDim.new(0, 8)
+notifLayout.Parent = notifHolder
+
+-- mode: "yesno" or "dismiss"
+-- returns "yes", "no", or "dismiss"
+local function showNotification(title, message, mode)
+    mode = mode or "dismiss"
+    local result = nil
+
+    local card = Instance.new("Frame")
+    card.Name = "Notif"
+    card.BackgroundColor3 = COLORS.darker
+    card.BorderSizePixel = 0
+    card.Size = UDim2.new(1, 0, 0, 0)
+    card.ClipsDescendants = true
+    card.Parent = notifHolder
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+
+    local stroke = Instance.new("UIStroke", card)
+    stroke.Color = COLORS.accent
+    stroke.Thickness = 1
+    stroke.Transparency = 0.5
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, -10, 0, 24)
+    titleLbl.Position = UDim2.new(0, 10, 0, 6)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = title
+    titleLbl.TextColor3 = COLORS.text
+    titleLbl.TextSize = 14
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    titleLbl.Parent = card
+
+    local msgLbl = Instance.new("TextLabel")
+    msgLbl.Size = UDim2.new(1, -20, 0, 32)
+    msgLbl.Position = UDim2.new(0, 10, 0, 28)
+    msgLbl.BackgroundTransparency = 1
+    msgLbl.Text = message
+    msgLbl.TextColor3 = COLORS.textMuted
+    msgLbl.TextSize = 12
+    msgLbl.Font = Enum.Font.Gotham
+    msgLbl.TextXAlignment = Enum.TextXAlignment.Left
+    msgLbl.TextWrapped = true
+    msgLbl.TextYAlignment = Enum.TextYAlignment.Top
+    msgLbl.Parent = card
+
+    local targetHeight = 100
+
+    local function createBtn(text, posX, width, bgColor, callback)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, width, 0, 26)
+        btn.Position = UDim2.new(0, posX, 0, 66)
+        btn.BackgroundColor3 = bgColor
+        btn.BorderSizePixel = 0
+        btn.Text = text
+        btn.TextColor3 = COLORS.text
+        btn.TextSize = 12
+        btn.Font = Enum.Font.GothamBold
+        btn.AutoButtonColor = false
+        btn.Parent = card
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        btn.MouseButton1Click:Connect(callback)
+        return btn
+    end
+
+    local function closeNotif(res)
+        result = res
+        local tween = TweenService:Create(card, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+            Size = UDim2.new(1, 0, 0, 0)
+        })
+        tween:Play()
+        tween.Completed:Connect(function()
+            card:Destroy()
+        end)
+    end
+
+    if mode == "yesno" then
+        createBtn("Yes", 10, 80, Color3.fromRGB(87, 242, 135), function() closeNotif("yes") end)
+        createBtn("No", 96, 80, Color3.fromRGB(237, 66, 69), function() closeNotif("no") end)
+    else
+        createBtn("Dismiss", 10, 80, COLORS.hover, function() closeNotif("dismiss") end)
+    end
+
+    -- animate in
+    TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        Size = UDim2.new(1, 0, 0, targetHeight)
+    }):Play()
+
+    -- auto dismiss after 15s
+    task.delay(15, function()
+        if not result and card.Parent then
+            closeNotif(mode == "yesno" and "no" or "dismiss")
+        end
+    end)
+
+    -- wait for result
+    while not result do task.wait() end
+    return result
+end
+
+_G.SixZeroHubNotify = showNotification
+
+---------- UPDATE CHECKER ----------
+
+local scriptHashes = {} -- [fileKey] = last known content hash
+local UPDATE_CHECK_INTERVAL = 30
+
+local function hashString(str)
+    -- simple djb2 hash
+    local hash = 5381
+    for i = 1, math.min(#str, 500) do
+        hash = (hash * 33 + string.byte(str, i)) % 2^32
+    end
+    return hash
+end
+
+local function getAllScriptLists()
+    local all = {}
+    for _, s in ipairs(UNI_SCRIPTS) do table.insert(all, {info = s, source = "uni"}) end
+    for _, s in ipairs(DEV_SCRIPTS) do table.insert(all, {info = s, source = "dev"}) end
+    for _, s in ipairs(SPEC_SCRIPTS) do table.insert(all, {info = s, source = "spec"}) end
+    return all
+end
+
+task.spawn(function()
+    task.wait(10) -- initial delay before first check
+    while screenGui and screenGui.Parent do
+        local allScripts = getAllScriptLists()
+        for _, entry in ipairs(allScripts) do
+            local info = entry.info
+            local source = entry.source
+            local fileKey = info.file or info.url
+            if not loadedScripts[fileKey] then continue end
+
+            local scriptUrl = info.url or (REPO_BASE .. info.file)
+            local ok, newContent = pcall(function()
+                return game:HttpGet(scriptUrl .. "?t=" .. tostring(tick()), true)
+            end)
+            if not ok or not newContent then continue end
+
+            local newHash = hashString(newContent)
+            if scriptHashes[fileKey] and scriptHashes[fileKey] ~= newHash then
+                -- script has changed
+                local answer = showNotification(
+                    info.name .. " has updated",
+                    "Would you like to swap to the most recent version?",
+                    "yesno"
+                )
+                if answer == "yes" then
+                    -- deactivate old
+                    local data = activeScripts[fileKey]
+                    if data and data.cleanup then
+                        pcall(data.cleanup)
+                    end
+                    activeScripts[fileKey] = nil
+                    loadedScripts[fileKey] = nil
+
+                    -- re-execute
+                    pcall(function()
+                        loadstring(newContent)()
+                    end)
+                    loadedScripts[fileKey] = true
+
+                    -- reload compat if needed
+                    if info.compat then
+                        task.delay(1, function()
+                            pcall(function()
+                                loadstring(game:HttpGet(info.compat))()
+                            end)
+                        end)
+                    end
+
+                    -- auto-register if script doesn't self-register
+                    task.delay(2, function()
+                        if not activeScripts[fileKey] then
+                            _G.SixZeroHubRegister(info.name, fileKey, nil, source)
+                        end
+                    end)
+
+                    -- update status in script buttons
+                    local btnData = scriptButtons[fileKey]
+                    if btnData then
+                        btnData.status.Text = "running"
+                        btnData.status.TextColor3 = Color3.fromRGB(87, 242, 135)
+                    end
+                end
+                scriptHashes[fileKey] = newHash
+            elseif not scriptHashes[fileKey] then
+                scriptHashes[fileKey] = newHash
+            end
+
+            task.wait(2) -- stagger checks between scripts
+        end
+        task.wait(UPDATE_CHECK_INTERVAL)
     end
 end)
 
