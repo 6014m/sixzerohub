@@ -8,8 +8,7 @@ local localPlayer = Players.LocalPlayer
 local connections = {}
 local active = true
 local CLICK_RANGE = 32
-local CLICK_COOLDOWN = 0.5
-local lastClick = 0
+local clicked = false -- prevent spam within the same crate appearance
 
 local conn = RunService.Heartbeat:Connect(function()
     if not active then return end
@@ -18,25 +17,24 @@ local conn = RunService.Heartbeat:Connect(function()
     local root = char:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    local now = tick()
-    if now - lastClick < CLICK_COOLDOWN then return end
-
     local airdrop = workspace:FindFirstChild("Airdrop")
-    if not airdrop then return end
+    if not airdrop then
+        clicked = false -- reset when crate despawns
+        return
+    end
 
     -- find the closest BasePart in the airdrop to check distance
-    local closestPart = nil
     local closestDist = math.huge
     for _, desc in ipairs(airdrop:GetDescendants()) do
         if desc:IsA("BasePart") then
             local dist = (desc.Position - root.Position).Magnitude
             if dist < closestDist then
                 closestDist = dist
-                closestPart = desc
             end
         end
     end
-    if not closestPart or closestDist > CLICK_RANGE then return end
+    if closestDist > CLICK_RANGE then return end
+    if clicked then return end
 
     -- try ProximityPrompt first (modern games)
     for _, desc in ipairs(airdrop:GetDescendants()) do
@@ -44,7 +42,7 @@ local conn = RunService.Heartbeat:Connect(function()
             pcall(function()
                 if fireproximityprompt then
                     fireproximityprompt(desc)
-                    lastClick = now
+                    clicked = true
                 end
             end)
             return
@@ -57,7 +55,7 @@ local conn = RunService.Heartbeat:Connect(function()
             pcall(function()
                 if fireclickdetector then
                     fireclickdetector(desc)
-                    lastClick = now
+                    clicked = true
                 end
             end)
             return
