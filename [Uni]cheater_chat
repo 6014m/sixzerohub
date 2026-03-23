@@ -440,7 +440,12 @@ local keybindConn = UserInputService.InputBegan:Connect(function(input, gpe)
     if not active then return end
     if not focusKeybind then return end
     if input.KeyCode == focusKeybind then
+        local oldText = inputBox.Text
         inputBox:CaptureFocus()
+        task.defer(function()
+            inputBox.Text = oldText
+            inputBox.CursorPosition = #oldText + 1
+        end)
     end
 end)
 table.insert(connections, keybindConn)
