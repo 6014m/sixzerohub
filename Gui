@@ -269,7 +269,11 @@ pcall(function()
         local raw = readfile(SETTINGS_FILE)
         local decoded = HttpService:JSONDecode(raw)
         if type(decoded) == "table" then
-            scriptSettingsValues = decoded
+            for fileKey, settings in pairs(decoded) do
+                if type(settings) == "table" then
+                    scriptSettingsValues[fileKey] = settings
+                end
+            end
         end
     end
 end)
@@ -277,7 +281,20 @@ end)
 local function saveSettingsToFile()
     pcall(function()
         if writefile then
-            writefile(SETTINGS_FILE, HttpService:JSONEncode(scriptSettingsValues))
+            local toSave = {}
+            for fileKey, settings in pairs(scriptSettingsValues) do
+                if type(settings) == "table" then
+                    local clean = {}
+                    for k, v in pairs(settings) do
+                        local t = typeof(v)
+                        if t == "string" or t == "number" or t == "boolean" then
+                            clean[k] = v
+                        end
+                    end
+                    toSave[fileKey] = clean
+                end
+            end
+            writefile(SETTINGS_FILE, HttpService:JSONEncode(toSave))
         end
     end)
 end
