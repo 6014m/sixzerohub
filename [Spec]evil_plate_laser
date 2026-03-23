@@ -7,10 +7,9 @@ local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 local connections = {}
 local active = true
-local JUMP_RANGE = 8
-local JUMP_COOLDOWN = 0.6
+local JUMP_RANGE = 10
+local JUMP_COOLDOWN = 0.5
 local lastJump = 0
-local lastLaserPositions = {} -- track laser movement to detect approach direction
 
 local function getRootPart()
     local char = localPlayer.Character
@@ -39,6 +38,7 @@ end
 
 local function getLaserParts(round)
     local lasers = {}
+    -- search for Lasers1-4 containers
     for i = 1, 4 do
         local laser = round:FindFirstChild("Lasers" .. i)
         if not laser then continue end
@@ -52,6 +52,7 @@ local function getLaserParts(round)
             end
         end
     end
+    -- catch-all: any BasePart descendant with "laser" in the name
     for _, desc in ipairs(round:GetDescendants()) do
         if desc:IsA("BasePart") and desc.Name:lower():find("laser") then
             local already = false
@@ -75,8 +76,6 @@ local conn = RunService.Heartbeat:Connect(function()
 
     local now = tick()
     if now - lastJump < JUMP_COOLDOWN then return end
-
-    -- only jump from the ground
     if not isGrounded(hum) then return end
 
     local round = findActiveRound()
@@ -91,30 +90,14 @@ local conn = RunService.Heartbeat:Connect(function()
         local horizDist = Vector3.new(diff.X, 0, diff.Z).Magnitude
         local yDiff = laserPos.Y - rootPos.Y
 
-        -- only care about lasers at body height
-        if yDiff < -5 or yDiff > 8 then continue end
+        -- only care about lasers at roughly body height
+        if yDiff < -4 or yDiff > 6 then continue end
 
-        -- check if laser is approaching by comparing to last known position
-        local lastPos = lastLaserPositions[laser]
-        lastLaserPositions[laser] = laserPos
-
-        if lastPos and horizDist <= JUMP_RANGE then
-            local lastDist = Vector3.new(lastPos.X - rootPos.X, 0, lastPos.Z - rootPos.Z).Magnitude
-            local closing = lastDist > horizDist -- laser is getting closer
-
-            if closing then
-                hum.Jump = true
-                pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
-                lastJump = now
-                break
-            end
-        end
-    end
-
-    -- clean up tracked lasers that no longer exist
-    for laser in pairs(lastLaserPositions) do
-        if not laser.Parent then
-            lastLaserPositions[laser] = nil
+        if horizDist <= JUMP_RANGE then
+            hum.Jump = true
+            pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
+            lastJump = now
+            break
         end
     end
 end)
@@ -128,7 +111,6 @@ local function cleanup()
         pcall(function() c:Disconnect() end)
     end
     connections = {}
-    lastLaserPositions = {}
 end
 
 if _G.SixZeroHubRegister then
