@@ -72,7 +72,7 @@ main.Size = UDim2.new(0, 320, 0, 350)
 main.Position = UDim2.new(0, 20, 0.5, -175)
 main.BackgroundColor3 = COLORS.bg
 main.BorderSizePixel = 0
-main.ClipsDescendants = true
+main.ClipsDescendants = false
 main.Parent = gui
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
 
@@ -118,7 +118,6 @@ Instance.new("UICorner", statusDot).CornerRadius = UDim.new(1, 0)
 
 -- minimize button
 local minimized = false
-local fullHeight = 350
 
 local minimizeBtn = Instance.new("TextButton")
 minimizeBtn.Size = UDim2.new(0, 20, 0, 20)
@@ -128,23 +127,16 @@ minimizeBtn.Text = "\xE2\x80\x94"
 minimizeBtn.TextColor3 = COLORS.muted
 minimizeBtn.TextSize = 14
 minimizeBtn.Font = Enum.Font.GothamBold
-minimizeBtn.ZIndex = 10
 minimizeBtn.Parent = header
 
 minimizeBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
-    if minimized then
-        fullHeight = main.Size.Y.Offset
-        TweenService:Create(main, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Size = UDim2.new(0, main.Size.X.Offset, 0, 30)
-        }):Play()
-        minimizeBtn.Text = "+"
-    else
-        TweenService:Create(main, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Size = UDim2.new(0, main.Size.X.Offset, 0, fullHeight)
-        }):Play()
-        minimizeBtn.Text = "\xE2\x80\x94"
-    end
+    messageScroll.Visible = not minimized
+    inputFrame.Visible = not minimized
+    mainStroke.Enabled = not minimized
+    main.BackgroundTransparency = minimized and 1 or 0
+    header.Size = minimized and UDim2.new(0, 160, 0, 30) or UDim2.new(1, 0, 0, 30)
+    minimizeBtn.Text = minimized and "+" or "\xE2\x80\x94"
 end)
 
 -- shift status dot left
