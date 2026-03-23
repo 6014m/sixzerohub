@@ -604,7 +604,7 @@ local UNI_SCRIPTS = {
 }
 
 local DEV_SCRIPTS = {
-    -- add dev tool scripts here: { name = "...", file = "..." } or { name = "...", url = "..." }
+    { name = "Part Monitor", file = "[Dev]part_monitor" },
 }
 
 local SPEC_SCRIPTS = {
