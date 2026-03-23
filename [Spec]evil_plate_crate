@@ -1,0 +1,55 @@
+-- [Spec] Evil Plate Game - Auto Crate
+-- Automatically clicks airdrop crates when in range
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local localPlayer = Players.LocalPlayer
+local connections = {}
+local CLICK_RANGE = 32
+
+local conn = RunService.Heartbeat:Connect(function()
+    local char = localPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local airdrop = workspace:FindFirstChild("Airdrop")
+    if not airdrop then return end
+
+    local crate = airdrop:FindFirstChild("Crate")
+    if not crate then return end
+
+    local clickDetector = crate:FindFirstChildOfClass("ClickDetector")
+    if not clickDetector then
+        for _, desc in ipairs(crate:GetDescendants()) do
+            if desc:IsA("ClickDetector") then
+                clickDetector = desc
+                break
+            end
+        end
+    end
+    if not clickDetector then return end
+
+    local cratePart = crate:IsA("BasePart") and crate or crate:FindFirstChildWhichIsA("BasePart")
+    if not cratePart then return end
+
+    local dist = (cratePart.Position - root.Position).Magnitude
+    if dist <= CLICK_RANGE then
+        fireclickdetector(clickDetector)
+    end
+end)
+table.insert(connections, conn)
+
+---------- SIXZEROHUB REGISTRATION ----------
+
+local function cleanup()
+    for _, c in ipairs(connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    connections = {}
+end
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Auto Crate", "[Spec]evil_plate_crate", cleanup, "spec")
+end
