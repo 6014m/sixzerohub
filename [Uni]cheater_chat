@@ -435,17 +435,26 @@ local function applyOpacity(val)
 end
 
 -- keybind listener
+local suppressNextChar = false
+local suppressText = ""
+
+local textChangedConn = inputBox:GetPropertyChangedSignal("Text"):Connect(function()
+    if suppressNextChar then
+        suppressNextChar = false
+        inputBox.Text = suppressText
+        inputBox.CursorPosition = #suppressText + 1
+    end
+end)
+table.insert(connections, textChangedConn)
+
 local keybindConn = UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if not active then return end
     if not focusKeybind then return end
     if input.KeyCode == focusKeybind then
-        local oldText = inputBox.Text
+        suppressText = inputBox.Text
+        suppressNextChar = true
         inputBox:CaptureFocus()
-        task.defer(function()
-            inputBox.Text = oldText
-            inputBox.CursorPosition = #oldText + 1
-        end)
     end
 end)
 table.insert(connections, keybindConn)
