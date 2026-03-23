@@ -44,6 +44,16 @@ do
     local genv = getgenv and getgenv() or _G
     if genv[SCRIPT_KEY] then
         local old = genv[SCRIPT_KEY]
+
+        -- deactivate all running scripts first
+        if old.ActiveScripts then
+            for fileKey, data in pairs(old.ActiveScripts) do
+                if data.cleanup then
+                    pcall(data.cleanup)
+                end
+            end
+        end
+
         if old.Gui then pcall(function() old.Gui:Destroy() end) end
         if old.ToggleGui then pcall(function() old.ToggleGui:Destroy() end) end
         if old.NotifGui then pcall(function() old.NotifGui:Destroy() end) end
@@ -227,6 +237,7 @@ end)
 
 local loadedScripts = {}
 local activeScripts = {}
+genv[SCRIPT_KEY].ActiveScripts = activeScripts
 local activeMenuOpen = false
 local uniContent -- forward declare
 local devContent -- forward declare
