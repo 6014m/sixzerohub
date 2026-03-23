@@ -6,11 +6,13 @@ local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
 local connections = {}
+local active = true
 local CLICK_RANGE = 32
 local CLICK_COOLDOWN = 0.5
 local lastClick = 0
 
 local conn = RunService.Heartbeat:Connect(function()
+    if not active then return end
     local char = localPlayer.Character
     if not char then return end
     local root = char:FindFirstChild("HumanoidRootPart")
@@ -67,6 +69,7 @@ table.insert(connections, conn)
 ---------- SIXZEROHUB REGISTRATION ----------
 
 local function cleanup()
+    active = false
     for _, c in ipairs(connections) do
         pcall(function() c:Disconnect() end)
     end
