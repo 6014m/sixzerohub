@@ -1,14 +1,15 @@
 -- [Spec] Evil Plate Game - Laser Jumper
--- Auto-jumps over lasers when they're within range
+-- Auto-jumps over lasers with tight timing
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
 local connections = {}
-local JUMP_RANGE = 15
-local JUMP_COOLDOWN = 0.25
+local JUMP_RANGE = 8
+local JUMP_COOLDOWN = 0.4
 local lastJump = 0
+local lastLaserPositions = {} -- track laser movement to detect approach direction
 
 local function getRootPart()
     local char = localPlayer.Character
@@ -18,6 +19,13 @@ end
 local function getHumanoid()
     local char = localPlayer.Character
     return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function isGrounded(hum)
+    local state = hum:GetState()
+    return state == Enum.HumanoidStateType.Running
+        or state == Enum.HumanoidStateType.RunningNoPhysics
+        or state == Enum.HumanoidStateType.Landed
 end
 
 local function findActiveRound()
@@ -46,7 +54,6 @@ local function getLaserParts(round)
             end
         end
     end
-    -- also grab any BasePart descendants of round with "Laser" in the name
     for _, desc in ipairs(round:GetDescendants()) do
         if desc:IsA("BasePart") and desc.Name:lower():find("laser") then
             local already = false
@@ -70,21 +77,45 @@ local conn = RunService.Heartbeat:Connect(function()
     local now = tick()
     if now - lastJump < JUMP_COOLDOWN then return end
 
+    -- only jump from the ground
+    if not isGrounded(hum) then return end
+
     local round = findActiveRound()
     if not round then return end
 
+    local rootPos = root.Position
     local lasers = getLaserParts(round)
+
     for _, laser in ipairs(lasers) do
-        local dist = (laser.Position - root.Position).Magnitude
-        if dist <= JUMP_RANGE then
-            -- check if laser is roughly at leg/body height (not way above or below)
-            local yDiff = laser.Position.Y - root.Position.Y
-            if yDiff > -5 and yDiff < 8 then
+        local laserPos = laser.Position
+        local diff = laserPos - rootPos
+        local horizDist = Vector3.new(diff.X, 0, diff.Z).Magnitude
+        local yDiff = laserPos.Y - rootPos.Y
+
+        -- only care about lasers at body height
+        if yDiff < -5 or yDiff > 8 then continue end
+
+        -- check if laser is approaching by comparing to last known position
+        local lastPos = lastLaserPositions[laser]
+        lastLaserPositions[laser] = laserPos
+
+        if lastPos and horizDist <= JUMP_RANGE then
+            local lastDist = Vector3.new(lastPos.X - rootPos.X, 0, lastPos.Z - rootPos.Z).Magnitude
+            local closing = lastDist > horizDist -- laser is getting closer
+
+            if closing then
                 hum.Jump = true
                 pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
                 lastJump = now
                 break
             end
+        end
+    end
+
+    -- clean up tracked lasers that no longer exist
+    for laser in pairs(lastLaserPositions) do
+        if not laser.Parent then
+            lastLaserPositions[laser] = nil
         end
     end
 end)
@@ -97,6 +128,7 @@ local function cleanup()
         pcall(function() c:Disconnect() end)
     end
     connections = {}
+    lastLaserPositions = {}
 end
 
 if _G.SixZeroHubRegister then
