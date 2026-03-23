@@ -226,12 +226,13 @@ end
 
 ---------- NETWORKING ----------
 
+local httpRequest = request or http_request or (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request)
 local username = localPlayer.Name
 
 local function sendMessage(text)
-    if #text == 0 or #SERVER_URL == 0 then return end
+    if #text == 0 or #SERVER_URL == 0 or not httpRequest then return end
     pcall(function()
-        HttpService:RequestAsync({
+        httpRequest({
             Url = SERVER_URL .. "/send",
             Method = "POST",
             Headers = { ["Content-Type"] = "application/json" },
@@ -241,16 +242,16 @@ local function sendMessage(text)
 end
 
 local function pollMessages()
-    if #SERVER_URL == 0 then return end
+    if #SERVER_URL == 0 or not httpRequest then return end
     local ok, response = pcall(function()
-        return HttpService:RequestAsync({
+        return httpRequest({
             Url = SERVER_URL .. "/messages?since=" .. tostring(lastTimestamp),
             Method = "GET",
         })
     end)
-    if ok and response and response.Success then
-        local data = HttpService:JSONDecode(response.Body)
-        if data and data.messages then
+    if ok and response and response.StatusCode == 200 then
+        local s, data = pcall(HttpService.JSONDecode, HttpService, response.Body)
+        if s and data and data.messages then
             for _, msg in ipairs(data.messages) do
                 if msg.timestamp > lastTimestamp then
                     lastTimestamp = msg.timestamp
@@ -258,7 +259,6 @@ local function pollMessages()
                     addMessageToUI(msg.author, msg.content, isSelf)
                 end
             end
-            -- update status dot
             statusDot.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
         end
     end
