@@ -1,5 +1,5 @@
 -- [Spec] Evil Plate Game - Auto Crate
--- Automatically clicks airdrop crates when in range
+-- Automatically clicks/prompts airdrop crates when in range
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,6 +7,8 @@ local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 local connections = {}
 local CLICK_RANGE = 32
+local CLICK_COOLDOWN = 0.5
+local lastClick = 0
 
 local conn = RunService.Heartbeat:Connect(function()
     local char = localPlayer.Character
@@ -14,29 +16,50 @@ local conn = RunService.Heartbeat:Connect(function()
     local root = char:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
+    local now = tick()
+    if now - lastClick < CLICK_COOLDOWN then return end
+
     local airdrop = workspace:FindFirstChild("Airdrop")
     if not airdrop then return end
 
-    local crate = airdrop:FindFirstChild("Crate")
-    if not crate then return end
-
-    local clickDetector = crate:FindFirstChildOfClass("ClickDetector")
-    if not clickDetector then
-        for _, desc in ipairs(crate:GetDescendants()) do
-            if desc:IsA("ClickDetector") then
-                clickDetector = desc
-                break
+    -- find the closest BasePart in the airdrop to check distance
+    local closestPart = nil
+    local closestDist = math.huge
+    for _, desc in ipairs(airdrop:GetDescendants()) do
+        if desc:IsA("BasePart") then
+            local dist = (desc.Position - root.Position).Magnitude
+            if dist < closestDist then
+                closestDist = dist
+                closestPart = desc
             end
         end
     end
-    if not clickDetector then return end
+    if not closestPart or closestDist > CLICK_RANGE then return end
 
-    local cratePart = crate:IsA("BasePart") and crate or crate:FindFirstChildWhichIsA("BasePart")
-    if not cratePart then return end
+    -- try ProximityPrompt first (modern games)
+    for _, desc in ipairs(airdrop:GetDescendants()) do
+        if desc:IsA("ProximityPrompt") then
+            pcall(function()
+                if fireproximityprompt then
+                    fireproximityprompt(desc)
+                    lastClick = now
+                end
+            end)
+            return
+        end
+    end
 
-    local dist = (cratePart.Position - root.Position).Magnitude
-    if dist <= CLICK_RANGE then
-        fireclickdetector(clickDetector)
+    -- try ClickDetector
+    for _, desc in ipairs(airdrop:GetDescendants()) do
+        if desc:IsA("ClickDetector") then
+            pcall(function()
+                if fireclickdetector then
+                    fireclickdetector(desc)
+                    lastClick = now
+                end
+            end)
+            return
+        end
     end
 end)
 table.insert(connections, conn)
