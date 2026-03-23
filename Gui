@@ -1339,10 +1339,17 @@ local function buildKnownFiles()
 end
 buildKnownFiles()
 
-local function getScriptType(fileName)
-    if fileName:sub(1, 5) == "[Uni]" then return "Uni"
-    elseif fileName:sub(1, 5) == "[Dev]" then return "Dev"
-    elseif fileName:sub(1, 6) == "[Spec]" then return "Spec"
+local typeMap = {
+    ["[Uni]"] = { source = "uni", label = "Uni", content = uniContent, list = UNI_SCRIPTS },
+    ["[Dev]"] = { source = "dev", label = "Dev", content = devContent, list = DEV_SCRIPTS },
+    ["[Spec]"] = { source = "spec", label = "Spec", content = specContent, list = SPEC_SCRIPTS },
+}
+
+local function getScriptTypeInfo(fileName)
+    for prefix, info in pairs(typeMap) do
+        if fileName:sub(1, #prefix) == prefix then
+            return info, prefix
+        end
     end
     return nil
 end
@@ -1355,13 +1362,20 @@ task.spawn(function()
         end)
         if ok and response then
             for name in response:gmatch('"name"%s*:%s*"([^"]+)"') do
-                if not knownFiles[name] and getScriptType(name) then
-                    local scriptType = getScriptType(name)
-                    local displayName = name:gsub("^%[%w+%]", ""):gsub("_", " ")
+                local typeInfo, prefix = getScriptTypeInfo(name)
+                if not knownFiles[name] and typeInfo then
+                    local displayName = name:sub(#prefix + 1):gsub("_", " ")
                     knownFiles[name] = true
+
+                    -- add to script list and create button in menu
+                    local newInfo = { name = displayName, file = name }
+                    table.insert(typeInfo.list, newInfo)
+                    createScriptButton(newInfo, typeInfo.content, typeInfo.source)
+                    rebuildSortOrder(typeInfo.content)
+
                     showNotification(
                         "Update/Release",
-                        "[" .. scriptType .. "] " .. displayName .. " has been added",
+                        "[" .. typeInfo.label .. "] " .. displayName .. " has been added",
                         "dismiss"
                     )
                 end
