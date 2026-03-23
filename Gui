@@ -10,6 +10,32 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+---------- TELEPORT PERSISTENCE ----------
+
+local HUB_URL = "https://raw.githubusercontent.com/6014m/sixzerohub/main/Gui"
+
+local queueteleport = queue_on_teleport
+    or (syn and syn.queue_on_teleport)
+    or (fluxus and fluxus.queue_on_teleport)
+    or (krnl and krnl.queue_on_teleport)
+    or (getgenv and getgenv().queue_on_teleport)
+
+if queueteleport then
+    local genv = getgenv and getgenv() or _G
+    if not genv.SIXZEROHUB_TP_QUEUED then
+        genv.SIXZEROHUB_TP_QUEUED = true
+        pcall(function()
+            queueteleport([[
+                repeat task.wait() until game:IsLoaded()
+                task.wait(2)
+                pcall(function()
+                    loadstring(game:HttpGet("]] .. HUB_URL .. [[", true))()
+                end)
+            ]])
+        end)
+    end
+end
+
 -- Discord grey palette
 local COLORS = {
     background = Color3.fromRGB(47, 49, 54),
@@ -992,5 +1018,21 @@ playerGui.ChildAdded:Connect(function(child)
             end
             child.Position = UDim2.new(0, GUI_OFFSET, 0, 0)
         end
+    end
+end)
+
+---------- TELEPORT RE-QUEUE ----------
+
+player.OnTeleport:Connect(function(state)
+    if state == Enum.TeleportState.Started and queueteleport then
+        pcall(function()
+            queueteleport([[
+                repeat task.wait() until game:IsLoaded()
+                task.wait(2)
+                pcall(function()
+                    loadstring(game:HttpGet("]] .. HUB_URL .. [[", true))()
+                end)
+            ]])
+        end)
     end
 end)
