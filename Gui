@@ -258,8 +258,30 @@ end
 
 ---------- SETTINGS SYSTEM ----------
 
+local SETTINGS_FILE = "SixZeroHub_settings.json"
+
 local scriptSettingsDefs = {} -- [fileKey] = { {name, type, default, ...}, ... }
 local scriptSettingsValues = {} -- [fileKey] = { [settingName] = value }
+
+-- load saved settings from file
+pcall(function()
+    if isfile and isfile(SETTINGS_FILE) then
+        local raw = readfile(SETTINGS_FILE)
+        local decoded = HttpService:JSONDecode(raw)
+        if type(decoded) == "table" then
+            scriptSettingsValues = decoded
+        end
+    end
+end)
+
+local function saveSettingsToFile()
+    pcall(function()
+        if writefile then
+            writefile(SETTINGS_FILE, HttpService:JSONEncode(scriptSettingsValues))
+        end
+    end)
+end
+
 _G.SixZeroHubSettings = scriptSettingsValues
 
 local settingsPanel -- forward declare
@@ -443,6 +465,7 @@ local function showSettingsPanel(fileKey)
                 values[def.name] = not values[def.name]
                 updateToggle()
                 if def.onChange then pcall(def.onChange, values[def.name]) end
+                saveSettingsToFile()
             end)
 
         elseif def.type == "slider" then
@@ -503,6 +526,7 @@ local function showSettingsPanel(fileKey)
                     values[def.name] = math.clamp(stepped, min, max)
                     updateSlider()
                     if def.onChange then pcall(def.onChange, values[def.name]) end
+                    saveSettingsToFile()
                 end
             end)
 
@@ -530,6 +554,7 @@ local function showSettingsPanel(fileKey)
                 values[def.name] = options[optIdx]
                 dropBtn.Text = tostring(values[def.name])
                 if def.onChange then pcall(def.onChange, values[def.name]) end
+                saveSettingsToFile()
             end)
         end
     end
