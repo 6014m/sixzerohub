@@ -299,30 +299,57 @@ local function getAvatarUrl(playerName)
 end
 
 -- recolor nametag above player's head
-local nametagColors = {} -- track which players we've colored
-local function recolorNametag(playerName)
-    if nametagColors[playerName] then return end
+local customNametags = {} -- [playerName] = BillboardGui
+
+local function applyNametag(playerName)
+    if customNametags[playerName] then return end
     pcall(function()
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr.Name == playerName and plr.Character then
                 local head = plr.Character:FindFirstChild("Head")
                 if not head then return end
-                -- find the BillboardGui nametag (Roblox default or game-added)
-                for _, child in ipairs(head:GetChildren()) do
-                    if child:IsA("BillboardGui") and child.Name ~= "SZHChatBubble" then
-                        for _, desc in ipairs(child:GetDescendants()) do
-                            if desc:IsA("TextLabel") and desc.Text == playerName then
-                                desc.TextColor3 = getPlayerColor(playerName)
-                                nametagColors[playerName] = true
-                            end
-                        end
-                    end
-                end
-                -- also check Humanoid displayname overhead
+
                 local hum = plr.Character:FindFirstChildOfClass("Humanoid")
                 if hum then
-                    hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
+                    -- hide default overhead name
+                    hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
                 end
+
+                -- create custom colored nametag
+                local bb = Instance.new("BillboardGui")
+                bb.Name = "SZHNametag"
+                bb.Adornee = head
+                bb.Size = UDim2.new(0, 150, 0, 24)
+                bb.StudsOffset = Vector3.new(0, 1.8, 0)
+                bb.AlwaysOnTop = false
+                bb.MaxDistance = 50
+                bb.Parent = head
+
+                local nameLabel = Instance.new("TextLabel")
+                nameLabel.Size = UDim2.new(1, 0, 1, 0)
+                nameLabel.BackgroundTransparency = 1
+                nameLabel.Text = hum and hum.DisplayName ~= "" and hum.DisplayName or playerName
+                nameLabel.TextColor3 = getPlayerColor(playerName)
+                nameLabel.TextSize = 16
+                nameLabel.Font = Enum.Font.GothamBold
+                nameLabel.TextStrokeTransparency = 0.5
+                nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                nameLabel.Parent = bb
+
+                customNametags[playerName] = bb
+
+                -- clean up on character removal
+                plr.CharacterRemoving:Connect(function()
+                    customNametags[playerName] = nil
+                end)
+
+                -- re-apply on respawn
+                plr.CharacterAdded:Connect(function(char)
+                    customNametags[playerName] = nil
+                    task.delay(1, function()
+                        if active then applyNametag(playerName) end
+                    end)
+                end)
             end
         end
     end)
@@ -385,7 +412,7 @@ local function addMessageToUI(author, content, isSelf)
 
     -- recolor nametag in-game
     if author ~= "System" then
-        task.spawn(recolorNametag, author)
+        task.spawn(applyNametag, author)
     end
 
     -- show bubble above player's head if they're in the server
@@ -734,6 +761,21 @@ local function cleanup()
         pcall(function() billboard:Destroy() end)
     end
     activeBubbles = {}
+    -- remove custom nametags and restore default names
+    for name, nametag in pairs(customNametags) do
+        pcall(function() nametag:Destroy() end)
+        pcall(function()
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr.Name == name and plr.Character then
+                    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
+                    end
+                end
+            end
+        end)
+    end
+    customNametags = {}
     pcall(function() gui:Destroy() end)
 end
 
