@@ -6,8 +6,8 @@ local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
 local connections = {}
-local JUMP_RANGE = 12
-local JUMP_COOLDOWN = 0.3
+local JUMP_RANGE = 15
+local JUMP_COOLDOWN = 0.25
 local lastJump = 0
 
 local function getRootPart()
@@ -35,13 +35,26 @@ local function getLaserParts(round)
     local lasers = {}
     for i = 1, 4 do
         local laser = round:FindFirstChild("Lasers" .. i)
-        if laser and laser:IsA("BasePart") then
+        if not laser then continue end
+        if laser:IsA("BasePart") then
             table.insert(lasers, laser)
-        elseif laser and laser:IsA("Model") then
+        else
             for _, part in ipairs(laser:GetDescendants()) do
                 if part:IsA("BasePart") then
                     table.insert(lasers, part)
                 end
+            end
+        end
+    end
+    -- also grab any BasePart descendants of round with "Laser" in the name
+    for _, desc in ipairs(round:GetDescendants()) do
+        if desc:IsA("BasePart") and desc.Name:lower():find("laser") then
+            local already = false
+            for _, l in ipairs(lasers) do
+                if l == desc then already = true; break end
+            end
+            if not already then
+                table.insert(lasers, desc)
             end
         end
     end
@@ -66,8 +79,9 @@ local conn = RunService.Heartbeat:Connect(function()
         if dist <= JUMP_RANGE then
             -- check if laser is roughly at leg/body height (not way above or below)
             local yDiff = laser.Position.Y - root.Position.Y
-            if yDiff > -3 and yDiff < 5 then
-                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            if yDiff > -5 and yDiff < 8 then
+                hum.Jump = true
+                pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
                 lastJump = now
                 break
             end
