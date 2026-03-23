@@ -138,8 +138,8 @@ colName.TextXAlignment = Enum.TextXAlignment.Left
 colName.Parent = colBar
 
 local colPath = Instance.new("TextLabel")
-colPath.Size = UDim2.new(1, -184, 1, 0)
-colPath.Position = UDim2.new(0, 184, 0, 0)
+colPath.Size = UDim2.new(1, -212, 1, 0)
+colPath.Position = UDim2.new(0, 210, 0, 0)
 colPath.BackgroundTransparency = 1
 colPath.Text = "Path"
 colPath.TextColor3 = COLORS.muted
@@ -254,11 +254,44 @@ local function addEntry(inst)
     nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
     nameLbl.Parent = row
 
+    local fullPath = getFullPath(inst)
+
+    local copyBtn = Instance.new("TextButton")
+    copyBtn.Size = UDim2.new(0, 22, 0, 18)
+    copyBtn.Position = UDim2.new(0, 184, 0, 2)
+    copyBtn.BackgroundColor3 = COLORS.row
+    copyBtn.BorderSizePixel = 0
+    copyBtn.Text = "\xF0\x9F\x93\x8B"
+    copyBtn.TextSize = 10
+    copyBtn.Font = Enum.Font.GothamBold
+    copyBtn.TextColor3 = COLORS.muted
+    copyBtn.AutoButtonColor = false
+    copyBtn.Parent = row
+    Instance.new("UICorner", copyBtn).CornerRadius = UDim.new(0, 3)
+
+    copyBtn.MouseButton1Click:Connect(function()
+        pcall(function()
+            if setclipboard then
+                setclipboard(fullPath)
+            elseif toclipboard then
+                toclipboard(fullPath)
+            end
+        end)
+        copyBtn.Text = "\xE2\x9C\x93"
+        copyBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
+        task.delay(1, function()
+            if copyBtn and copyBtn.Parent then
+                copyBtn.Text = "\xF0\x9F\x93\x8B"
+                copyBtn.TextColor3 = COLORS.muted
+            end
+        end)
+    end)
+
     local pathLbl = Instance.new("TextLabel")
-    pathLbl.Size = UDim2.new(1, -184, 1, 0)
-    pathLbl.Position = UDim2.new(0, 184, 0, 0)
+    pathLbl.Size = UDim2.new(1, -212, 1, 0)
+    pathLbl.Position = UDim2.new(0, 210, 0, 0)
     pathLbl.BackgroundTransparency = 1
-    pathLbl.Text = getFullPath(inst)
+    pathLbl.Text = fullPath
     pathLbl.TextColor3 = COLORS.path
     pathLbl.TextSize = 11
     pathLbl.Font = Enum.Font.Gotham
