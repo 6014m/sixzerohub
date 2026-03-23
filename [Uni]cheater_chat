@@ -335,11 +335,14 @@ local keybindConn = UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 table.insert(connections, keybindConn)
 
--- register settings with hub (deferred to ensure hub is fully loaded)
-task.defer(function()
-    if not _G.SixZeroHubRegisterSettings then return end
+-- register settings with hub (delayed to ensure hub is fully loaded)
+task.delay(1, function()
+    if not _G.SixZeroHubRegisterSettings then
+        warn("[CheaterChat] _G.SixZeroHubRegisterSettings not found")
+        return
+    end
 
-    pcall(_G.SixZeroHubRegisterSettings, "[Uni]cheater_chat", {
+    local ok, err = pcall(_G.SixZeroHubRegisterSettings, "[Uni]cheater_chat", {
         _title = "Cheater Chat",
         {
             name = "opacity",
@@ -368,6 +371,7 @@ task.defer(function()
             end,
         },
     })
+    if not ok then warn("[CheaterChat] Settings registration failed:", err) end
 end)
 
 ---------- SIXZEROHUB REGISTRATION ----------
