@@ -1,0 +1,320 @@
+-- [Dev] Part Monitor
+-- Lists newly created parts in real-time, excluding player characters
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+
+local COLORS = {
+    bg = Color3.fromRGB(32, 34, 37),
+    header = Color3.fromRGB(24, 26, 29),
+    row = Color3.fromRGB(47, 49, 54),
+    rowAlt = Color3.fromRGB(42, 44, 48),
+    text = Color3.fromRGB(220, 221, 222),
+    muted = Color3.fromRGB(142, 146, 151),
+    accent = Color3.fromRGB(255, 165, 0),
+    path = Color3.fromRGB(100, 180, 255),
+    type = Color3.fromRGB(200, 160, 255),
+}
+
+local MAX_ENTRIES = 200
+local entries = {}
+local paused = false
+local connections = {}
+
+---------- GUI ----------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "PartMonitor"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 998
+
+pcall(function() gui.Parent = game:GetService("CoreGui") end)
+if not gui.Parent then gui.Parent = playerGui end
+
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, 420, 0, 320)
+main.Position = UDim2.new(0.5, -210, 0.5, -160)
+main.BackgroundColor3 = COLORS.bg
+main.BorderSizePixel = 0
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+
+local mainStroke = Instance.new("UIStroke", main)
+mainStroke.Color = COLORS.accent
+mainStroke.Thickness = 1
+mainStroke.Transparency = 0.5
+
+-- header
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 34)
+header.BackgroundColor3 = COLORS.header
+header.BorderSizePixel = 0
+header.Parent = main
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
+
+local headerFill = Instance.new("Frame")
+headerFill.Size = UDim2.new(1, 0, 0, 8)
+headerFill.Position = UDim2.new(0, 0, 1, -8)
+headerFill.BackgroundColor3 = COLORS.header
+headerFill.BorderSizePixel = 0
+headerFill.Parent = header
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(1, -120, 1, 0)
+titleLbl.Position = UDim2.new(0, 10, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "Part Monitor"
+titleLbl.TextColor3 = COLORS.accent
+titleLbl.TextSize = 14
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Parent = header
+
+local countLbl = Instance.new("TextLabel")
+countLbl.Name = "Count"
+countLbl.Size = UDim2.new(0, 40, 1, 0)
+countLbl.Position = UDim2.new(1, -115, 0, 0)
+countLbl.BackgroundTransparency = 1
+countLbl.Text = "0"
+countLbl.TextColor3 = COLORS.muted
+countLbl.TextSize = 11
+countLbl.Font = Enum.Font.Gotham
+countLbl.Parent = header
+
+local pauseBtn = Instance.new("TextButton")
+pauseBtn.Size = UDim2.new(0, 50, 0, 22)
+pauseBtn.Position = UDim2.new(1, -72, 0, 6)
+pauseBtn.BackgroundColor3 = COLORS.row
+pauseBtn.BorderSizePixel = 0
+pauseBtn.Text = "Pause"
+pauseBtn.TextColor3 = COLORS.text
+pauseBtn.TextSize = 11
+pauseBtn.Font = Enum.Font.GothamBold
+pauseBtn.AutoButtonColor = false
+pauseBtn.Parent = header
+Instance.new("UICorner", pauseBtn).CornerRadius = UDim.new(0, 4)
+
+local clearBtn = Instance.new("TextButton")
+clearBtn.Size = UDim2.new(0, 16, 0, 22)
+clearBtn.Position = UDim2.new(1, -18, 0, 6)
+clearBtn.BackgroundTransparency = 1
+clearBtn.Text = "X"
+clearBtn.TextColor3 = COLORS.muted
+clearBtn.TextSize = 14
+clearBtn.Font = Enum.Font.GothamBold
+clearBtn.Parent = header
+
+-- column headers
+local colBar = Instance.new("Frame")
+colBar.Size = UDim2.new(1, -12, 0, 20)
+colBar.Position = UDim2.new(0, 6, 0, 36)
+colBar.BackgroundTransparency = 1
+colBar.Parent = main
+
+local colType = Instance.new("TextLabel")
+colType.Size = UDim2.new(0, 80, 1, 0)
+colType.BackgroundTransparency = 1
+colType.Text = "Type"
+colType.TextColor3 = COLORS.muted
+colType.TextSize = 10
+colType.Font = Enum.Font.GothamBold
+colType.TextXAlignment = Enum.TextXAlignment.Left
+colType.Parent = colBar
+
+local colName = Instance.new("TextLabel")
+colName.Size = UDim2.new(0, 100, 1, 0)
+colName.Position = UDim2.new(0, 82, 0, 0)
+colName.BackgroundTransparency = 1
+colName.Text = "Name"
+colName.TextColor3 = COLORS.muted
+colName.TextSize = 10
+colName.Font = Enum.Font.GothamBold
+colName.TextXAlignment = Enum.TextXAlignment.Left
+colName.Parent = colBar
+
+local colPath = Instance.new("TextLabel")
+colPath.Size = UDim2.new(1, -184, 1, 0)
+colPath.Position = UDim2.new(0, 184, 0, 0)
+colPath.BackgroundTransparency = 1
+colPath.Text = "Path"
+colPath.TextColor3 = COLORS.muted
+colPath.TextSize = 10
+colPath.Font = Enum.Font.GothamBold
+colPath.TextXAlignment = Enum.TextXAlignment.Left
+colPath.Parent = colBar
+
+-- scroll list
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, -12, 1, -62)
+scroll.Position = UDim2.new(0, 6, 0, 58)
+scroll.BackgroundTransparency = 1
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 3
+scroll.ScrollBarImageColor3 = COLORS.accent
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.Parent = main
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 1)
+listLayout.Parent = scroll
+
+---------- DRAGGABLE ----------
+
+do
+    local dragging, dragStart, frameStart
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            frameStart = main.Position
+        end
+    end)
+    header.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+---------- HELPERS ----------
+
+local function getFullPath(inst)
+    local parts = {}
+    local current = inst
+    while current and current ~= game do
+        table.insert(parts, 1, current.Name)
+        current = current.Parent
+    end
+    return table.concat(parts, ".")
+end
+
+local function isPlayerDescendant(inst)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character and inst:IsDescendantOf(plr.Character) then
+            return true
+        end
+    end
+    if inst:IsDescendantOf(playerGui) then return true end
+    pcall(function()
+        if inst:IsDescendantOf(game:GetService("CoreGui")) then return true end
+    end)
+    return false
+end
+
+local entryCount = 0
+
+local function addEntry(inst)
+    if paused then return end
+
+    entryCount = entryCount + 1
+    local idx = entryCount
+
+    local row = Instance.new("Frame")
+    row.Name = "Entry_" .. idx
+    row.Size = UDim2.new(1, 0, 0, 22)
+    row.BackgroundColor3 = (idx % 2 == 0) and COLORS.rowAlt or COLORS.row
+    row.BackgroundTransparency = 0.3
+    row.BorderSizePixel = 0
+    row.LayoutOrder = -idx
+    row.Parent = scroll
+
+    local typeLbl = Instance.new("TextLabel")
+    typeLbl.Size = UDim2.new(0, 80, 1, 0)
+    typeLbl.BackgroundTransparency = 1
+    typeLbl.Text = inst.ClassName
+    typeLbl.TextColor3 = COLORS.type
+    typeLbl.TextSize = 11
+    typeLbl.Font = Enum.Font.GothamBold
+    typeLbl.TextXAlignment = Enum.TextXAlignment.Left
+    typeLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    typeLbl.Parent = row
+
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size = UDim2.new(0, 100, 1, 0)
+    nameLbl.Position = UDim2.new(0, 82, 0, 0)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Text = inst.Name
+    nameLbl.TextColor3 = COLORS.text
+    nameLbl.TextSize = 11
+    nameLbl.Font = Enum.Font.Gotham
+    nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    nameLbl.Parent = row
+
+    local pathLbl = Instance.new("TextLabel")
+    pathLbl.Size = UDim2.new(1, -184, 1, 0)
+    pathLbl.Position = UDim2.new(0, 184, 0, 0)
+    pathLbl.BackgroundTransparency = 1
+    pathLbl.Text = getFullPath(inst)
+    pathLbl.TextColor3 = COLORS.path
+    pathLbl.TextSize = 11
+    pathLbl.Font = Enum.Font.Gotham
+    pathLbl.TextXAlignment = Enum.TextXAlignment.Left
+    pathLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    pathLbl.Parent = row
+
+    table.insert(entries, row)
+    if #entries > MAX_ENTRIES then
+        local old = table.remove(entries, 1)
+        old:Destroy()
+    end
+
+    countLbl.Text = tostring(#entries)
+end
+
+---------- MONITOR ----------
+
+local function startMonitoring()
+    local conn = workspace.DescendantAdded:Connect(function(desc)
+        if desc:IsA("BasePart") and not isPlayerDescendant(desc) then
+            addEntry(desc)
+        end
+    end)
+    table.insert(connections, conn)
+end
+
+startMonitoring()
+
+---------- BUTTON EVENTS ----------
+
+pauseBtn.MouseButton1Click:Connect(function()
+    paused = not paused
+    pauseBtn.Text = paused and "Resume" or "Pause"
+    pauseBtn.BackgroundColor3 = paused and Color3.fromRGB(200, 60, 60) or COLORS.row
+end)
+
+clearBtn.MouseButton1Click:Connect(function()
+    for _, row in ipairs(entries) do
+        row:Destroy()
+    end
+    entries = {}
+    entryCount = 0
+    countLbl.Text = "0"
+end)
+
+---------- SIXZEROHUB REGISTRATION ----------
+
+local function cleanup()
+    for _, conn in ipairs(connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    connections = {}
+    pcall(function() gui:Destroy() end)
+end
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Part Monitor", "[Dev]part_monitor", cleanup, "dev")
+end
