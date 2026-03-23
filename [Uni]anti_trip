@@ -1,0 +1,47 @@
+-- [Uni] Anti Trip
+-- Prevents ragdoll/trip/platform stand states
+
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+local connections = {}
+local active = true
+
+local function hookCharacter(char)
+    if not active then return end
+    local hum = char:WaitForChild("Humanoid", 10)
+    if not hum or not active then return end
+
+    local conn = hum.StateChanged:Connect(function(old, new)
+        if not active then return end
+        if new == Enum.HumanoidStateType.FallingDown or new == Enum.HumanoidStateType.PlatformStanding then
+            hum.PlatformStand = false
+            hum.Sit = false
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+        end
+    end)
+    table.insert(connections, conn)
+end
+
+if localPlayer.Character then
+    task.spawn(hookCharacter, localPlayer.Character)
+end
+
+local charConn = localPlayer.CharacterAdded:Connect(function(char)
+    task.spawn(hookCharacter, char)
+end)
+table.insert(connections, charConn)
+
+---------- SIXZEROHUB REGISTRATION ----------
+
+local function cleanup()
+    active = false
+    for _, c in ipairs(connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    connections = {}
+end
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Anti Trip", "[Uni]anti_trip", cleanup, "uni")
+end
