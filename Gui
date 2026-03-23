@@ -499,8 +499,11 @@ function refreshActiveList()
                 end)
 
                 deactivateBtn.MouseButton1Click:Connect(function()
-                    if data.cleanup then
-                        pcall(data.cleanup)
+                    -- look up current data at click time, not capture time
+                    local current = activeScripts[fileKey]
+                    if current and current.cleanup then
+                        local ok, err = pcall(current.cleanup)
+                        if not ok then warn("[SixZeroHub] Cleanup error for " .. fileKey .. ": " .. tostring(err)) end
                     end
                     activeScripts[fileKey] = nil
                     loadedScripts[fileKey] = nil
