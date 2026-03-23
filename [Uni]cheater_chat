@@ -292,6 +292,84 @@ if #SERVER_URL == 0 then
     statusDot.BackgroundColor3 = Color3.fromRGB(237, 66, 69)
 end
 
+---------- SETTINGS ----------
+
+local focusKeybind = nil -- nil = no keybind
+local chatOpacity = 0 -- 0 = fully visible, 1 = invisible
+
+local function applyOpacity(val)
+    chatOpacity = val
+    local t = val / 100
+    main.BackgroundTransparency = t
+    header.BackgroundTransparency = t
+    headerFill.BackgroundTransparency = t
+    inputFrame.BackgroundTransparency = t
+    mainStroke.Transparency = 0.5 + t * 0.5
+    titleLbl.TextTransparency = t
+    statusDot.BackgroundTransparency = t
+
+    -- messages
+    for _, child in ipairs(messageScroll:GetChildren()) do
+        if child:IsA("Frame") then
+            for _, lbl in ipairs(child:GetChildren()) do
+                if lbl:IsA("TextLabel") then
+                    lbl.TextTransparency = t
+                end
+            end
+        end
+    end
+    inputBox.TextTransparency = t
+    inputBox.PlaceholderColor3 = COLORS.muted -- placeholder stays
+    sendBtn.BackgroundTransparency = t
+    sendBtn.TextTransparency = t
+end
+
+-- keybind listener
+local keybindConn = UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if not active then return end
+    if not focusKeybind then return end
+    if input.KeyCode == focusKeybind then
+        inputBox:CaptureFocus()
+    end
+end)
+table.insert(connections, keybindConn)
+
+-- register settings with hub
+if _G.SixZeroHubRegisterSettings then
+    local waitingForKey = false
+
+    _G.SixZeroHubRegisterSettings("[Uni]cheater_chat", {
+        _title = "Cheater Chat",
+        {
+            name = "opacity",
+            label = "Opacity",
+            type = "slider",
+            default = 0,
+            min = 0,
+            max = 80,
+            step = 5,
+            onChange = function(val)
+                applyOpacity(val)
+            end,
+        },
+        {
+            name = "keybind",
+            label = "Focus Key",
+            type = "dropdown",
+            default = "None",
+            options = {"None", "T", "Y", "U", "Slash", "Semicolon", "Quote", "BackQuote", "F1", "F2", "F3", "F4"},
+            onChange = function(val)
+                if val == "None" then
+                    focusKeybind = nil
+                else
+                    focusKeybind = Enum.KeyCode[val]
+                end
+            end,
+        },
+    })
+end
+
 ---------- SIXZEROHUB REGISTRATION ----------
 
 local function cleanup()
