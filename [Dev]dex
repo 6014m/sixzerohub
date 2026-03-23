@@ -1,0 +1,54 @@
+-- [Dev] Dex Explorer
+-- Loads Dex debugging suite with SixZeroHub deactivation support
+
+local DEX_URL = "https://raw.githubusercontent.com/LorekeeperZinnia/Dex/master/out.lua"
+
+-- Track Dex GUIs before loading so we can find new ones after
+local function getExistingGuis()
+    local guis = {}
+    local function scan(parent)
+        pcall(function()
+            for _, child in ipairs(parent:GetChildren()) do
+                if child:IsA("ScreenGui") then
+                    guis[child] = true
+                end
+            end
+        end)
+    end
+    scan(game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"))
+    pcall(function() scan(game:GetService("CoreGui")) end)
+    pcall(function() if gethui then scan(gethui()) end end)
+    return guis
+end
+
+local beforeGuis = getExistingGuis()
+
+-- Load Dex
+loadstring(game:HttpGet(DEX_URL))()
+
+-- Find Dex GUIs (any new ScreenGuis that appeared)
+task.delay(3, function()
+    local dexGuis = {}
+    local function scan(parent)
+        pcall(function()
+            for _, child in ipairs(parent:GetChildren()) do
+                if child:IsA("ScreenGui") and not beforeGuis[child] then
+                    table.insert(dexGuis, child)
+                end
+            end
+        end)
+    end
+    scan(game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui"))
+    pcall(function() scan(game:GetService("CoreGui")) end)
+    pcall(function() if gethui then scan(gethui()) end end)
+
+    local function cleanup()
+        for _, gui in ipairs(dexGuis) do
+            pcall(function() gui:Destroy() end)
+        end
+    end
+
+    if _G.SixZeroHubRegister then
+        _G.SixZeroHubRegister("Dex", "[Dev]dex", cleanup, "dev")
+    end
+end)
