@@ -7,7 +7,7 @@ local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 local connections = {}
 local JUMP_RANGE = 8
-local JUMP_COOLDOWN = 0.4
+local JUMP_COOLDOWN = 0.6
 local lastJump = 0
 local lastLaserPositions = {} -- track laser movement to detect approach direction
 
@@ -22,10 +22,7 @@ local function getHumanoid()
 end
 
 local function isGrounded(hum)
-    local state = hum:GetState()
-    return state == Enum.HumanoidStateType.Running
-        or state == Enum.HumanoidStateType.RunningNoPhysics
-        or state == Enum.HumanoidStateType.Landed
+    return hum.FloorMaterial ~= Enum.Material.Air
 end
 
 local function findActiveRound()
