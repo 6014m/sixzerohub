@@ -36,6 +36,41 @@ if queueteleport then
     end
 end
 
+---------- CLEANUP OLD INSTANCE ----------
+
+local SCRIPT_KEY = "SIXZEROHUB_INSTANCE"
+
+do
+    local genv = getgenv and getgenv() or _G
+    if genv[SCRIPT_KEY] then
+        local old = genv[SCRIPT_KEY]
+        if old.Gui then pcall(function() old.Gui:Destroy() end) end
+        if old.ToggleGui then pcall(function() old.ToggleGui:Destroy() end) end
+        if old.Connections then
+            for _, conn in ipairs(old.Connections) do
+                pcall(function() conn:Disconnect() end)
+            end
+        end
+        genv[SCRIPT_KEY] = nil
+    end
+
+    -- also destroy any lingering SixZeroHub GUIs
+    pcall(function()
+        for _, gui in ipairs(game:GetService("CoreGui"):GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name == "SixZeroHub" then gui:Destroy() end
+        end
+    end)
+    pcall(function()
+        for _, gui in ipairs(player:WaitForChild("PlayerGui"):GetChildren()) do
+            if gui:IsA("ScreenGui") and (gui.Name == "SixZeroHub" or gui.Name == "SixZeroHubToggle") then gui:Destroy() end
+        end
+    end)
+end
+
+local hubConnections = {}
+local genv = getgenv and getgenv() or _G
+genv[SCRIPT_KEY] = { Connections = hubConnections }
+
 -- Discord grey palette
 local COLORS = {
     background = Color3.fromRGB(47, 49, 54),
@@ -76,6 +111,10 @@ toggleGui.ResetOnSpawn = false
 toggleGui.DisplayOrder = 1000
 toggleGui.IgnoreGuiInset = true
 toggleGui.Parent = playerGui
+
+-- store refs for cleanup on re-execute
+genv[SCRIPT_KEY].Gui = screenGui
+genv[SCRIPT_KEY].ToggleGui = toggleGui
 
 ---------- CORNER BAR ----------
 
