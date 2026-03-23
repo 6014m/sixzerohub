@@ -450,45 +450,192 @@ local keybindConn = UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 table.insert(connections, keybindConn)
 
--- register settings with hub
+-- settings definitions (shared between hub and standalone)
+local SETTINGS_DEFS = {
+    _title = "Cheater Chat",
+    {
+        name = "opacity",
+        label = "Opacity",
+        type = "slider",
+        default = 0,
+        min = 0,
+        max = 80,
+        step = 5,
+        onChange = function(val)
+            applyOpacity(val)
+        end,
+    },
+    {
+        name = "keybind",
+        label = "Focus Key",
+        type = "dropdown",
+        default = "None",
+        options = {"None", "T", "Y", "U", "Slash", "Semicolon", "Quote", "BackQuote", "F1", "F2", "F3", "F4"},
+        onChange = function(val)
+            if val == "None" then
+                focusKeybind = nil
+            else
+                focusKeybind = Enum.KeyCode[val]
+            end
+        end,
+    },
+}
+
+local isHub = _G.SixZeroHubRegister ~= nil
+
+-- register settings with hub if running through it
 task.delay(2, function()
-    if not _G.SixZeroHubRegisterSettings then
-        warn("[CheaterChat] _G.SixZeroHubRegisterSettings not found")
-        return
+    if _G.SixZeroHubRegisterSettings then
+        _G.SixZeroHubRegisterSettings("[Uni]cheater_chat", SETTINGS_DEFS)
+    end
+end)
+
+-- built-in settings panel when NOT running through hub
+if not isHub then
+    local settingsOpen = false
+    local settingsFrame = Instance.new("Frame")
+    settingsFrame.Name = "Settings"
+    settingsFrame.Size = UDim2.new(1, -8, 0, 0)
+    settingsFrame.Position = UDim2.new(0, 4, 0, 32)
+    settingsFrame.BackgroundColor3 = COLORS.header
+    settingsFrame.BorderSizePixel = 0
+    settingsFrame.ClipsDescendants = true
+    settingsFrame.Parent = main
+    Instance.new("UICorner", settingsFrame).CornerRadius = UDim.new(0, 6)
+
+    local settingsLayout = Instance.new("UIListLayout")
+    settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    settingsLayout.Padding = UDim.new(0, 4)
+    settingsLayout.Parent = settingsFrame
+
+    local settingsPad = Instance.new("UIPadding")
+    settingsPad.PaddingLeft = UDim.new(0, 6)
+    settingsPad.PaddingRight = UDim.new(0, 6)
+    settingsPad.PaddingTop = UDim.new(0, 6)
+    settingsPad.PaddingBottom = UDim.new(0, 6)
+    settingsPad.Parent = settingsFrame
+
+    local settingsValues = {}
+    for _, def in ipairs(SETTINGS_DEFS) do
+        settingsValues[def.name] = def.default
+
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 26)
+        row.BackgroundTransparency = 1
+        row.Parent = settingsFrame
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(0.5, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = def.label or def.name
+        label.TextColor3 = COLORS.text
+        label.TextSize = 12
+        label.Font = Enum.Font.Gotham
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = row
+
+        if def.type == "slider" then
+            local valLbl = Instance.new("TextLabel")
+            valLbl.Size = UDim2.new(0, 30, 1, 0)
+            valLbl.Position = UDim2.new(1, -30, 0, 0)
+            valLbl.BackgroundTransparency = 1
+            valLbl.TextColor3 = COLORS.muted
+            valLbl.TextSize = 11
+            valLbl.Font = Enum.Font.Gotham
+            valLbl.Text = tostring(def.default)
+            valLbl.Parent = row
+
+            local bar = Instance.new("Frame")
+            bar.Size = UDim2.new(0.35, 0, 0, 6)
+            bar.Position = UDim2.new(0.5, 4, 0.5, -3)
+            bar.BackgroundColor3 = COLORS.input
+            bar.BorderSizePixel = 0
+            bar.Parent = row
+            Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 3)
+
+            local knob = Instance.new("Frame")
+            knob.Size = UDim2.new(0, 10, 0, 14)
+            knob.AnchorPoint = Vector2.new(0.5, 0.5)
+            knob.Position = UDim2.new(0, 0, 0.5, 0)
+            knob.BackgroundColor3 = COLORS.accent
+            knob.BorderSizePixel = 0
+            knob.Parent = bar
+            Instance.new("UICorner", knob).CornerRadius = UDim.new(0, 3)
+
+            local dragging = false
+            bar.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true end
+            end)
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local relX = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+                    local raw = def.min + (def.max - def.min) * relX
+                    local stepped = math.floor(raw / def.step + 0.5) * def.step
+                    settingsValues[def.name] = math.clamp(stepped, def.min, def.max)
+                    knob.Position = UDim2.new(relX, 0, 0.5, 0)
+                    valLbl.Text = tostring(settingsValues[def.name])
+                    if def.onChange then def.onChange(settingsValues[def.name]) end
+                end
+            end)
+
+        elseif def.type == "dropdown" then
+            local opts = def.options
+            local optIdx = 1
+            local dropBtn = Instance.new("TextButton")
+            dropBtn.Size = UDim2.new(0.45, 0, 0, 20)
+            dropBtn.Position = UDim2.new(0.55, 0, 0, 3)
+            dropBtn.BackgroundColor3 = COLORS.input
+            dropBtn.BorderSizePixel = 0
+            dropBtn.Text = tostring(def.default)
+            dropBtn.TextColor3 = COLORS.text
+            dropBtn.TextSize = 11
+            dropBtn.Font = Enum.Font.Gotham
+            dropBtn.AutoButtonColor = false
+            dropBtn.Parent = row
+            Instance.new("UICorner", dropBtn).CornerRadius = UDim.new(0, 4)
+
+            dropBtn.MouseButton1Click:Connect(function()
+                optIdx = optIdx % #opts + 1
+                settingsValues[def.name] = opts[optIdx]
+                dropBtn.Text = tostring(opts[optIdx])
+                if def.onChange then def.onChange(opts[optIdx]) end
+            end)
+        end
     end
 
-    warn("[CheaterChat] Registering settings...")
-    _G.SixZeroHubRegisterSettings("[Uni]cheater_chat", {
-        _title = "Cheater Chat",
-        {
-            name = "opacity",
-            label = "Opacity",
-            type = "slider",
-            default = 0,
-            min = 0,
-            max = 80,
-            step = 5,
-            onChange = function(val)
-                applyOpacity(val)
-            end,
-        },
-        {
-            name = "keybind",
-            label = "Focus Key",
-            type = "dropdown",
-            default = "None",
-            options = {"None", "T", "Y", "U", "Slash", "Semicolon", "Quote", "BackQuote", "F1", "F2", "F3", "F4"},
-            onChange = function(val)
-                if val == "None" then
-                    focusKeybind = nil
-                else
-                    focusKeybind = Enum.KeyCode[val]
-                end
-            end,
-        },
-    })
-    warn("[CheaterChat] Settings registered successfully")
-end)
+    -- cog button in header
+    local cogBtn = Instance.new("TextButton")
+    cogBtn.Size = UDim2.new(0, 22, 0, 22)
+    cogBtn.Position = UDim2.new(1, -38, 0, 4)
+    cogBtn.BackgroundTransparency = 1
+    cogBtn.Text = "\xE2\x9A\x99"
+    cogBtn.TextColor3 = COLORS.muted
+    cogBtn.TextSize = 14
+    cogBtn.Font = Enum.Font.GothamBold
+    cogBtn.Parent = header
+
+    -- move status dot left to make room
+    statusDot.Position = UDim2.new(1, -44, 0.5, -4)
+
+    local targetHeight = 6 + #SETTINGS_DEFS * 30 + (#SETTINGS_DEFS - 1) * 4 + 6
+
+    cogBtn.MouseButton1Click:Connect(function()
+        settingsOpen = not settingsOpen
+        if settingsOpen then
+            messageScroll.Position = UDim2.new(0, 4, 0, 32 + targetHeight + 4)
+            messageScroll.Size = UDim2.new(1, -8, 1, -68 - targetHeight - 4)
+        else
+            messageScroll.Position = UDim2.new(0, 4, 0, 32)
+            messageScroll.Size = UDim2.new(1, -8, 1, -68)
+        end
+        TweenService:Create(settingsFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = UDim2.new(1, -8, 0, settingsOpen and targetHeight or 0)
+        }):Play()
+    end)
+end
 
 ---------- SIXZEROHUB REGISTRATION ----------
 
