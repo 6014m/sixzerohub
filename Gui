@@ -1118,11 +1118,20 @@ local function createScriptButton(info, targetContent, source)
         showSettingsPanel(fileKey)
     end)
 
-    -- check if settings exist now or watch for registration
+    -- check if settings exist now, and keep checking periodically
     local function updateCogVisibility()
         cogBtn.Visible = scriptSettingsDefs[fileKey] ~= nil
     end
     updateCogVisibility()
+    -- poll for late registrations
+    task.spawn(function()
+        local checks = 0
+        while checks < 10 and not scriptSettingsDefs[fileKey] do
+            task.wait(1)
+            checks = checks + 1
+            updateCogVisibility()
+        end
+    end)
 
     -- favorite star (far right)
     local favBtn = Instance.new("TextButton")
