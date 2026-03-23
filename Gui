@@ -120,13 +120,16 @@ local loadedScripts = {}
 local activeScripts = {}
 local activeMenuOpen = false
 local uniContent -- forward declare
+local devContent -- forward declare
+local specContent -- forward declare
 
 local function refreshActiveList() end -- forward declare, defined below
 
-_G.SixZeroHubRegister = function(displayName, fileKey, cleanupFn)
+_G.SixZeroHubRegister = function(displayName, fileKey, cleanupFn, source)
     activeScripts[fileKey] = {
         name = displayName,
         cleanup = cleanupFn,
+        source = source or "other",
     }
     if activeMenuOpen then
         refreshActiveList()
@@ -310,72 +313,145 @@ activeEmptyLabel.TextSize = 14
 activeEmptyLabel.Font = Enum.Font.Gotham
 activeEmptyLabel.Parent = activeContent
 
+-- source display names and colors
+local SOURCE_INFO = {
+    uni = { label = "Universal", color = COLORS.accent },
+    dev = { label = "Dev Tools", color = Color3.fromRGB(255, 165, 0) },
+    spec = { label = "Specific Games", color = Color3.fromRGB(200, 80, 200) },
+    other = { label = "Other", color = COLORS.textMuted },
+}
+
+local function createDivider(parent, sourceKey, layoutOrder)
+    local info = SOURCE_INFO[sourceKey] or SOURCE_INFO.other
+
+    local divider = Instance.new("Frame")
+    divider.Name = "Divider_" .. sourceKey
+    divider.Size = UDim2.new(1, -8, 0, 22)
+    divider.BackgroundTransparency = 1
+    divider.LayoutOrder = layoutOrder
+    divider.Parent = parent
+
+    local line = Instance.new("Frame")
+    line.Size = UDim2.new(1, 0, 0, 1)
+    line.Position = UDim2.new(0, 0, 0.5, 0)
+    line.BackgroundColor3 = info.color
+    line.BackgroundTransparency = 0.5
+    line.BorderSizePixel = 0
+    line.Parent = divider
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 0, 1, 0)
+    label.AutomaticSize = Enum.AutomaticSize.X
+    label.Position = UDim2.new(0, 6, 0, 0)
+    label.BackgroundColor3 = COLORS.sidebar
+    label.BackgroundTransparency = 0
+    label.BorderSizePixel = 0
+    label.Text = "  " .. info.label .. "  "
+    label.TextColor3 = info.color
+    label.TextSize = 11
+    label.Font = Enum.Font.GothamBold
+    label.Parent = divider
+
+    return divider
+end
+
 function refreshActiveList()
     for _, child in ipairs(activeContent:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
+        if child:IsA("Frame") or (child:IsA("TextLabel") and child.Name ~= "Empty") then
+            child:Destroy()
+        end
+    end
+
+    -- group scripts by source
+    local groups = {}
+    local sourceOrder = { "uni", "dev", "spec", "other" }
+
+    for fileKey, data in pairs(activeScripts) do
+        local src = data.source or "other"
+        if not groups[src] then groups[src] = {} end
+        table.insert(groups[src], { key = fileKey, data = data })
     end
 
     local count = 0
-    for fileKey, data in pairs(activeScripts) do
-        count = count + 1
+    local layoutIdx = 0
 
-        local row = Instance.new("Frame")
-        row.Name = fileKey
-        row.Size = UDim2.new(1, -8, 0, 36)
-        row.BackgroundColor3 = COLORS.hover
-        row.BorderSizePixel = 0
-        row.Parent = activeContent
+    for _, srcKey in ipairs(sourceOrder) do
+        local items = groups[srcKey]
+        if items and #items > 0 then
+            -- add divider
+            layoutIdx = layoutIdx + 1
+            createDivider(activeContent, srcKey, layoutIdx)
 
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+            for _, item in ipairs(items) do
+                count = count + 1
+                layoutIdx = layoutIdx + 1
 
-        local nameLabel = Instance.new("TextLabel")
-        nameLabel.Size = UDim2.new(1, -90, 1, 0)
-        nameLabel.Position = UDim2.new(0, 10, 0, 0)
-        nameLabel.BackgroundTransparency = 1
-        nameLabel.Text = data.name
-        nameLabel.TextColor3 = Color3.fromRGB(87, 242, 135)
-        nameLabel.TextSize = 14
-        nameLabel.Font = Enum.Font.Gotham
-        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        nameLabel.Parent = row
+                local fileKey = item.key
+                local data = item.data
 
-        local deactivateBtn = Instance.new("TextButton")
-        deactivateBtn.Name = "Deactivate"
-        deactivateBtn.Size = UDim2.new(0, 75, 0, 24)
-        deactivateBtn.Position = UDim2.new(1, -82, 0.5, -12)
-        deactivateBtn.BackgroundColor3 = Color3.fromRGB(237, 66, 69)
-        deactivateBtn.BorderSizePixel = 0
-        deactivateBtn.Text = "Deactivate"
-        deactivateBtn.TextColor3 = COLORS.text
-        deactivateBtn.TextSize = 11
-        deactivateBtn.Font = Enum.Font.GothamBold
-        deactivateBtn.AutoButtonColor = false
-        deactivateBtn.Parent = row
+                local row = Instance.new("Frame")
+                row.Name = fileKey
+                row.Size = UDim2.new(1, -8, 0, 36)
+                row.BackgroundColor3 = COLORS.hover
+                row.BorderSizePixel = 0
+                row.LayoutOrder = layoutIdx
+                row.Parent = activeContent
 
-        Instance.new("UICorner", deactivateBtn).CornerRadius = UDim.new(0, 4)
+                Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
 
-        deactivateBtn.MouseEnter:Connect(function()
-            TweenService:Create(deactivateBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(200, 50, 50)}):Play()
-        end)
-        deactivateBtn.MouseLeave:Connect(function()
-            TweenService:Create(deactivateBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(237, 66, 69)}):Play()
-        end)
+                local nameLabel = Instance.new("TextLabel")
+                nameLabel.Size = UDim2.new(1, -90, 1, 0)
+                nameLabel.Position = UDim2.new(0, 10, 0, 0)
+                nameLabel.BackgroundTransparency = 1
+                nameLabel.Text = data.name
+                nameLabel.TextColor3 = Color3.fromRGB(87, 242, 135)
+                nameLabel.TextSize = 14
+                nameLabel.Font = Enum.Font.Gotham
+                nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+                nameLabel.Parent = row
 
-        deactivateBtn.MouseButton1Click:Connect(function()
-            if data.cleanup then
-                pcall(data.cleanup)
+                local deactivateBtn = Instance.new("TextButton")
+                deactivateBtn.Name = "Deactivate"
+                deactivateBtn.Size = UDim2.new(0, 75, 0, 24)
+                deactivateBtn.Position = UDim2.new(1, -82, 0.5, -12)
+                deactivateBtn.BackgroundColor3 = Color3.fromRGB(237, 66, 69)
+                deactivateBtn.BorderSizePixel = 0
+                deactivateBtn.Text = "Deactivate"
+                deactivateBtn.TextColor3 = COLORS.text
+                deactivateBtn.TextSize = 11
+                deactivateBtn.Font = Enum.Font.GothamBold
+                deactivateBtn.AutoButtonColor = false
+                deactivateBtn.Parent = row
+
+                Instance.new("UICorner", deactivateBtn).CornerRadius = UDim.new(0, 4)
+
+                deactivateBtn.MouseEnter:Connect(function()
+                    TweenService:Create(deactivateBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(200, 50, 50)}):Play()
+                end)
+                deactivateBtn.MouseLeave:Connect(function()
+                    TweenService:Create(deactivateBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(237, 66, 69)}):Play()
+                end)
+
+                deactivateBtn.MouseButton1Click:Connect(function()
+                    if data.cleanup then
+                        pcall(data.cleanup)
+                    end
+                    activeScripts[fileKey] = nil
+                    loadedScripts[fileKey] = nil
+                    -- clear status in whichever content list it came from
+                    for _, contentFrame in ipairs({uniContent, devContent, specContent}) do
+                        if contentFrame then
+                            local ref = contentFrame:FindFirstChild(fileKey)
+                            if ref then
+                                local s = ref:FindFirstChild("Status")
+                                if s then s.Text = "" end
+                            end
+                        end
+                    end
+                    refreshActiveList()
+                end)
             end
-            activeScripts[fileKey] = nil
-            loadedScripts[fileKey] = nil
-            if uniContent then
-                local ref = uniContent:FindFirstChild(fileKey)
-                if ref then
-                    local s = ref:FindFirstChild("Status")
-                    if s then s.Text = "" end
-                end
-            end
-            refreshActiveList()
-        end)
+        end
     end
 
     activeEmptyLabel.Visible = (count == 0)
@@ -390,96 +466,79 @@ end
 
 activeCloseBtn.MouseButton1Click:Connect(closeActiveMenu)
 
----------- ACTIVE BUTTON (bottom right of sidebar, above Uni) ----------
+---------- HELPER: CREATE BOTTOM BUTTON ----------
 
-local activeBtn = Instance.new("TextButton")
-activeBtn.Name = "ActiveButton"
-activeBtn.Size = UDim2.new(0, 50, 0, 26)
-activeBtn.Position = UDim2.new(0, 6, 1, -64)
-activeBtn.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
-activeBtn.BorderSizePixel = 0
-activeBtn.Text = "Active"
+local function createBottomButton(name, text, yOffset, bgColor, hoverColor, tooltipText)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.new(0, 50, 0, 26)
+    btn.Position = UDim2.new(0, 6, 1, yOffset)
+    btn.BackgroundColor3 = bgColor
+    btn.BorderSizePixel = 0
+    btn.Text = text
+    btn.TextColor3 = COLORS.text
+    btn.TextSize = 12
+    btn.Font = Enum.Font.GothamBold
+    btn.AutoButtonColor = false
+    btn.Parent = screenGui
+
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    local tooltip = Instance.new("Frame")
+    tooltip.Size = UDim2.new(0, 130, 0, 28)
+    tooltip.Position = UDim2.new(1, 5, 0.5, -14)
+    tooltip.BackgroundColor3 = COLORS.darker
+    tooltip.BorderSizePixel = 0
+    tooltip.Visible = false
+    tooltip.Parent = btn
+
+    Instance.new("UICorner", tooltip).CornerRadius = UDim.new(0, 6)
+
+    local tipLabel = Instance.new("TextLabel")
+    tipLabel.Size = UDim2.new(1, 0, 1, 0)
+    tipLabel.BackgroundTransparency = 1
+    tipLabel.Text = tooltipText
+    tipLabel.TextColor3 = COLORS.text
+    tipLabel.TextSize = 12
+    tipLabel.Font = Enum.Font.Gotham
+    tipLabel.Parent = tooltip
+
+    btn.MouseEnter:Connect(function()
+        tooltip.Visible = true
+        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = hoverColor}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        tooltip.Visible = false
+        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = bgColor}):Play()
+    end)
+
+    return btn
+end
+
+---------- BOTTOM BUTTONS (top to bottom: Active, Dev, Spec, Uni) ----------
+
+local activeBtn = createBottomButton(
+    "ActiveButton", "Active", -124,
+    Color3.fromRGB(87, 242, 135), Color3.fromRGB(70, 200, 110), "Active Scripts"
+)
 activeBtn.TextColor3 = COLORS.darker
-activeBtn.TextSize = 12
-activeBtn.Font = Enum.Font.GothamBold
-activeBtn.AutoButtonColor = false
-activeBtn.Parent = screenGui
 
-Instance.new("UICorner", activeBtn).CornerRadius = UDim.new(0, 6)
+local devBtn = createBottomButton(
+    "DevButton", "Dev", -94,
+    Color3.fromRGB(255, 165, 0), Color3.fromRGB(220, 140, 0), "Dev Tools"
+)
 
-local activeTooltip = Instance.new("Frame")
-activeTooltip.Size = UDim2.new(0, 110, 0, 28)
-activeTooltip.Position = UDim2.new(1, 5, 0.5, -14)
-activeTooltip.BackgroundColor3 = COLORS.darker
-activeTooltip.BorderSizePixel = 0
-activeTooltip.Visible = false
-activeTooltip.Parent = activeBtn
+local specBtn = createBottomButton(
+    "SpecButton", "Spec", -64,
+    Color3.fromRGB(200, 80, 200), Color3.fromRGB(170, 60, 170), "Specific Games"
+)
 
-Instance.new("UICorner", activeTooltip).CornerRadius = UDim.new(0, 6)
+local uniBtn = createBottomButton(
+    "UniButton", "Uni", -34,
+    COLORS.accent, Color3.fromRGB(71, 82, 196), "Universal Scripts"
+)
 
-local activeTooltipText = Instance.new("TextLabel")
-activeTooltipText.Size = UDim2.new(1, 0, 1, 0)
-activeTooltipText.BackgroundTransparency = 1
-activeTooltipText.Text = "Active Scripts"
-activeTooltipText.TextColor3 = COLORS.text
-activeTooltipText.TextSize = 12
-activeTooltipText.Font = Enum.Font.Gotham
-activeTooltipText.Parent = activeTooltip
-
-activeBtn.MouseEnter:Connect(function()
-    activeTooltip.Visible = true
-    TweenService:Create(activeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(70, 200, 110)}):Play()
-end)
-activeBtn.MouseLeave:Connect(function()
-    activeTooltip.Visible = false
-    TweenService:Create(activeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(87, 242, 135)}):Play()
-end)
 activeBtn.MouseButton1Click:Connect(toggleActiveMenu)
-
----------- UNI BUTTON (bottom right of sidebar) ----------
-
-local uniBtn = Instance.new("TextButton")
-uniBtn.Name = "UniButton"
-uniBtn.Size = UDim2.new(0, 50, 0, 26)
-uniBtn.Position = UDim2.new(0, 6, 1, -34)
-uniBtn.BackgroundColor3 = COLORS.accent
-uniBtn.BorderSizePixel = 0
-uniBtn.Text = "Uni"
-uniBtn.TextColor3 = COLORS.text
-uniBtn.TextSize = 14
-uniBtn.Font = Enum.Font.GothamBold
-uniBtn.AutoButtonColor = false
-uniBtn.Parent = screenGui
-
-Instance.new("UICorner", uniBtn).CornerRadius = UDim.new(0, 6)
-
-local uniTooltip = Instance.new("Frame")
-uniTooltip.Size = UDim2.new(0, 130, 0, 28)
-uniTooltip.Position = UDim2.new(1, 5, 0.5, -14)
-uniTooltip.BackgroundColor3 = COLORS.darker
-uniTooltip.BorderSizePixel = 0
-uniTooltip.Visible = false
-uniTooltip.Parent = uniBtn
-
-Instance.new("UICorner", uniTooltip).CornerRadius = UDim.new(0, 6)
-
-local tooltipText = Instance.new("TextLabel")
-tooltipText.Size = UDim2.new(1, 0, 1, 0)
-tooltipText.BackgroundTransparency = 1
-tooltipText.Text = "Universal Scripts"
-tooltipText.TextColor3 = COLORS.text
-tooltipText.TextSize = 12
-tooltipText.Font = Enum.Font.Gotham
-tooltipText.Parent = uniTooltip
-
-uniBtn.MouseEnter:Connect(function()
-    uniTooltip.Visible = true
-    TweenService:Create(uniBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(71, 82, 196)}):Play()
-end)
-uniBtn.MouseLeave:Connect(function()
-    uniTooltip.Visible = false
-    TweenService:Create(uniBtn, TweenInfo.new(0.15), {BackgroundColor3 = COLORS.accent}):Play()
-end)
 
 ---------- UNIVERSAL SCRIPTS MENU ----------
 
@@ -490,13 +549,40 @@ local toggleUniMenu, closeUniMenu, isUniMenuOpen = createPopupToggle(uniMenu)
 uniBtn.MouseButton1Click:Connect(toggleUniMenu)
 uniCloseBtn.MouseButton1Click:Connect(closeUniMenu)
 
+---------- DEV TOOLS MENU ----------
+
+local devMenu, devHeader, _devContent, devCloseBtn = createPopupMenu("DevToolsMenu", "Dev Tools")
+devContent = _devContent
+local toggleDevMenu, closeDevMenu, isDevMenuOpen = createPopupToggle(devMenu)
+
+devBtn.MouseButton1Click:Connect(toggleDevMenu)
+devCloseBtn.MouseButton1Click:Connect(closeDevMenu)
+
+---------- SPECIFIC GAMES MENU ----------
+
+local specMenu, specHeader, _specContent, specCloseBtn = createPopupMenu("SpecificGamesMenu", "Specific Games")
+specContent = _specContent
+local toggleSpecMenu, closeSpecMenu, isSpecMenuOpen = createPopupToggle(specMenu)
+
+specBtn.MouseButton1Click:Connect(toggleSpecMenu)
+specCloseBtn.MouseButton1Click:Connect(closeSpecMenu)
+
 ---------- SCRIPT ENTRIES ----------
 
 local REPO_BASE = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
-local SCRIPTS = {
+
+local UNI_SCRIPTS = {
     { name = "Horizontal Density", file = "[Uni]horizontal_density" },
     { name = "Damage Block Dodger", file = "[Uni]damage_block_dodger" },
     { name = "Lock-On Shiftlock", url = "https://raw.githubusercontent.com/6014m/roblox-lockon-shiftlock/main/The%20Actual%20Script", compat = "https://raw.githubusercontent.com/6014m/roblox-lockon-shiftlock/main/SixZeroHubCompat.lua" },
+}
+
+local DEV_SCRIPTS = {
+    -- add dev tool scripts here: { name = "...", file = "..." } or { name = "...", url = "..." }
+}
+
+local SPEC_SCRIPTS = {
+    -- add game-specific scripts here: { name = "...", file = "..." } or { name = "...", url = "..." }
 }
 
 local FAVORITES_FILE = "SixZeroHub_favorites.json"
@@ -520,10 +606,12 @@ local favorites = loadFavorites()
 local scriptButtons = {}
 
 -- sort scripts: favorites first (alphabetically), then non-favorites (alphabetically)
-local function rebuildSortOrder()
+local function rebuildSortOrder(targetContent)
     local sorted = {}
     for _, data in pairs(scriptButtons) do
-        table.insert(sorted, data)
+        if data.btn.Parent == targetContent then
+            table.insert(sorted, data)
+        end
     end
     table.sort(sorted, function(a, b)
         local aFav = favorites[a.info.file or a.info.url] or false
@@ -546,7 +634,7 @@ local function updateFavIcon(favBtn, fileKey)
     end
 end
 
-local function createScriptButton(info)
+local function createScriptButton(info, targetContent, source)
     local fileKey = info.file or info.url
 
     local btn = Instance.new("TextButton")
@@ -561,7 +649,7 @@ local function createScriptButton(info)
     btn.TextXAlignment = Enum.TextXAlignment.Left
     btn.AutoButtonColor = false
     btn.LayoutOrder = 0
-    btn.Parent = uniContent
+    btn.Parent = targetContent
 
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
@@ -594,7 +682,7 @@ local function createScriptButton(info)
         if not favorites[fileKey] then favorites[fileKey] = nil end
         saveFavorites(favorites)
         updateFavIcon(favBtn, fileKey)
-        rebuildSortOrder()
+        rebuildSortOrder(targetContent)
     end)
 
     btn.MouseEnter:Connect(function()
@@ -637,7 +725,7 @@ local function createScriptButton(info)
                 -- auto-register external scripts that don't self-register
                 task.delay(2, function()
                     if not activeScripts[fileKey] then
-                        _G.SixZeroHubRegister(info.name, fileKey, nil)
+                        _G.SixZeroHubRegister(info.name, fileKey, nil, source)
                     end
                 end)
             else
@@ -651,10 +739,20 @@ local function createScriptButton(info)
     scriptButtons[fileKey] = { btn = btn, favBtn = favBtn, status = status, info = info }
 end
 
-for _, scriptInfo in ipairs(SCRIPTS) do
-    createScriptButton(scriptInfo)
+for _, scriptInfo in ipairs(UNI_SCRIPTS) do
+    createScriptButton(scriptInfo, uniContent, "uni")
 end
-rebuildSortOrder()
+rebuildSortOrder(uniContent)
+
+for _, scriptInfo in ipairs(DEV_SCRIPTS) do
+    createScriptButton(scriptInfo, devContent, "dev")
+end
+rebuildSortOrder(devContent)
+
+for _, scriptInfo in ipairs(SPEC_SCRIPTS) do
+    createScriptButton(scriptInfo, specContent, "spec")
+end
+rebuildSortOrder(specContent)
 
 ---------- GUI OFFSET MANAGEMENT ----------
 
@@ -842,6 +940,8 @@ local function toggleGuiVisibility()
         slantClip.Visible = true
         titleLabel.Visible = true
         activeBtn.Visible = true
+        devBtn.Visible = true
+        specBtn.Visible = true
         uniBtn.Visible = true
         moveChat(true)
         shiftGameGuis(true)
@@ -851,11 +951,15 @@ local function toggleGuiVisibility()
         slantClip.Visible = false
         titleLabel.Visible = false
         activeBtn.Visible = false
+        devBtn.Visible = false
+        specBtn.Visible = false
         uniBtn.Visible = false
         moveChat(false)
         shiftGameGuis(false)
         unshiftAllLockOnChildren()
         closeUniMenu()
+        closeDevMenu()
+        closeSpecMenu()
         closeActiveMenu()
     end
 
