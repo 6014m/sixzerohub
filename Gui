@@ -645,6 +645,7 @@ local UNI_SCRIPTS = {
 local DEV_SCRIPTS = {
     { name = "Part Monitor", file = "[Dev]part_monitor" },
     { name = "Game ID Copier", file = "[Dev]gameid_copier" },
+    { name = "Dex", file = "[Dev]dex" },
 }
 
 local SPEC_SCRIPTS = {
