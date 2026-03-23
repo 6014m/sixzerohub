@@ -11,7 +11,7 @@ local playerGui = localPlayer:WaitForChild("PlayerGui")
 local connections = {}
 local active = true
 
-local SERVER_URL = "" -- SET THIS AFTER RENDER DEPLOY
+local SERVER_URL = "https://sixzero-chat-bot.onrender.com"
 
 local COLORS = {
     bg = Color3.fromRGB(32, 34, 37),
