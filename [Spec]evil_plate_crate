@@ -8,7 +8,6 @@ local localPlayer = Players.LocalPlayer
 local connections = {}
 local active = true
 local CLICK_RANGE = 32
-local clicked = false -- prevent spam within the same crate appearance
 
 local conn = RunService.Heartbeat:Connect(function()
     if not active then return end
@@ -18,48 +17,31 @@ local conn = RunService.Heartbeat:Connect(function()
     if not root then return end
 
     local airdrop = workspace:FindFirstChild("Airdrop")
-    if not airdrop then
-        clicked = false -- reset when crate despawns
-        return
-    end
+    if not airdrop then return end
 
-    -- find the closest BasePart in the airdrop to check distance
-    local closestDist = math.huge
+    -- single pass: find distance, prompt, and click detector all at once
+    local inRange = false
+    local prompt, detector
     for _, desc in ipairs(airdrop:GetDescendants()) do
-        if desc:IsA("BasePart") then
-            local dist = (desc.Position - root.Position).Magnitude
-            if dist < closestDist then
-                closestDist = dist
+        if not inRange and desc:IsA("BasePart") then
+            if (desc.Position - root.Position).Magnitude <= CLICK_RANGE then
+                inRange = true
             end
         end
-    end
-    if closestDist > CLICK_RANGE then return end
-    if clicked then return end
-
-    -- try ProximityPrompt first (modern games)
-    for _, desc in ipairs(airdrop:GetDescendants()) do
-        if desc:IsA("ProximityPrompt") then
-            pcall(function()
-                if fireproximityprompt then
-                    fireproximityprompt(desc)
-                    clicked = true
-                end
-            end)
-            return
+        if not prompt and desc:IsA("ProximityPrompt") then
+            prompt = desc
+        end
+        if not detector and desc:IsA("ClickDetector") then
+            detector = desc
         end
     end
 
-    -- try ClickDetector
-    for _, desc in ipairs(airdrop:GetDescendants()) do
-        if desc:IsA("ClickDetector") then
-            pcall(function()
-                if fireclickdetector then
-                    fireclickdetector(desc)
-                    clicked = true
-                end
-            end)
-            return
-        end
+    if not inRange then return end
+
+    if prompt and fireproximityprompt then
+        pcall(fireproximityprompt, prompt)
+    elseif detector and fireclickdetector then
+        pcall(fireclickdetector, detector)
     end
 end)
 table.insert(connections, conn)
