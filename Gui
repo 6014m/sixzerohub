@@ -609,7 +609,7 @@ local DEV_SCRIPTS = {
 }
 
 local SPEC_SCRIPTS = {
-    { name = "Laser Jumper", file = "[Spec]evil_plate_laser", gameId = 0 }, -- set gameId once known
+    { name = "Laser Jumper", file = "[Spec]evil_plate_laser", gameId = 100337093788565 },
 }
 
 local currentGameId = game.PlaceId
