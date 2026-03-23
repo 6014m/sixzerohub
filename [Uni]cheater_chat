@@ -10,6 +10,7 @@ local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 local connections = {}
 local active = true
+local isHub = _G.SixZeroHubRegister ~= nil
 
 local SERVER_URL = "https://sixzero-chat.killtrex0.workers.dev"
 
@@ -41,7 +42,6 @@ local playerColorMap = {}
 
 local function getPlayerColor(name)
     if playerColorMap[name] then return playerColorMap[name] end
-    -- hash the name to pick a consistent color
     local hash = 0
     for i = 1, #name do
         hash = (hash * 31 + string.byte(name, i)) % 2^24
@@ -72,7 +72,6 @@ main.Size = UDim2.new(0, 320, 0, 350)
 main.Position = UDim2.new(0, 20, 0.5, -175)
 main.BackgroundColor3 = COLORS.bg
 main.BorderSizePixel = 0
-main.ClipsDescendants = false
 main.Parent = gui
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
 
@@ -108,20 +107,19 @@ titleLbl.Font = Enum.Font.GothamBold
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 titleLbl.Parent = header
 
+-- status dot (rightmost)
 local statusDot = Instance.new("Frame")
 statusDot.Size = UDim2.new(0, 8, 0, 8)
-statusDot.Position = UDim2.new(1, -20, 0.5, -4)
+statusDot.Position = UDim2.new(1, -16, 0.5, -4)
 statusDot.BackgroundColor3 = Color3.fromRGB(237, 66, 69)
 statusDot.BorderSizePixel = 0
 statusDot.Parent = header
 Instance.new("UICorner", statusDot).CornerRadius = UDim.new(1, 0)
 
--- minimize button (handler connected after messageScroll and inputFrame exist)
-local minimized = false
-
+-- minimize button (left of status dot)
 local minimizeBtn = Instance.new("TextButton")
 minimizeBtn.Size = UDim2.new(0, 20, 0, 20)
-minimizeBtn.Position = UDim2.new(1, -40, 0, 5)
+minimizeBtn.Position = UDim2.new(1, -36, 0, 5)
 minimizeBtn.BackgroundTransparency = 1
 minimizeBtn.Text = "\xE2\x80\x94"
 minimizeBtn.TextColor3 = COLORS.muted
@@ -129,8 +127,13 @@ minimizeBtn.TextSize = 14
 minimizeBtn.Font = Enum.Font.GothamBold
 minimizeBtn.Parent = header
 
--- shift status dot left
-statusDot.Position = UDim2.new(1, -46, 0.5, -4)
+-- body container (everything below header)
+local body = Instance.new("Frame")
+body.Name = "Body"
+body.Size = UDim2.new(1, 0, 1, -30)
+body.Position = UDim2.new(0, 0, 0, 30)
+body.BackgroundTransparency = 1
+body.Parent = main
 
 -- draggable
 do
@@ -158,15 +161,15 @@ end
 -- message area
 local messageScroll = Instance.new("ScrollingFrame")
 messageScroll.Name = "Messages"
-messageScroll.Size = UDim2.new(1, -8, 1, -68)
-messageScroll.Position = UDim2.new(0, 4, 0, 32)
+messageScroll.Size = UDim2.new(1, -8, 1, -38)
+messageScroll.Position = UDim2.new(0, 4, 0, 2)
 messageScroll.BackgroundTransparency = 1
 messageScroll.BorderSizePixel = 0
 messageScroll.ScrollBarThickness = 3
 messageScroll.ScrollBarImageColor3 = COLORS.muted
 messageScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 messageScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-messageScroll.Parent = main
+messageScroll.Parent = body
 
 local msgLayout = Instance.new("UIListLayout")
 msgLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -184,7 +187,7 @@ inputFrame.Size = UDim2.new(1, -8, 0, 30)
 inputFrame.Position = UDim2.new(0, 4, 1, -34)
 inputFrame.BackgroundColor3 = COLORS.input
 inputFrame.BorderSizePixel = 0
-inputFrame.Parent = main
+inputFrame.Parent = body
 Instance.new("UICorner", inputFrame).CornerRadius = UDim.new(0, 6)
 
 local inputBox = Instance.new("TextBox")
@@ -214,95 +217,20 @@ sendBtn.AutoButtonColor = false
 sendBtn.Parent = inputFrame
 Instance.new("UICorner", sendBtn).CornerRadius = UDim.new(0, 4)
 
--- minimize handler (now that messageScroll and inputFrame exist)
+---------- MINIMIZE ----------
+
+local minimized = false
+
 minimizeBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
-    messageScroll.Visible = not minimized
-    inputFrame.Visible = not minimized
-    main.Size = minimized and UDim2.new(0, 320, 0, 30) or UDim2.new(0, 320, 0, 350)
+    body.Visible = not minimized
+    main.Size = minimized and UDim2.new(0, 200, 0, 30) or UDim2.new(0, 320, 0, 350)
     minimizeBtn.Text = minimized and "+" or "\xE2\x80\x94"
 end)
 
 ---------- MESSAGE DISPLAY ----------
 
 local msgCount = 0
-
-local activeBubbles = {} -- [player] = {gui, cleanup_time}
-
-local function showChatBubble(authorName, content)
-    -- find the player in the server
-    local targetPlayer = nil
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr.Name == authorName then
-            targetPlayer = plr
-            break
-        end
-    end
-    if not targetPlayer or not targetPlayer.Character then return end
-    local head = targetPlayer.Character:FindFirstChild("Head")
-    if not head then return end
-
-    -- remove old bubble for this player
-    if activeBubbles[authorName] then
-        pcall(function() activeBubbles[authorName]:Destroy() end)
-        activeBubbles[authorName] = nil
-    end
-
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "SZHChatBubble"
-    billboard.Adornee = head
-    billboard.Size = UDim2.new(0, 200, 0, 60)
-    billboard.StudsOffset = Vector3.new(2.5, 2, 0)
-    billboard.AlwaysOnTop = true
-    billboard.Parent = head
-
-    local bubble = Instance.new("Frame")
-    bubble.Size = UDim2.new(1, 0, 0, 0)
-    bubble.AutomaticSize = Enum.AutomaticSize.Y
-    bubble.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    bubble.BackgroundTransparency = 0.15
-    bubble.BorderSizePixel = 0
-    bubble.Parent = billboard
-    Instance.new("UICorner", bubble).CornerRadius = UDim.new(0, 8)
-    Instance.new("UIPadding", bubble).PaddingLeft = UDim.new(0, 6)
-    local pad = bubble.UIPadding
-    pad.PaddingRight = UDim.new(0, 6)
-    pad.PaddingTop = UDim.new(0, 4)
-    pad.PaddingBottom = UDim.new(0, 4)
-
-    local nameLbl = Instance.new("TextLabel")
-    nameLbl.Size = UDim2.new(1, 0, 0, 14)
-    nameLbl.BackgroundTransparency = 1
-    nameLbl.Text = authorName
-    nameLbl.TextColor3 = getPlayerColor(authorName)
-    nameLbl.TextSize = 11
-    nameLbl.Font = Enum.Font.GothamBold
-    nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-    nameLbl.Parent = bubble
-
-    local msgLbl = Instance.new("TextLabel")
-    msgLbl.Size = UDim2.new(1, 0, 0, 0)
-    msgLbl.AutomaticSize = Enum.AutomaticSize.Y
-    msgLbl.Position = UDim2.new(0, 0, 0, 14)
-    msgLbl.BackgroundTransparency = 1
-    msgLbl.Text = content
-    msgLbl.TextColor3 = Color3.fromRGB(220, 220, 220)
-    msgLbl.TextSize = 12
-    msgLbl.Font = Enum.Font.Gotham
-    msgLbl.TextXAlignment = Enum.TextXAlignment.Left
-    msgLbl.TextWrapped = true
-    msgLbl.Parent = bubble
-
-    activeBubbles[authorName] = billboard
-
-    -- auto-remove after 6 seconds
-    task.delay(6, function()
-        if activeBubbles[authorName] == billboard then
-            pcall(function() billboard:Destroy() end)
-            activeBubbles[authorName] = nil
-        end
-    end)
-end
 
 -- cache avatar thumbnails
 local avatarCache = {}
@@ -324,12 +252,12 @@ local function getAvatarUrl(playerName)
     return url
 end
 
--- recolor nametag above player's head
-local customNametags = {} -- [playerName] = BillboardGui
+-- custom nametags above heads
+local customNametags = {}
+local activeBubbles = {}
 
 local function applyNametag(playerName)
     if customNametags[playerName] then return end
-    -- don't show nametag above local player's own head
     if playerName == localPlayer.Name then return end
     pcall(function()
         for _, plr in ipairs(Players:GetPlayers()) do
@@ -368,14 +296,81 @@ local function applyNametag(playerName)
                 plr.CharacterRemoving:Connect(function()
                     customNametags[playerName] = nil
                 end)
-
-                plr.CharacterAdded:Connect(function(char)
+                plr.CharacterAdded:Connect(function()
                     customNametags[playerName] = nil
                     task.delay(1, function()
                         if active then applyNametag(playerName) end
                     end)
                 end)
             end
+        end
+    end)
+end
+
+local function showChatBubble(authorName, content)
+    local targetPlayer = nil
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Name == authorName then targetPlayer = plr break end
+    end
+    if not targetPlayer or not targetPlayer.Character then return end
+    local head = targetPlayer.Character:FindFirstChild("Head")
+    if not head then return end
+
+    if activeBubbles[authorName] then
+        pcall(function() activeBubbles[authorName]:Destroy() end)
+        activeBubbles[authorName] = nil
+    end
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "SZHChatBubble"
+    billboard.Adornee = head
+    billboard.Size = UDim2.new(0, 200, 0, 60)
+    billboard.StudsOffset = Vector3.new(2.5, 2, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = head
+
+    local bubble = Instance.new("Frame")
+    bubble.Size = UDim2.new(1, 0, 0, 0)
+    bubble.AutomaticSize = Enum.AutomaticSize.Y
+    bubble.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    bubble.BackgroundTransparency = 0.15
+    bubble.BorderSizePixel = 0
+    bubble.Parent = billboard
+    Instance.new("UICorner", bubble).CornerRadius = UDim.new(0, 8)
+    local pad = Instance.new("UIPadding", bubble)
+    pad.PaddingLeft = UDim.new(0, 6)
+    pad.PaddingRight = UDim.new(0, 6)
+    pad.PaddingTop = UDim.new(0, 4)
+    pad.PaddingBottom = UDim.new(0, 4)
+
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size = UDim2.new(1, 0, 0, 14)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Text = authorName
+    nameLbl.TextColor3 = getPlayerColor(authorName)
+    nameLbl.TextSize = 11
+    nameLbl.Font = Enum.Font.GothamBold
+    nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    nameLbl.Parent = bubble
+
+    local msgLbl = Instance.new("TextLabel")
+    msgLbl.Size = UDim2.new(1, 0, 0, 0)
+    msgLbl.AutomaticSize = Enum.AutomaticSize.Y
+    msgLbl.Position = UDim2.new(0, 0, 0, 14)
+    msgLbl.BackgroundTransparency = 1
+    msgLbl.Text = content
+    msgLbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+    msgLbl.TextSize = 12
+    msgLbl.Font = Enum.Font.Gotham
+    msgLbl.TextXAlignment = Enum.TextXAlignment.Left
+    msgLbl.TextWrapped = true
+    msgLbl.Parent = bubble
+
+    activeBubbles[authorName] = billboard
+    task.delay(6, function()
+        if activeBubbles[authorName] == billboard then
+            pcall(function() billboard:Destroy() end)
+            activeBubbles[authorName] = nil
         end
     end)
 end
@@ -392,7 +387,6 @@ local function addMessageToUI(author, content, isSelf)
     msgFrame.LayoutOrder = msgCount
     msgFrame.Parent = messageScroll
 
-    -- avatar icon
     local avatarIcon = Instance.new("ImageLabel")
     avatarIcon.Size = UDim2.new(0, 20, 0, 20)
     avatarIcon.Position = UDim2.new(0, 0, 0, 0)
@@ -401,7 +395,6 @@ local function addMessageToUI(author, content, isSelf)
     avatarIcon.Parent = msgFrame
     Instance.new("UICorner", avatarIcon).CornerRadius = UDim.new(1, 0)
 
-    -- load avatar async
     if author ~= "System" then
         task.spawn(function()
             local url = getAvatarUrl(author)
@@ -435,17 +428,11 @@ local function addMessageToUI(author, content, isSelf)
     contentLbl.TextWrapped = true
     contentLbl.Parent = msgFrame
 
-    -- recolor nametag in-game
     if author ~= "System" then
+        pcall(showChatBubble, author, content)
         task.spawn(applyNametag, author)
     end
 
-    -- show bubble above player's head if they're in the server
-    if author ~= "System" then
-        pcall(showChatBubble, author, content)
-    end
-
-    -- trim old messages
     local children = messageScroll:GetChildren()
     local frames = {}
     for _, c in ipairs(children) do
@@ -455,7 +442,6 @@ local function addMessageToUI(author, content, isSelf)
         frames[1]:Destroy()
     end
 
-    -- auto scroll to bottom
     task.defer(function()
         messageScroll.CanvasPosition = Vector2.new(0, messageScroll.AbsoluteCanvasSize.Y)
     end)
@@ -515,7 +501,6 @@ inputBox.FocusLost:Connect(function(enterPressed)
     if enterPressed then doSend() end
 end)
 
--- poll loop
 local pollConn = task.spawn(function()
     while active and gui and gui.Parent do
         pcall(pollMessages)
@@ -523,7 +508,6 @@ local pollConn = task.spawn(function()
     end
 end)
 
--- no server warning
 if #SERVER_URL == 0 then
     addMessageToUI("System", "No server URL configured. Chat is offline.", false)
     statusDot.BackgroundColor3 = Color3.fromRGB(237, 66, 69)
@@ -531,8 +515,8 @@ end
 
 ---------- SETTINGS ----------
 
-local focusKeybind = nil -- nil = no keybind
-local chatOpacity = 0 -- 0 = fully visible, 1 = invisible
+local focusKeybind = nil
+local chatOpacity = 0
 
 local function applyOpacity(val)
     chatOpacity = val
@@ -544,19 +528,14 @@ local function applyOpacity(val)
     mainStroke.Transparency = 0.5 + t * 0.5
     titleLbl.TextTransparency = t
     statusDot.BackgroundTransparency = t
-
-    -- messages
     for _, child in ipairs(messageScroll:GetChildren()) do
         if child:IsA("Frame") then
             for _, lbl in ipairs(child:GetChildren()) do
-                if lbl:IsA("TextLabel") then
-                    lbl.TextTransparency = t
-                end
+                if lbl:IsA("TextLabel") then lbl.TextTransparency = t end
             end
         end
     end
     inputBox.TextTransparency = t
-    inputBox.PlaceholderColor3 = COLORS.muted -- placeholder stays
     sendBtn.BackgroundTransparency = t
     sendBtn.TextTransparency = t
 end
@@ -586,7 +565,7 @@ local keybindConn = UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 table.insert(connections, keybindConn)
 
--- settings definitions (shared between hub and standalone)
+-- shared settings definitions
 local SETTINGS_DEFS = {
     _title = "Cheater Chat",
     {
@@ -597,9 +576,7 @@ local SETTINGS_DEFS = {
         min = 0,
         max = 80,
         step = 5,
-        onChange = function(val)
-            applyOpacity(val)
-        end,
+        onChange = function(val) applyOpacity(val) end,
     },
     {
         name = "keybind",
@@ -617,8 +594,6 @@ local SETTINGS_DEFS = {
     },
 }
 
-local isHub = _G.SixZeroHubRegister ~= nil
-
 -- register settings with hub if running through it
 task.delay(2, function()
     if _G.SixZeroHubRegisterSettings then
@@ -626,17 +601,29 @@ task.delay(2, function()
     end
 end)
 
--- built-in settings panel when NOT running through hub
+-- standalone settings (only when NOT running through hub)
 if not isHub then
     local settingsOpen = false
+
+    -- cog button in header (left of minimize)
+    local cogBtn = Instance.new("TextButton")
+    cogBtn.Size = UDim2.new(0, 20, 0, 20)
+    cogBtn.Position = UDim2.new(1, -56, 0, 5)
+    cogBtn.BackgroundTransparency = 1
+    cogBtn.Text = "\xE2\x9A\x99"
+    cogBtn.TextColor3 = COLORS.muted
+    cogBtn.TextSize = 14
+    cogBtn.Font = Enum.Font.GothamBold
+    cogBtn.Parent = header
+
     local settingsFrame = Instance.new("Frame")
     settingsFrame.Name = "Settings"
     settingsFrame.Size = UDim2.new(1, -8, 0, 0)
-    settingsFrame.Position = UDim2.new(0, 4, 0, 32)
+    settingsFrame.Position = UDim2.new(0, 4, 0, 0)
     settingsFrame.BackgroundColor3 = COLORS.header
     settingsFrame.BorderSizePixel = 0
     settingsFrame.ClipsDescendants = true
-    settingsFrame.Parent = main
+    settingsFrame.Parent = body
     Instance.new("UICorner", settingsFrame).CornerRadius = UDim.new(0, 6)
 
     local settingsLayout = Instance.new("UIListLayout")
@@ -742,34 +729,19 @@ if not isHub then
         end
     end
 
-    -- cog button in header
-    local cogBtn = Instance.new("TextButton")
-    cogBtn.Size = UDim2.new(0, 22, 0, 22)
-    cogBtn.Position = UDim2.new(1, -38, 0, 4)
-    cogBtn.BackgroundTransparency = 1
-    cogBtn.Text = "\xE2\x9A\x99"
-    cogBtn.TextColor3 = COLORS.muted
-    cogBtn.TextSize = 14
-    cogBtn.Font = Enum.Font.GothamBold
-    cogBtn.Parent = header
-
-    -- move status dot left to make room
-    statusDot.Position = UDim2.new(1, -44, 0.5, -4)
-
     local targetHeight = 6 + #SETTINGS_DEFS * 30 + (#SETTINGS_DEFS - 1) * 4 + 6
 
     cogBtn.MouseButton1Click:Connect(function()
         settingsOpen = not settingsOpen
         if settingsOpen then
-            messageScroll.Position = UDim2.new(0, 4, 0, 32 + targetHeight + 4)
-            messageScroll.Size = UDim2.new(1, -8, 1, -68 - targetHeight - 4)
+            settingsFrame.Size = UDim2.new(1, -8, 0, targetHeight)
+            messageScroll.Position = UDim2.new(0, 4, 0, targetHeight + 6)
+            messageScroll.Size = UDim2.new(1, -8, 1, -38 - targetHeight - 6)
         else
-            messageScroll.Position = UDim2.new(0, 4, 0, 32)
-            messageScroll.Size = UDim2.new(1, -8, 1, -68)
+            settingsFrame.Size = UDim2.new(1, -8, 0, 0)
+            messageScroll.Position = UDim2.new(0, 4, 0, 2)
+            messageScroll.Size = UDim2.new(1, -8, 1, -38)
         end
-        TweenService:Create(settingsFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Size = UDim2.new(1, -8, 0, settingsOpen and targetHeight or 0)
-        }):Play()
     end)
 end
 
@@ -781,21 +753,17 @@ local function cleanup()
         pcall(function() c:Disconnect() end)
     end
     connections = {}
-    -- destroy chat bubbles
-    for name, billboard in pairs(activeBubbles) do
+    for _, billboard in pairs(activeBubbles) do
         pcall(function() billboard:Destroy() end)
     end
     activeBubbles = {}
-    -- remove custom nametags and restore default names
     for name, nametag in pairs(customNametags) do
         pcall(function() nametag:Destroy() end)
         pcall(function()
             for _, plr in ipairs(Players:GetPlayers()) do
                 if plr.Name == name and plr.Character then
                     local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
-                    end
+                    if hum then hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer end
                 end
             end
         end)
