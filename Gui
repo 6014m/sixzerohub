@@ -202,6 +202,311 @@ _G.SixZeroHubRegister = function(displayName, fileKey, cleanupFn, source)
     end
 end
 
+---------- SETTINGS SYSTEM ----------
+
+local scriptSettingsDefs = {} -- [fileKey] = { {name, type, default, ...}, ... }
+local scriptSettingsValues = {} -- [fileKey] = { [settingName] = value }
+_G.SixZeroHubSettings = scriptSettingsValues
+
+local settingsPanel -- forward declare
+local settingsPanelContent -- forward declare
+local settingsPanelOpen = false
+local settingsPanelKey = nil
+
+local function buildSettingsPanel()
+    settingsPanel = Instance.new("Frame")
+    settingsPanel.Name = "SettingsPanel"
+    settingsPanel.Size = UDim2.new(0, 250, 0, 300)
+    settingsPanel.Position = UDim2.new(0.5, -125, 0.5, -150)
+    settingsPanel.BackgroundColor3 = COLORS.sidebar
+    settingsPanel.BorderSizePixel = 0
+    settingsPanel.Visible = false
+    settingsPanel.Parent = screenGui
+    Instance.new("UICorner", settingsPanel).CornerRadius = UDim.new(0, 8)
+
+    local shadow = Instance.new("ImageLabel")
+    shadow.Size = UDim2.new(1, 20, 1, 20)
+    shadow.Position = UDim2.new(0, -10, 0, -10)
+    shadow.BackgroundTransparency = 1
+    shadow.Image = "rbxassetid://5554236805"
+    shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    shadow.ImageTransparency = 0.6
+    shadow.ScaleType = Enum.ScaleType.Slice
+    shadow.SliceCenter = Rect.new(23, 23, 277, 277)
+    shadow.ZIndex = -1
+    shadow.Parent = settingsPanel
+
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 36)
+    header.BackgroundColor3 = COLORS.darker
+    header.BorderSizePixel = 0
+    header.Parent = settingsPanel
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
+
+    local headerFill = Instance.new("Frame")
+    headerFill.Size = UDim2.new(1, 0, 0, 10)
+    headerFill.Position = UDim2.new(0, 0, 1, -10)
+    headerFill.BackgroundColor3 = COLORS.darker
+    headerFill.BorderSizePixel = 0
+    headerFill.Parent = header
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Name = "Title"
+    titleLbl.Size = UDim2.new(1, -40, 1, 0)
+    titleLbl.Position = UDim2.new(0, 10, 0, 0)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = "Settings"
+    titleLbl.TextColor3 = COLORS.text
+    titleLbl.TextSize = 14
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    titleLbl.Parent = header
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 26, 0, 26)
+    closeBtn.Position = UDim2.new(1, -31, 0, 5)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = COLORS.textMuted
+    closeBtn.TextSize = 16
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.Parent = header
+    closeBtn.MouseButton1Click:Connect(function()
+        settingsPanel.Visible = false
+        settingsPanelOpen = false
+        settingsPanelKey = nil
+    end)
+
+    settingsPanelContent = Instance.new("ScrollingFrame")
+    settingsPanelContent.Name = "Content"
+    settingsPanelContent.Size = UDim2.new(1, -12, 1, -44)
+    settingsPanelContent.Position = UDim2.new(0, 6, 0, 40)
+    settingsPanelContent.BackgroundTransparency = 1
+    settingsPanelContent.BorderSizePixel = 0
+    settingsPanelContent.ScrollBarThickness = 3
+    settingsPanelContent.ScrollBarImageColor3 = COLORS.textMuted
+    settingsPanelContent.CanvasSize = UDim2.new(0, 0, 0, 0)
+    settingsPanelContent.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    settingsPanelContent.Parent = settingsPanel
+
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 6)
+    layout.Parent = settingsPanelContent
+
+    -- make draggable
+    local isDragging, dragStart, frameStart
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+            dragStart = input.Position
+            frameStart = settingsPanel.Position
+        end
+    end)
+    header.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            settingsPanel.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+local function showSettingsPanel(fileKey)
+    if not settingsPanel then buildSettingsPanel() end
+
+    local defs = scriptSettingsDefs[fileKey]
+    if not defs then return end
+
+    -- init values table if needed
+    if not scriptSettingsValues[fileKey] then
+        scriptSettingsValues[fileKey] = {}
+    end
+    local values = scriptSettingsValues[fileKey]
+
+    -- set defaults for any missing values
+    for _, def in ipairs(defs) do
+        if values[def.name] == nil then
+            values[def.name] = def.default
+        end
+    end
+
+    -- clear old content
+    for _, child in ipairs(settingsPanelContent:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    -- set title
+    settingsPanel.Header.Title.Text = (defs._title or fileKey) .. " Settings"
+
+    -- build controls
+    for i, def in ipairs(defs) do
+        local row = Instance.new("Frame")
+        row.Name = def.name
+        row.Size = UDim2.new(1, 0, 0, 30)
+        row.BackgroundTransparency = 1
+        row.LayoutOrder = i
+        row.Parent = settingsPanelContent
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(0.55, 0, 1, 0)
+        label.Position = UDim2.new(0, 4, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = def.label or def.name
+        label.TextColor3 = COLORS.text
+        label.TextSize = 13
+        label.Font = Enum.Font.Gotham
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.TextTruncate = Enum.TextTruncate.AtEnd
+        label.Parent = row
+
+        if def.type == "toggle" then
+            local toggleBtn = Instance.new("TextButton")
+            toggleBtn.Size = UDim2.new(0, 40, 0, 22)
+            toggleBtn.Position = UDim2.new(1, -48, 0, 4)
+            toggleBtn.BorderSizePixel = 0
+            toggleBtn.Font = Enum.Font.GothamBold
+            toggleBtn.TextSize = 11
+            toggleBtn.AutoButtonColor = false
+            toggleBtn.Parent = row
+            Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 4)
+
+            local function updateToggle()
+                local val = values[def.name]
+                toggleBtn.Text = val and "ON" or "OFF"
+                toggleBtn.BackgroundColor3 = val and Color3.fromRGB(87, 242, 135) or COLORS.hover
+                toggleBtn.TextColor3 = val and COLORS.darker or COLORS.text
+            end
+            updateToggle()
+
+            toggleBtn.MouseButton1Click:Connect(function()
+                values[def.name] = not values[def.name]
+                updateToggle()
+                if def.onChange then pcall(def.onChange, values[def.name]) end
+            end)
+
+        elseif def.type == "slider" then
+            local min = def.min or 0
+            local max = def.max or 100
+            local step = def.step or 1
+
+            local valLabel = Instance.new("TextLabel")
+            valLabel.Size = UDim2.new(0, 35, 1, 0)
+            valLabel.Position = UDim2.new(1, -40, 0, 0)
+            valLabel.BackgroundTransparency = 1
+            valLabel.TextColor3 = COLORS.textMuted
+            valLabel.TextSize = 12
+            valLabel.Font = Enum.Font.Gotham
+            valLabel.Text = tostring(values[def.name] or min)
+            valLabel.Parent = row
+
+            local sliderBar = Instance.new("Frame")
+            sliderBar.Size = UDim2.new(0.35, 0, 0, 6)
+            sliderBar.Position = UDim2.new(0.55, 4, 0.5, -3)
+            sliderBar.BackgroundColor3 = COLORS.hover
+            sliderBar.BorderSizePixel = 0
+            sliderBar.Parent = row
+            Instance.new("UICorner", sliderBar).CornerRadius = UDim.new(0, 3)
+
+            local knob = Instance.new("Frame")
+            knob.Size = UDim2.new(0, 12, 0, 16)
+            knob.AnchorPoint = Vector2.new(0.5, 0.5)
+            knob.BackgroundColor3 = COLORS.accent
+            knob.BorderSizePixel = 0
+            knob.Parent = sliderBar
+            Instance.new("UICorner", knob).CornerRadius = UDim.new(0, 3)
+
+            local function updateSlider()
+                local val = values[def.name] or min
+                local pct = (val - min) / (max - min)
+                knob.Position = UDim2.new(pct, 0, 0.5, 0)
+                valLabel.Text = tostring(math.floor(val / step + 0.5) * step)
+            end
+            updateSlider()
+
+            local dragging = false
+            sliderBar.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = true
+                end
+            end)
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = false
+                end
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local relX = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+                    local raw = min + (max - min) * relX
+                    local stepped = math.floor(raw / step + 0.5) * step
+                    values[def.name] = math.clamp(stepped, min, max)
+                    updateSlider()
+                    if def.onChange then pcall(def.onChange, values[def.name]) end
+                end
+            end)
+
+        elseif def.type == "dropdown" then
+            local options = def.options or {}
+
+            local dropBtn = Instance.new("TextButton")
+            dropBtn.Size = UDim2.new(0.4, -8, 0, 22)
+            dropBtn.Position = UDim2.new(0.6, 0, 0, 4)
+            dropBtn.BackgroundColor3 = COLORS.hover
+            dropBtn.BorderSizePixel = 0
+            dropBtn.Text = tostring(values[def.name] or options[1] or "")
+            dropBtn.TextColor3 = COLORS.text
+            dropBtn.TextSize = 12
+            dropBtn.Font = Enum.Font.Gotham
+            dropBtn.AutoButtonColor = false
+            dropBtn.TextTruncate = Enum.TextTruncate.AtEnd
+            dropBtn.Parent = row
+            Instance.new("UICorner", dropBtn).CornerRadius = UDim.new(0, 4)
+
+            local optIdx = table.find(options, values[def.name]) or 1
+
+            dropBtn.MouseButton1Click:Connect(function()
+                optIdx = optIdx % #options + 1
+                values[def.name] = options[optIdx]
+                dropBtn.Text = tostring(values[def.name])
+                if def.onChange then pcall(def.onChange, values[def.name]) end
+            end)
+        end
+    end
+
+    settingsPanelKey = fileKey
+    settingsPanelOpen = true
+    settingsPanel.Visible = true
+end
+
+_G.SixZeroHubRegisterSettings = function(fileKey, defs)
+    scriptSettingsDefs[fileKey] = defs
+    -- init defaults
+    if not scriptSettingsValues[fileKey] then
+        scriptSettingsValues[fileKey] = {}
+    end
+    for _, def in ipairs(defs) do
+        if scriptSettingsValues[fileKey][def.name] == nil then
+            scriptSettingsValues[fileKey][def.name] = def.default
+        end
+    end
+    -- show cog button if it exists
+    local btnData = scriptButtons[fileKey]
+    if btnData and btnData.updateCog then
+        btnData.updateCog()
+    end
+    -- refresh panel if it's currently showing this script
+    if settingsPanelOpen and settingsPanelKey == fileKey then
+        showSettingsPanel(fileKey)
+    end
+end
+
 ---------- HELPER: DRAGGABLE ----------
 
 local function makeDraggable(header, frame)
@@ -741,6 +1046,29 @@ local function createScriptButton(info, targetContent, source)
     status.TextXAlignment = Enum.TextXAlignment.Right
     status.Parent = btn
 
+    -- settings cog (before star)
+    local cogBtn = Instance.new("TextButton")
+    cogBtn.Name = "Settings"
+    cogBtn.Size = UDim2.new(0, 24, 0, 24)
+    cogBtn.Position = UDim2.new(1, -56, 0.5, -12)
+    cogBtn.BackgroundTransparency = 1
+    cogBtn.Text = "\xE2\x9A\x99"
+    cogBtn.TextColor3 = COLORS.textMuted
+    cogBtn.TextSize = 16
+    cogBtn.Font = Enum.Font.GothamBold
+    cogBtn.Visible = false
+    cogBtn.Parent = btn
+
+    cogBtn.MouseButton1Click:Connect(function()
+        showSettingsPanel(fileKey)
+    end)
+
+    -- check if settings exist now or watch for registration
+    local function updateCogVisibility()
+        cogBtn.Visible = scriptSettingsDefs[fileKey] ~= nil
+    end
+    updateCogVisibility()
+
     -- favorite star (far right)
     local favBtn = Instance.new("TextButton")
     favBtn.Name = "Favorite"
@@ -811,7 +1139,7 @@ local function createScriptButton(info, targetContent, source)
         end)
     end)
 
-    scriptButtons[fileKey] = { btn = btn, favBtn = favBtn, status = status, info = info }
+    scriptButtons[fileKey] = { btn = btn, favBtn = favBtn, cogBtn = cogBtn, updateCog = updateCogVisibility, status = status, info = info }
 end
 
 for _, scriptInfo in ipairs(UNI_SCRIPTS) do
