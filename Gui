@@ -153,6 +153,49 @@ titleLabel.Rotation = -45
 titleLabel.ZIndex = 3
 titleLabel.Parent = screenGui
 
+-- rejoin button
+local rejoinBtn = Instance.new("TextButton")
+rejoinBtn.Name = "Rejoin"
+rejoinBtn.Size = UDim2.new(0, 32, 0, 26)
+rejoinBtn.Position = UDim2.new(1, -78, 0, 5)
+rejoinBtn.BackgroundColor3 = COLORS.hover
+rejoinBtn.BackgroundTransparency = 0.5
+rejoinBtn.BorderSizePixel = 0
+rejoinBtn.AutoButtonColor = false
+rejoinBtn.Font = Enum.Font.GothamBold
+rejoinBtn.TextSize = 14
+rejoinBtn.Text = "\xF0\x9F\x94\x84"
+rejoinBtn.TextColor3 = COLORS.text
+rejoinBtn.Parent = toggleGui
+Instance.new("UICorner", rejoinBtn).CornerRadius = UDim.new(0, 6)
+
+local rejoinTooltip = Instance.new("TextLabel")
+rejoinTooltip.Size = UDim2.new(0, 50, 0, 22)
+rejoinTooltip.Position = UDim2.new(0.5, -25, 1, 4)
+rejoinTooltip.AnchorPoint = Vector2.new(0, 0)
+rejoinTooltip.BackgroundColor3 = COLORS.darker
+rejoinTooltip.BorderSizePixel = 0
+rejoinTooltip.Text = "Rejoin"
+rejoinTooltip.TextColor3 = COLORS.text
+rejoinTooltip.TextSize = 12
+rejoinTooltip.Font = Enum.Font.GothamBold
+rejoinTooltip.Visible = false
+rejoinTooltip.Parent = rejoinBtn
+Instance.new("UICorner", rejoinTooltip).CornerRadius = UDim.new(0, 4)
+
+rejoinBtn.MouseEnter:Connect(function()
+    rejoinTooltip.Visible = true
+    TweenService:Create(rejoinBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.2}):Play()
+end)
+rejoinBtn.MouseLeave:Connect(function()
+    rejoinTooltip.Visible = false
+    TweenService:Create(rejoinBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
+end)
+rejoinBtn.MouseButton1Click:Connect(function()
+    local TeleportService = game:GetService("TeleportService")
+    TeleportService:Teleport(game.PlaceId, player)
+end)
+
 -- eye toggle button — lives in its own ScreenGui so it's always clickable
 local eyeBtn = Instance.new("TextButton")
 eyeBtn.Name = "EyeToggle"
