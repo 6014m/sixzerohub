@@ -1699,6 +1699,35 @@ task.spawn(function()
     end
 end)
 
+---------- HUB SELF-UPDATE CHECKER ----------
+
+local hubSHA = nil
+
+task.spawn(function()
+    task.wait(6)
+    while screenGui and screenGui.Parent do
+        local newSHA = fetchSHA("https://api.github.com/repos/6014m/sixzerohub/contents/Gui")
+        if newSHA then
+            if hubSHA and hubSHA ~= newSHA then
+                local answer = showNotification(
+                    "Six Zero Hub has updated",
+                    "The hub UI has been updated. Re-execute to apply changes.",
+                    "yesno"
+                )
+                if answer == "yes" then
+                    pcall(function()
+                        loadstring(game:HttpGet(HUB_URL, true))()
+                    end)
+                end
+                hubSHA = newSHA
+            elseif not hubSHA then
+                hubSHA = newSHA
+            end
+        end
+        task.wait(UPDATE_CHECK_INTERVAL)
+    end
+end)
+
 ---------- NEW SCRIPT DETECTION ----------
 
 local knownFiles = {}
