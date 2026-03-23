@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
 local connections = {}
+local active = true
 local JUMP_RANGE = 8
 local JUMP_COOLDOWN = 0.6
 local lastJump = 0
@@ -66,6 +67,7 @@ local function getLaserParts(round)
 end
 
 local conn = RunService.Heartbeat:Connect(function()
+    if not active then return end
     local root = getRootPart()
     local hum = getHumanoid()
     if not root or not hum then return end
@@ -121,6 +123,7 @@ table.insert(connections, conn)
 ---------- SIXZEROHUB REGISTRATION ----------
 
 local function cleanup()
+    active = false
     for _, c in ipairs(connections) do
         pcall(function() c:Disconnect() end)
     end
