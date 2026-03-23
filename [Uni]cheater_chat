@@ -278,6 +278,56 @@ local function showChatBubble(authorName, content)
     end)
 end
 
+-- cache avatar thumbnails
+local avatarCache = {}
+local function getAvatarUrl(playerName)
+    if avatarCache[playerName] then return avatarCache[playerName] end
+    local url = ""
+    pcall(function()
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Name == playerName then
+                local thumbType = Enum.ThumbnailType.HeadShot
+                local thumbSize = Enum.ThumbnailSize.Size48x48
+                local content, isReady = Players:GetUserThumbnailAsync(plr.UserId, thumbType, thumbSize)
+                if isReady then url = content end
+                break
+            end
+        end
+    end)
+    avatarCache[playerName] = url
+    return url
+end
+
+-- recolor nametag above player's head
+local nametagColors = {} -- track which players we've colored
+local function recolorNametag(playerName)
+    if nametagColors[playerName] then return end
+    pcall(function()
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Name == playerName and plr.Character then
+                local head = plr.Character:FindFirstChild("Head")
+                if not head then return end
+                -- find the BillboardGui nametag (Roblox default or game-added)
+                for _, child in ipairs(head:GetChildren()) do
+                    if child:IsA("BillboardGui") and child.Name ~= "SZHChatBubble" then
+                        for _, desc in ipairs(child:GetDescendants()) do
+                            if desc:IsA("TextLabel") and desc.Text == playerName then
+                                desc.TextColor3 = getPlayerColor(playerName)
+                                nametagColors[playerName] = true
+                            end
+                        end
+                    end
+                end
+                -- also check Humanoid displayname overhead
+                local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
+                end
+            end
+        end
+    end)
+end
+
 local function addMessageToUI(author, content, isSelf)
     msgCount = msgCount + 1
     local nameColor = getPlayerColor(author)
@@ -290,8 +340,28 @@ local function addMessageToUI(author, content, isSelf)
     msgFrame.LayoutOrder = msgCount
     msgFrame.Parent = messageScroll
 
+    -- avatar icon
+    local avatarIcon = Instance.new("ImageLabel")
+    avatarIcon.Size = UDim2.new(0, 20, 0, 20)
+    avatarIcon.Position = UDim2.new(0, 0, 0, 0)
+    avatarIcon.BackgroundColor3 = COLORS.input
+    avatarIcon.BorderSizePixel = 0
+    avatarIcon.Parent = msgFrame
+    Instance.new("UICorner", avatarIcon).CornerRadius = UDim.new(1, 0)
+
+    -- load avatar async
+    if author ~= "System" then
+        task.spawn(function()
+            local url = getAvatarUrl(author)
+            if url and #url > 0 and avatarIcon.Parent then
+                avatarIcon.Image = url
+            end
+        end)
+    end
+
     local authorLbl = Instance.new("TextLabel")
-    authorLbl.Size = UDim2.new(1, 0, 0, 16)
+    authorLbl.Size = UDim2.new(1, -26, 0, 16)
+    authorLbl.Position = UDim2.new(0, 24, 0, 2)
     authorLbl.BackgroundTransparency = 1
     authorLbl.Text = author
     authorLbl.TextColor3 = nameColor
@@ -301,9 +371,9 @@ local function addMessageToUI(author, content, isSelf)
     authorLbl.Parent = msgFrame
 
     local contentLbl = Instance.new("TextLabel")
-    contentLbl.Size = UDim2.new(1, 0, 0, 0)
+    contentLbl.Size = UDim2.new(1, -26, 0, 0)
     contentLbl.AutomaticSize = Enum.AutomaticSize.Y
-    contentLbl.Position = UDim2.new(0, 0, 0, 16)
+    contentLbl.Position = UDim2.new(0, 24, 0, 18)
     contentLbl.BackgroundTransparency = 1
     contentLbl.Text = content
     contentLbl.TextColor3 = COLORS.text
@@ -312,6 +382,11 @@ local function addMessageToUI(author, content, isSelf)
     contentLbl.TextXAlignment = Enum.TextXAlignment.Left
     contentLbl.TextWrapped = true
     contentLbl.Parent = msgFrame
+
+    -- recolor nametag in-game
+    if author ~= "System" then
+        task.spawn(recolorNametag, author)
+    end
 
     -- show bubble above player's head if they're in the server
     if author ~= "System" then
