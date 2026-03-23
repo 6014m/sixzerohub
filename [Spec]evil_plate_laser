@@ -7,9 +7,10 @@ local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 local connections = {}
 local active = true
-local JUMP_RANGE = 10
+local JUMP_RANGE = 12
 local JUMP_COOLDOWN = 0.5
 local lastJump = 0
+local debugPrinted = false
 
 local function getRootPart()
     local char = localPlayer.Character
@@ -29,42 +30,45 @@ local function findActiveRound()
     local activeEvents = workspace:FindFirstChild("ActiveEvents")
     if not activeEvents then return nil end
     for _, child in ipairs(activeEvents:GetChildren()) do
-        if child.Name:match("^Round_%d+$") then
+        -- match any child that contains "Round" in the name
+        if child.Name:find("Round") then
             return child
         end
     end
     return nil
 end
 
-local function getLaserParts(round)
-    local lasers = {}
-    -- search for Lasers1-4 containers
-    for i = 1, 4 do
-        local laser = round:FindFirstChild("Lasers" .. i)
-        if not laser then continue end
-        if laser:IsA("BasePart") then
-            table.insert(lasers, laser)
-        else
-            for _, part in ipairs(laser:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    table.insert(lasers, part)
-                end
-            end
-        end
-    end
-    -- catch-all: any BasePart descendant with "laser" in the name
+local function getAllParts(round)
+    local parts = {}
     for _, desc in ipairs(round:GetDescendants()) do
-        if desc:IsA("BasePart") and desc.Name:lower():find("laser") then
-            local already = false
-            for _, l in ipairs(lasers) do
-                if l == desc then already = true; break end
-            end
-            if not already then
-                table.insert(lasers, desc)
+        if desc:IsA("BasePart") then
+            table.insert(parts, desc)
+        end
+    end
+    return parts
+end
+
+-- debug: print round structure once so we can see what's there
+local function debugRound(round)
+    if debugPrinted then return end
+    debugPrinted = true
+    print("[LaserJumper] Found round: " .. round:GetFullName())
+    print("[LaserJumper] Children:")
+    for _, child in ipairs(round:GetChildren()) do
+        print("  " .. child.ClassName .. " - " .. child.Name)
+        if not child:IsA("BasePart") then
+            for _, sub in ipairs(child:GetChildren()) do
+                print("    " .. sub.ClassName .. " - " .. sub.Name)
             end
         end
     end
-    return lasers
+    local parts = getAllParts(round)
+    print("[LaserJumper] Total BaseParts: " .. #parts)
+    for i, p in ipairs(parts) do
+        if i <= 20 then
+            print("  Part: " .. p.Name .. " (" .. p.ClassName .. ") at " .. tostring(p.Position))
+        end
+    end
 end
 
 local conn = RunService.Heartbeat:Connect(function()
@@ -81,16 +85,20 @@ local conn = RunService.Heartbeat:Connect(function()
     local round = findActiveRound()
     if not round then return end
 
+    debugRound(round)
+
     local rootPos = root.Position
-    local lasers = getLaserParts(round)
 
-    for _, laser in ipairs(lasers) do
-        local laserPos = laser.Position
-        local diff = laserPos - rootPos
+    -- scan ALL BasePart descendants of the round, not just named ones
+    for _, part in ipairs(round:GetDescendants()) do
+        if not part:IsA("BasePart") then continue end
+
+        local partPos = part.Position
+        local diff = partPos - rootPos
         local horizDist = Vector3.new(diff.X, 0, diff.Z).Magnitude
-        local yDiff = laserPos.Y - rootPos.Y
+        local yDiff = partPos.Y - rootPos.Y
 
-        -- only care about lasers at roughly body height
+        -- skip parts too high or too low
         if yDiff < -4 or yDiff > 6 then continue end
 
         if horizDist <= JUMP_RANGE then
