@@ -1212,16 +1212,32 @@ _G.SixZeroHubNotify = showNotification
 
 ---------- UPDATE CHECKER ----------
 
-local scriptHashes = {} -- [fileKey] = last known content hash
+local scriptSHAs = {} -- [fileKey] = last known git SHA
 local UPDATE_CHECK_INTERVAL = 30
 
-local function hashString(str)
-    -- simple djb2 hash
-    local hash = 5381
-    for i = 1, math.min(#str, 500) do
-        hash = (hash * 33 + string.byte(str, i)) % 2^32
+-- map fileKey to its GitHub API path for SHA checking
+local function getGitApiUrl(info)
+    if info.file then
+        -- files in sixzerohub repo
+        local encoded = info.file:gsub("%[", "%%5B"):gsub("%]", "%%5D")
+        return "https://api.github.com/repos/6014m/sixzerohub/contents/" .. encoded
+    elseif info.url then
+        -- external repos: parse owner/repo/branch/path from raw URL
+        local owner, repo, branch, path = info.url:match("raw%.githubusercontent%.com/([^/]+)/([^/]+)/([^/]+)/(.+)")
+        if owner and repo and path then
+            return "https://api.github.com/repos/" .. owner .. "/" .. repo .. "/contents/" .. path .. "?ref=" .. branch
+        end
     end
-    return hash
+    return nil
+end
+
+local function fetchSHA(apiUrl)
+    local ok, response = pcall(function()
+        return game:HttpGet(apiUrl, true)
+    end)
+    if not ok or not response then return nil end
+    local sha = response:match('"sha"%s*:%s*"([a-f0-9]+)"')
+    return sha
 end
 
 local function getAllScriptLists()
@@ -1233,7 +1249,7 @@ local function getAllScriptLists()
 end
 
 task.spawn(function()
-    task.wait(10) -- initial delay before first check
+    task.wait(15) -- initial delay before first check
     while screenGui and screenGui.Parent do
         local allScripts = getAllScriptLists()
         for _, entry in ipairs(allScripts) do
@@ -1242,64 +1258,70 @@ task.spawn(function()
             local fileKey = info.file or info.url
             if not loadedScripts[fileKey] then continue end
 
-            local scriptUrl = info.url or (REPO_BASE .. info.file)
-            local ok, newContent = pcall(function()
-                return game:HttpGet(scriptUrl .. "?t=" .. tostring(tick()), true)
-            end)
-            if not ok or not newContent then continue end
+            local apiUrl = getGitApiUrl(info)
+            if not apiUrl then continue end
 
-            local newHash = hashString(newContent)
-            if scriptHashes[fileKey] and scriptHashes[fileKey] ~= newHash then
-                -- script has changed
-                local answer = showNotification(
-                    info.name .. " has updated",
-                    "Would you like to swap to the most recent version?",
-                    "yesno"
-                )
-                if answer == "yes" then
-                    -- deactivate old
-                    local data = activeScripts[fileKey]
-                    if data and data.cleanup then
-                        pcall(data.cleanup)
-                    end
-                    activeScripts[fileKey] = nil
-                    loadedScripts[fileKey] = nil
+            local newSHA = fetchSHA(apiUrl)
+            if not newSHA then continue end
 
-                    -- re-execute
-                    pcall(function()
-                        loadstring(newContent)()
-                    end)
-                    loadedScripts[fileKey] = true
+            if scriptSHAs[fileKey] and scriptSHAs[fileKey] ~= newSHA then
+                -- script has changed, fetch the new content
+                local scriptUrl = info.url or (REPO_BASE .. info.file)
+                local contentOk, newContent = pcall(function()
+                    return game:HttpGet(scriptUrl .. "?v=" .. newSHA, true)
+                end)
 
-                    -- reload compat if needed
-                    if info.compat then
-                        task.delay(1, function()
-                            pcall(function()
-                                loadstring(game:HttpGet(info.compat))()
-                            end)
-                        end)
-                    end
-
-                    -- auto-register if script doesn't self-register
-                    task.delay(2, function()
-                        if not activeScripts[fileKey] then
-                            _G.SixZeroHubRegister(info.name, fileKey, nil, source)
+                if contentOk and newContent then
+                    local answer = showNotification(
+                        info.name .. " has updated",
+                        "Would you like to swap to the most recent version?",
+                        "yesno"
+                    )
+                    if answer == "yes" then
+                        -- deactivate old
+                        local data = activeScripts[fileKey]
+                        if data and data.cleanup then
+                            pcall(data.cleanup)
                         end
-                    end)
+                        activeScripts[fileKey] = nil
+                        loadedScripts[fileKey] = nil
 
-                    -- update status in script buttons
-                    local btnData = scriptButtons[fileKey]
-                    if btnData then
-                        btnData.status.Text = "running"
-                        btnData.status.TextColor3 = Color3.fromRGB(87, 242, 135)
+                        -- re-execute
+                        pcall(function()
+                            loadstring(newContent)()
+                        end)
+                        loadedScripts[fileKey] = true
+
+                        -- reload compat if needed
+                        if info.compat then
+                            task.delay(1, function()
+                                pcall(function()
+                                    loadstring(game:HttpGet(info.compat))()
+                                end)
+                            end)
+                        end
+
+                        -- auto-register if script doesn't self-register
+                        task.delay(2, function()
+                            if not activeScripts[fileKey] then
+                                _G.SixZeroHubRegister(info.name, fileKey, nil, source)
+                            end
+                        end)
+
+                        -- update status in script buttons
+                        local btnData = scriptButtons[fileKey]
+                        if btnData then
+                            btnData.status.Text = "running"
+                            btnData.status.TextColor3 = Color3.fromRGB(87, 242, 135)
+                        end
                     end
                 end
-                scriptHashes[fileKey] = newHash
-            elseif not scriptHashes[fileKey] then
-                scriptHashes[fileKey] = newHash
+                scriptSHAs[fileKey] = newSHA
+            elseif not scriptSHAs[fileKey] then
+                scriptSHAs[fileKey] = newSHA
             end
 
-            task.wait(2) -- stagger checks between scripts
+            task.wait(3) -- stagger checks between scripts
         end
         task.wait(UPDATE_CHECK_INTERVAL)
     end
