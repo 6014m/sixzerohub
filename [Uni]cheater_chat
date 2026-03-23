@@ -115,6 +115,45 @@ statusDot.BorderSizePixel = 0
 statusDot.Parent = header
 Instance.new("UICorner", statusDot).CornerRadius = UDim.new(1, 0)
 
+-- minimize button
+local minimized = false
+local savedSize = main.Size
+
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 20, 0, 20)
+minimizeBtn.Position = UDim2.new(1, -40, 0, 5)
+minimizeBtn.BackgroundTransparency = 1
+minimizeBtn.Text = "\xE2\x80\x94" -- em dash (—)
+minimizeBtn.TextColor3 = COLORS.muted
+minimizeBtn.TextSize = 14
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.Parent = header
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        savedSize = main.Size
+        TweenService:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, main.Size.X.Offset, 0, 30)
+        }):Play()
+        minimizeBtn.Text = "+"
+        messageScroll.Visible = false
+        inputFrame.Visible = false
+    else
+        TweenService:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = savedSize
+        }):Play()
+        minimizeBtn.Text = "\xE2\x80\x94"
+        task.delay(0.2, function()
+            messageScroll.Visible = true
+            inputFrame.Visible = true
+        end)
+    end
+end)
+
+-- shift status dot left
+statusDot.Position = UDim2.new(1, -46, 0.5, -4)
+
 -- draggable
 do
     local dragging, dragStart, frameStart
