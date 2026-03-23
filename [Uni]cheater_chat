@@ -303,6 +303,8 @@ local customNametags = {} -- [playerName] = BillboardGui
 
 local function applyNametag(playerName)
     if customNametags[playerName] then return end
+    -- don't show nametag above local player's own head
+    if playerName == localPlayer.Name then return end
     pcall(function()
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr.Name == playerName and plr.Character then
@@ -311,18 +313,16 @@ local function applyNametag(playerName)
 
                 local hum = plr.Character:FindFirstChildOfClass("Humanoid")
                 if hum then
-                    -- hide default overhead name
                     hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
                 end
 
-                -- create custom colored nametag
                 local bb = Instance.new("BillboardGui")
                 bb.Name = "SZHNametag"
                 bb.Adornee = head
                 bb.Size = UDim2.new(0, 150, 0, 24)
                 bb.StudsOffset = Vector3.new(0, 1.8, 0)
                 bb.AlwaysOnTop = false
-                bb.MaxDistance = 50
+                bb.MaxDistance = math.huge
                 bb.Parent = head
 
                 local nameLabel = Instance.new("TextLabel")
@@ -330,20 +330,19 @@ local function applyNametag(playerName)
                 nameLabel.BackgroundTransparency = 1
                 nameLabel.Text = hum and hum.DisplayName ~= "" and hum.DisplayName or playerName
                 nameLabel.TextColor3 = getPlayerColor(playerName)
-                nameLabel.TextSize = 16
+                nameLabel.TextSize = 14
                 nameLabel.Font = Enum.Font.GothamBold
                 nameLabel.TextStrokeTransparency = 0.5
                 nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                nameLabel.TextScaled = false
                 nameLabel.Parent = bb
 
                 customNametags[playerName] = bb
 
-                -- clean up on character removal
                 plr.CharacterRemoving:Connect(function()
                     customNametags[playerName] = nil
                 end)
 
-                -- re-apply on respawn
                 plr.CharacterAdded:Connect(function(char)
                     customNametags[playerName] = nil
                     task.delay(1, function()
