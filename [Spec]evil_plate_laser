@@ -1,5 +1,5 @@
 -- [Spec] Evil Plate Game - Laser Jumper
--- Auto-jumps over lasers with tight timing
+-- Detects moving hazards (lasers) and jumps over them
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,8 +7,9 @@ local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 local connections = {}
 local active = true
-local JUMP_RANGE = 12
+local JUMP_RANGE = 14
 local JUMP_COOLDOWN = 0.6
+local MIN_SPEED = 2
 local lastJump = 0
 
 local function getRootPart()
@@ -50,12 +51,16 @@ local conn = RunService.Heartbeat:Connect(function()
     for _, part in ipairs(round:GetDescendants()) do
         if not part:IsA("BasePart") then continue end
 
-        local diff = part.Position - rootPos
-        local horizDist = Vector3.new(diff.X, 0, diff.Z).Magnitude
-        local yDiff = diff.Y
+        -- only react to parts that are moving (lasers sweep, plates don't)
+        local vel = part.AssemblyLinearVelocity
+        local horizSpeed = Vector2.new(vel.X, vel.Z).Magnitude
+        if horizSpeed < MIN_SPEED then continue end
 
+        local diff = part.Position - rootPos
+        local yDiff = diff.Y
         if yDiff < -4 or yDiff > 6 then continue end
 
+        local horizDist = Vector2.new(diff.X, diff.Z).Magnitude
         if horizDist <= JUMP_RANGE then
             hum.Jump = true
             pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
