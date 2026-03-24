@@ -175,12 +175,12 @@ local flipConn = RunService.Heartbeat:Connect(function()
     local lookVec = Vector3.new(1, 0, 0) -- arbitrary forward
     if math.abs(upVec.Y) > 0.99 then
         -- flat ground, just flip on Z
-        root.CFrame = CFrame.new(root.Position.X, groundY + 1, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
+        root.CFrame = CFrame.new(root.Position.X, groundY - 2, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
     else
         -- slanted ground, align to slope
         local rightVec = lookVec:Cross(upVec).Unit
         local fwd = upVec:Cross(rightVec).Unit
-        root.CFrame = CFrame.fromMatrix(Vector3.new(root.Position.X, groundY + 1, root.Position.Z), rightVec, upVec, -fwd)
+        root.CFrame = CFrame.fromMatrix(Vector3.new(root.Position.X, groundY - 2, root.Position.Z), rightVec, upVec, -fwd)
     end
 end)
 table.insert(connections, flipConn)
@@ -354,7 +354,7 @@ local function tweenToTarget(targetRoot)
     local groundY = getGroundY(targetPos)
 
     -- flipped upside down: place HRP at ground+1 so head hangs below ground
-    tweenCFrame(root, CFrame.new(targetPos.X + 3, groundY + 1, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
+    tweenCFrame(root, CFrame.new(targetPos.X + 3, groundY - 2, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
 end
 
 ---------- ARREST ----------
@@ -414,11 +414,13 @@ end
 ---------- RESET ----------
 
 local function resetCharacter()
-    hidden = false
+    -- kill to reset arrest cooldown (noclip stays on until new character)
     pcall(function()
         local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.Health = 0 end
     end)
+    hidden = false
+    noclipEnabled = false
     local ok, newChar = pcall(function()
         return player.CharacterAdded:Wait()
     end)
@@ -502,10 +504,13 @@ task.spawn(function()
             end
 
             if arrested then
+                -- stay noclipped so ground doesn't push us up while tweening away
                 tweenToHiddenSpot()
-                unhideCharacter()
+                task.wait(0.2)
+                -- NOW reset
                 resetCamera()
                 resetCharacter()
+                -- re-hide for next target
                 hideCharacter()
                 detachCamera()
                 equipHandcuffs()
