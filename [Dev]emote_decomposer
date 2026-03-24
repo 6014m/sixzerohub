@@ -1,0 +1,708 @@
+-- [Dev] Emote Decomposer
+-- Watches for emote animations and logs how to trigger them
+-- Detects animation IDs, remote calls, and emote inventory
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local connections = {}
+local active = true
+
+local COLORS = {
+    background = Color3.fromRGB(47, 49, 54),
+    sidebar = Color3.fromRGB(54, 57, 63),
+    darker = Color3.fromRGB(32, 34, 37),
+    accent = Color3.fromRGB(88, 101, 242),
+    text = Color3.fromRGB(220, 221, 222),
+    textMuted = Color3.fromRGB(142, 146, 151),
+    hover = Color3.fromRGB(64, 68, 75),
+    green = Color3.fromRGB(87, 242, 135),
+    orange = Color3.fromRGB(255, 165, 0),
+    red = Color3.fromRGB(237, 66, 69),
+}
+
+---------- REMOTE TRACKING ----------
+
+local recentRemotes = {} -- { {time, remote, args}, ... }
+local REMOTE_WINDOW = 0.5 -- seconds to correlate remote with animation
+
+local oldNamecall
+local namecallHooked = false
+
+local function hookRemotes()
+    if namecallHooked then return end
+    if not hookmetamethod then return end
+    namecallHooked = true
+
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if active and (method == "FireServer" or method == "InvokeServer") then
+            if self:IsA("RemoteEvent") or self:IsA("RemoteFunction") then
+                local args = {...}
+                table.insert(recentRemotes, {
+                    time = os.clock(),
+                    remote = self:GetFullName(),
+                    method = method,
+                    args = args,
+                })
+                -- keep only recent
+                if #recentRemotes > 50 then
+                    table.remove(recentRemotes, 1)
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+end
+
+local function getRecentRemotes(since)
+    local results = {}
+    for _, entry in ipairs(recentRemotes) do
+        if entry.time >= since then
+            table.insert(results, entry)
+        end
+    end
+    return results
+end
+
+local function argsToString(args)
+    local parts = {}
+    for _, v in ipairs(args) do
+        local t = typeof(v)
+        if t == "string" then
+            table.insert(parts, '"' .. v .. '"')
+        elseif t == "number" or t == "boolean" then
+            table.insert(parts, tostring(v))
+        elseif t == "Instance" then
+            table.insert(parts, v:GetFullName())
+        elseif t == "EnumItem" then
+            table.insert(parts, tostring(v))
+        elseif t == "table" then
+            local inner = {}
+            for k, val in pairs(v) do
+                local kStr = type(k) == "string" and ('["' .. k .. '"]') or ("[" .. tostring(k) .. "]")
+                local vStr = typeof(val) == "string" and ('"' .. val .. '"') or tostring(val)
+                table.insert(inner, kStr .. " = " .. vStr)
+            end
+            table.insert(parts, "{" .. table.concat(inner, ", ") .. "}")
+        else
+            table.insert(parts, tostring(v))
+        end
+    end
+    return table.concat(parts, ", ")
+end
+
+---------- EMOTE DETECTION ----------
+
+local detectedEmotes = {} -- { {animId, name, directCode, remoteCode, time}, ... }
+local seenAnimIds = {} -- avoid duplicates
+
+local function onAnimationPlayed(track)
+    if not active then return end
+    local anim = track.Animation
+    if not anim then return end
+
+    local animId = tostring(anim.AnimationId)
+    local idNum = animId:match("%d+")
+    if not idNum then return end
+
+    -- skip common movement animations (walk, run, idle, jump, fall, climb, swim)
+    if track.Priority == Enum.AnimationPriority.Core or track.Priority == Enum.AnimationPriority.Movement then
+        return
+    end
+
+    -- skip if we already logged this one
+    if seenAnimIds[idNum] then return end
+    seenAnimIds[idNum] = true
+
+    local animName = anim.Name ~= "Animation" and anim.Name or ("Emote_" .. idNum)
+    local captureTime = os.clock()
+
+    -- direct play method (no FireServer needed)
+    local directCode = string.format(
+        [[local anim = Instance.new("Animation")
+anim.AnimationId = "rbxassetid://%s"
+local track = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator"):LoadAnimation(anim)
+track:Play()]],
+        idNum
+    )
+
+    -- check for correlated remotes
+    local remoteCode = nil
+    local remotes = getRecentRemotes(captureTime - REMOTE_WINDOW)
+    if #remotes > 0 then
+        local r = remotes[#remotes] -- most recent
+        local argStr = argsToString(r.args)
+        if r.method == "FireServer" then
+            remoteCode = string.format(
+                'game:GetService("ReplicatedStorage"):FindFirstChild("%s", true):%s(%s)',
+                r.remote:match("[^%.]+$") or r.remote,
+                r.method,
+                argStr
+            )
+        else
+            remoteCode = string.format(
+                'game:GetService("ReplicatedStorage"):FindFirstChild("%s", true):%s(%s)',
+                r.remote:match("[^%.]+$") or r.remote,
+                r.method,
+                argStr
+            )
+        end
+        -- also show the full path version
+        remoteCode = remoteCode .. "\n-- Full path: " .. r.remote .. ":" .. r.method .. "(" .. argStr .. ")"
+    end
+
+    table.insert(detectedEmotes, 1, {
+        animId = idNum,
+        name = animName,
+        directCode = directCode,
+        remoteCode = remoteCode,
+        remotePath = remotes[#remotes] and remotes[#remotes].remote or nil,
+        time = captureTime,
+    })
+end
+
+local function hookCharacter(char)
+    if not active then return end
+    local hum = char:WaitForChild("Humanoid", 10)
+    if not hum or not active then return end
+
+    local conn = hum.AnimationPlayed:Connect(onAnimationPlayed)
+    table.insert(connections, conn)
+end
+
+---------- EMOTE INVENTORY SCANNER ----------
+
+local function scanEmoteInventory()
+    local results = {}
+
+    -- 1) HumanoidDescription emotes
+    pcall(function()
+        local char = player.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                local desc = hum:GetAppliedDescription()
+                if desc then
+                    local emotes = desc:GetEmotes()
+                    for name, ids in pairs(emotes) do
+                        for _, id in ipairs(ids) do
+                            table.insert(results, {
+                                source = "HumanoidDescription",
+                                name = name,
+                                animId = tostring(id),
+                                code = string.format(
+                                    'game.Players.LocalPlayer.Character.Humanoid:PlayEmote("%s")',
+                                    name
+                                ),
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 2) Animate script emotes
+    pcall(function()
+        local char = player.Character
+        if char then
+            local animate = char:FindFirstChild("Animate")
+            if animate then
+                for _, child in ipairs(animate:GetChildren()) do
+                    if child.Name:lower():find("emote") or child:IsA("StringValue") then
+                        for _, anim in ipairs(child:GetChildren()) do
+                            if anim:IsA("Animation") then
+                                local id = tostring(anim.AnimationId):match("%d+")
+                                if id then
+                                    table.insert(results, {
+                                        source = "Animate Script",
+                                        name = child.Name .. "/" .. anim.Name,
+                                        animId = id,
+                                        code = string.format(
+                                            'local anim = Instance.new("Animation")\nanim.AnimationId = "rbxassetid://%s"\ngame.Players.LocalPlayer.Character.Humanoid.Animator:LoadAnimation(anim):Play()',
+                                            id
+                                        ),
+                                    })
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    return results
+end
+
+---------- GUI ----------
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "EmoteDecomposer"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.DisplayOrder = 998
+screenGui.IgnoreGuiInset = true
+pcall(function() screenGui.Parent = game:GetService("CoreGui") end)
+if not screenGui.Parent then screenGui.Parent = playerGui end
+
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, 440, 0, 380)
+main.Position = UDim2.new(0.5, -220, 0.5, -190)
+main.BackgroundColor3 = COLORS.sidebar
+main.BorderSizePixel = 0
+main.Parent = screenGui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+
+local shadow = Instance.new("ImageLabel")
+shadow.Size = UDim2.new(1, 20, 1, 20)
+shadow.Position = UDim2.new(0, -10, 0, -10)
+shadow.BackgroundTransparency = 1
+shadow.Image = "rbxassetid://5554236805"
+shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+shadow.ImageTransparency = 0.6
+shadow.ScaleType = Enum.ScaleType.Slice
+shadow.SliceCenter = Rect.new(23, 23, 277, 277)
+shadow.ZIndex = -1
+shadow.Parent = main
+
+-- header
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 36)
+header.BackgroundColor3 = COLORS.darker
+header.BorderSizePixel = 0
+header.Parent = main
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
+
+local headerFill = Instance.new("Frame")
+headerFill.Size = UDim2.new(1, 0, 0, 10)
+headerFill.Position = UDim2.new(0, 0, 1, -10)
+headerFill.BackgroundColor3 = COLORS.darker
+headerFill.BorderSizePixel = 0
+headerFill.Parent = header
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(1, -40, 1, 0)
+titleLbl.Position = UDim2.new(0, 10, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "Emote Decomposer"
+titleLbl.TextColor3 = COLORS.text
+titleLbl.TextSize = 14
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Parent = header
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 26, 0, 26)
+closeBtn.Position = UDim2.new(1, -31, 0, 5)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "X"
+closeBtn.TextColor3 = COLORS.textMuted
+closeBtn.TextSize = 16
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = header
+
+closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100) end)
+closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = COLORS.textMuted end)
+
+-- draggable
+do
+    local isDragging, dragStart, frameStart
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+            dragStart = input.Position
+            frameStart = main.Position
+        end
+    end)
+    header.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- tabs
+local tabBar = Instance.new("Frame")
+tabBar.Size = UDim2.new(1, 0, 0, 28)
+tabBar.Position = UDim2.new(0, 0, 0, 36)
+tabBar.BackgroundColor3 = COLORS.background
+tabBar.BorderSizePixel = 0
+tabBar.Parent = main
+
+local detectedTabBtn = Instance.new("TextButton")
+detectedTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+detectedTabBtn.BackgroundColor3 = COLORS.sidebar
+detectedTabBtn.BorderSizePixel = 0
+detectedTabBtn.Text = "Detected"
+detectedTabBtn.TextColor3 = COLORS.text
+detectedTabBtn.TextSize = 12
+detectedTabBtn.Font = Enum.Font.GothamBold
+detectedTabBtn.AutoButtonColor = false
+detectedTabBtn.Parent = tabBar
+
+local inventoryTabBtn = Instance.new("TextButton")
+inventoryTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+inventoryTabBtn.Position = UDim2.new(0.5, 0, 0, 0)
+inventoryTabBtn.BackgroundColor3 = COLORS.background
+inventoryTabBtn.BorderSizePixel = 0
+inventoryTabBtn.Text = "Emote Inventory"
+inventoryTabBtn.TextColor3 = COLORS.textMuted
+inventoryTabBtn.TextSize = 12
+inventoryTabBtn.Font = Enum.Font.GothamBold
+inventoryTabBtn.AutoButtonColor = false
+inventoryTabBtn.Parent = tabBar
+
+-- status bar
+local statusBar = Instance.new("TextLabel")
+statusBar.Size = UDim2.new(1, 0, 0, 20)
+statusBar.Position = UDim2.new(0, 0, 1, -20)
+statusBar.BackgroundColor3 = COLORS.darker
+statusBar.BorderSizePixel = 0
+statusBar.Text = "  Watching for emotes... click an emote in-game"
+statusBar.TextColor3 = COLORS.textMuted
+statusBar.TextSize = 10
+statusBar.Font = Enum.Font.Gotham
+statusBar.TextXAlignment = Enum.TextXAlignment.Left
+statusBar.Parent = main
+
+-- content
+local detectedList = Instance.new("ScrollingFrame")
+detectedList.Name = "DetectedList"
+detectedList.Size = UDim2.new(1, -10, 1, -90)
+detectedList.Position = UDim2.new(0, 5, 0, 68)
+detectedList.BackgroundTransparency = 1
+detectedList.BorderSizePixel = 0
+detectedList.ScrollBarThickness = 3
+detectedList.ScrollBarImageColor3 = COLORS.textMuted
+detectedList.CanvasSize = UDim2.new(0, 0, 0, 0)
+detectedList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+detectedList.Parent = main
+
+Instance.new("UIListLayout", detectedList).Padding = UDim.new(0, 4)
+
+local inventoryList = Instance.new("ScrollingFrame")
+inventoryList.Name = "InventoryList"
+inventoryList.Size = UDim2.new(1, -10, 1, -90)
+inventoryList.Position = UDim2.new(0, 5, 0, 68)
+inventoryList.BackgroundTransparency = 1
+inventoryList.BorderSizePixel = 0
+inventoryList.ScrollBarThickness = 3
+inventoryList.ScrollBarImageColor3 = COLORS.textMuted
+inventoryList.CanvasSize = UDim2.new(0, 0, 0, 0)
+inventoryList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+inventoryList.Visible = false
+inventoryList.Parent = main
+
+Instance.new("UIListLayout", inventoryList).Padding = UDim.new(0, 4)
+
+local currentTab = "detected"
+
+local function switchTab(tab)
+    currentTab = tab
+    detectedList.Visible = (tab == "detected")
+    inventoryList.Visible = (tab == "inventory")
+    detectedTabBtn.BackgroundColor3 = tab == "detected" and COLORS.sidebar or COLORS.background
+    detectedTabBtn.TextColor3 = tab == "detected" and COLORS.text or COLORS.textMuted
+    inventoryTabBtn.BackgroundColor3 = tab == "inventory" and COLORS.sidebar or COLORS.background
+    inventoryTabBtn.TextColor3 = tab == "inventory" and COLORS.text or COLORS.textMuted
+end
+
+detectedTabBtn.MouseButton1Click:Connect(function() switchTab("detected") end)
+inventoryTabBtn.MouseButton1Click:Connect(function() switchTab("inventory") end)
+
+---------- COPY TO CLIPBOARD ----------
+
+local function copyToClipboard(text)
+    pcall(function()
+        if setclipboard then
+            setclipboard(text)
+        elseif toclipboard then
+            toclipboard(text)
+        end
+    end)
+end
+
+---------- LIST RENDERING ----------
+
+local function createCodeRow(parent, label, code, color, layoutOrder)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -4, 0, 0)
+    row.AutomaticSize = Enum.AutomaticSize.Y
+    row.BackgroundColor3 = COLORS.hover
+    row.BorderSizePixel = 0
+    row.LayoutOrder = layoutOrder or 0
+    row.Parent = parent
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+    Instance.new("UIPadding", row).PaddingBottom = UDim.new(0, 6)
+
+    local headerRow = Instance.new("Frame")
+    headerRow.Size = UDim2.new(1, 0, 0, 28)
+    headerRow.BackgroundTransparency = 1
+    headerRow.Parent = row
+
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size = UDim2.new(1, -70, 1, 0)
+    nameLbl.Position = UDim2.new(0, 8, 0, 0)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Text = label
+    nameLbl.TextColor3 = color or COLORS.text
+    nameLbl.TextSize = 12
+    nameLbl.Font = Enum.Font.GothamBold
+    nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    nameLbl.Parent = headerRow
+
+    local copyBtn = Instance.new("TextButton")
+    copyBtn.Size = UDim2.new(0, 55, 0, 20)
+    copyBtn.Position = UDim2.new(1, -60, 0, 4)
+    copyBtn.BackgroundColor3 = COLORS.accent
+    copyBtn.BorderSizePixel = 0
+    copyBtn.Text = "Copy"
+    copyBtn.TextColor3 = COLORS.text
+    copyBtn.TextSize = 10
+    copyBtn.Font = Enum.Font.GothamBold
+    copyBtn.AutoButtonColor = false
+    copyBtn.Parent = headerRow
+    Instance.new("UICorner", copyBtn).CornerRadius = UDim.new(0, 4)
+
+    copyBtn.MouseEnter:Connect(function()
+        TweenService:Create(copyBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(71, 82, 196)}):Play()
+    end)
+    copyBtn.MouseLeave:Connect(function()
+        TweenService:Create(copyBtn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.accent}):Play()
+    end)
+
+    copyBtn.MouseButton1Click:Connect(function()
+        copyToClipboard(code)
+        copyBtn.Text = "Copied!"
+        task.delay(1.5, function()
+            if copyBtn.Parent then copyBtn.Text = "Copy" end
+        end)
+    end)
+
+    local codeBox = Instance.new("TextLabel")
+    codeBox.Size = UDim2.new(1, -16, 0, 0)
+    codeBox.AutomaticSize = Enum.AutomaticSize.Y
+    codeBox.Position = UDim2.new(0, 8, 0, 28)
+    codeBox.BackgroundColor3 = COLORS.darker
+    codeBox.BorderSizePixel = 0
+    codeBox.Text = "  " .. code:gsub("\n", "\n  ") .. "  "
+    codeBox.TextColor3 = COLORS.green
+    codeBox.TextSize = 10
+    codeBox.Font = Enum.Font.Code
+    codeBox.TextXAlignment = Enum.TextXAlignment.Left
+    codeBox.TextYAlignment = Enum.TextYAlignment.Top
+    codeBox.TextWrapped = true
+    codeBox.Parent = row
+    Instance.new("UICorner", codeBox).CornerRadius = UDim.new(0, 4)
+    local codePad = Instance.new("UIPadding", codeBox)
+    codePad.PaddingTop = UDim.new(0, 4)
+    codePad.PaddingBottom = UDim.new(0, 4)
+
+    return row
+end
+
+local lastDetectedCount = 0
+
+local function refreshDetectedList()
+    if #detectedEmotes == lastDetectedCount then return end
+    lastDetectedCount = #detectedEmotes
+
+    for _, child in ipairs(detectedList:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    if #detectedEmotes == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1, 0, 0, 40)
+        empty.BackgroundTransparency = 1
+        empty.Text = "Click an emote in-game to detect it"
+        empty.TextColor3 = COLORS.textMuted
+        empty.TextSize = 13
+        empty.Font = Enum.Font.Gotham
+        empty.Parent = detectedList
+        return
+    end
+
+    statusBar.Text = "  " .. #detectedEmotes .. " emote(s) detected"
+
+    for i, emote in ipairs(detectedEmotes) do
+        -- direct method (preferred)
+        createCodeRow(
+            detectedList,
+            emote.name .. "  (ID: " .. emote.animId .. ")  [Direct Play]",
+            emote.directCode,
+            COLORS.green,
+            i * 2 - 1
+        )
+
+        -- remote method if detected
+        if emote.remoteCode then
+            createCodeRow(
+                detectedList,
+                emote.name .. "  [Remote Method]",
+                emote.remoteCode,
+                COLORS.orange,
+                i * 2
+            )
+        end
+    end
+end
+
+local function refreshInventoryList()
+    for _, child in ipairs(inventoryList:GetChildren()) do
+        if child:IsA("Frame") or (child:IsA("TextLabel") and child.Name == "Empty") then child:Destroy() end
+    end
+
+    local inventory = scanEmoteInventory()
+
+    if #inventory == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Name = "Empty"
+        empty.Size = UDim2.new(1, 0, 0, 60)
+        empty.BackgroundTransparency = 1
+        empty.Text = "No emotes found in HumanoidDescription or Animate script.\nThis game may use custom emote systems."
+        empty.TextColor3 = COLORS.textMuted
+        empty.TextSize = 12
+        empty.Font = Enum.Font.Gotham
+        empty.TextWrapped = true
+        empty.Parent = inventoryList
+
+        -- show tip for finding custom emotes
+        createCodeRow(
+            inventoryList,
+            "Tip: Find custom emote remotes",
+            '-- Search ReplicatedStorage for emote-related remotes:\nfor _, v in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do\n    if (v:IsA("RemoteEvent") or v:IsA("RemoteFunction")) and v.Name:lower():find("emote") then\n        print(v:GetFullName())\n    end\nend',
+            COLORS.accent,
+            1
+        )
+
+        createCodeRow(
+            inventoryList,
+            "Tip: List all current AnimationTracks",
+            '-- See what animations are loaded on your character:\nlocal animator = game.Players.LocalPlayer.Character.Humanoid:FindFirstChildOfClass("Animator")\nfor _, track in ipairs(animator:GetPlayingAnimationTracks()) do\n    print(track.Name, track.Animation.AnimationId, track.IsPlaying and "PLAYING" or "stopped")\nend',
+            COLORS.accent,
+            2
+        )
+
+        return
+    end
+
+    -- group by source
+    local bySource = {}
+    for _, item in ipairs(inventory) do
+        if not bySource[item.source] then bySource[item.source] = {} end
+        table.insert(bySource[item.source], item)
+    end
+
+    local order = 0
+    for source, items in pairs(bySource) do
+        -- divider
+        order = order + 1
+        local divider = Instance.new("Frame")
+        divider.Size = UDim2.new(1, -4, 0, 22)
+        divider.BackgroundTransparency = 1
+        divider.LayoutOrder = order
+        divider.Parent = inventoryList
+
+        local line = Instance.new("Frame")
+        line.Size = UDim2.new(1, 0, 0, 1)
+        line.Position = UDim2.new(0, 0, 0.5, 0)
+        line.BackgroundColor3 = COLORS.accent
+        line.BackgroundTransparency = 0.5
+        line.BorderSizePixel = 0
+        line.Parent = divider
+
+        local srcLabel = Instance.new("TextLabel")
+        srcLabel.Size = UDim2.new(0, 0, 1, 0)
+        srcLabel.AutomaticSize = Enum.AutomaticSize.X
+        srcLabel.Position = UDim2.new(0, 6, 0, 0)
+        srcLabel.BackgroundColor3 = COLORS.sidebar
+        srcLabel.BorderSizePixel = 0
+        srcLabel.Text = "  " .. source .. "  "
+        srcLabel.TextColor3 = COLORS.accent
+        srcLabel.TextSize = 11
+        srcLabel.Font = Enum.Font.GothamBold
+        srcLabel.Parent = divider
+
+        for _, item in ipairs(items) do
+            order = order + 1
+            createCodeRow(
+                inventoryList,
+                item.name .. "  (ID: " .. item.animId .. ")",
+                item.code,
+                COLORS.green,
+                order
+            )
+        end
+    end
+end
+
+---------- TAB SWITCH HOOKS ----------
+
+inventoryTabBtn.MouseButton1Click:Connect(function()
+    switchTab("inventory")
+    refreshInventoryList()
+end)
+
+---------- CLOSE ----------
+
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui.Visible = false
+end)
+
+---------- INIT ----------
+
+hookRemotes()
+
+if player.Character then
+    task.spawn(hookCharacter, player.Character)
+end
+
+local charConn = player.CharacterAdded:Connect(function(char)
+    task.spawn(hookCharacter, char)
+end)
+table.insert(connections, charConn)
+
+-- periodic GUI refresh
+task.spawn(function()
+    while active and screenGui and screenGui.Parent do
+        if screenGui.Visible and currentTab == "detected" then
+            refreshDetectedList()
+        end
+        task.wait(1)
+    end
+end)
+
+---------- SIXZEROHUB REGISTRATION ----------
+
+local function cleanup()
+    active = false
+    for _, c in ipairs(connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    connections = {}
+    pcall(function()
+        if oldNamecall and hookmetamethod then
+            hookmetamethod(game, "__namecall", oldNamecall)
+        end
+    end)
+    pcall(function() screenGui:Destroy() end)
+end
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Emote Decomposer", "[Dev]emote_decomposer", cleanup, "dev")
+end
