@@ -93,6 +93,8 @@ local keybindConn = UserInputService.InputBegan:Connect(function(input, processe
             local cam = workspace.CurrentCamera
             cam.CameraType = Enum.CameraType.Custom
             cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
+            player.CameraMinZoomDistance = 0.5
+            player.CameraMaxZoomDistance = 128
         end)
     end
 end)
@@ -213,11 +215,11 @@ local flipConn = RunService.RenderStepped:Connect(function()
     local upVec = -normal
     local lookVec = Vector3.new(1, 0, 0)
     if math.abs(upVec.Y) > 0.99 then
-        noclipTargetCF = CFrame.new(root.Position.X, groundY - 2, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
+        noclipTargetCF = CFrame.new(root.Position.X, groundY + 2, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
     else
         local rightVec = lookVec:Cross(upVec).Unit
         local fwd = upVec:Cross(rightVec).Unit
-        noclipTargetCF = CFrame.fromMatrix(Vector3.new(root.Position.X, groundY - 2, root.Position.Z), rightVec, upVec, -fwd)
+        noclipTargetCF = CFrame.fromMatrix(Vector3.new(root.Position.X, groundY + 2, root.Position.Z), rightVec, upVec, -fwd)
     end
 end)
 table.insert(connections, flipConn)
@@ -234,28 +236,38 @@ local function pointCameraAbove(targetPos)
     pcall(function()
         local cam = workspace.CurrentCamera
 
-        -- find a clear camera position: start close above, move up until no obstruction
-        local bestPos = targetPos + Vector3.new(0, 8, 0)
-
         local params = RaycastParams.new()
         params.FilterType = Enum.RaycastFilterType.Exclude
         local filterList = {}
         if player.Character then table.insert(filterList, player.Character) end
         params.FilterDescendantsInstances = filterList
 
-        -- check if there's a ceiling between camera and target
-        for height = 8, 40, 4 do
+        -- start very close (5 studs above), move up only if blocked
+        local bestPos = targetPos + Vector3.new(0, 5, 0)
+        for height = 5, 30, 3 do
             local testPos = targetPos + Vector3.new(0, height, 0)
             local result = workspace:Raycast(testPos, (targetPos - testPos), params)
             if not result then
-                -- clear line of sight
                 bestPos = testPos
                 break
             end
-            bestPos = testPos + Vector3.new(0, 4, 0)
+            bestPos = testPos + Vector3.new(0, 3, 0)
         end
 
         cam.CFrame = CFrame.new(bestPos, targetPos)
+
+        -- zoom in as close as possible
+        pcall(function()
+            player.CameraMinZoomDistance = 0.5
+            player.CameraMaxZoomDistance = 0.5
+        end)
+    end)
+end
+
+local function resetCameraZoom()
+    pcall(function()
+        player.CameraMinZoomDistance = 0.5
+        player.CameraMaxZoomDistance = 128
     end)
 end
 
@@ -265,6 +277,7 @@ local function resetCamera()
         cam.CameraType = Enum.CameraType.Custom
         cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
     end)
+    resetCameraZoom()
 end
 
 ---------- TOOLS ----------
@@ -391,7 +404,7 @@ local function tweenToTarget(targetRoot)
     local groundY = getGroundY(targetPos)
 
     -- flipped upside down: place HRP at ground+1 so head hangs below ground
-    tweenCFrame(root, CFrame.new(targetPos.X + 3, groundY - 2, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
+    tweenCFrame(root, CFrame.new(targetPos.X + 3, groundY + 2, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
 end
 
 ---------- ARREST ----------
