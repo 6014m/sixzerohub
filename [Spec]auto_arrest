@@ -1,16 +1,20 @@
 -- [Spec] Auto Arrest
--- IY-style tween to targets, arrest with handcuffs
--- Priority: keycard holders > criminals > inmates
--- Cycles through targets to work around cooldown
+-- IY-style tween, click arrest, reset after confirmed arrest
+-- Priority: keycard holders > criminals > inmates (only if in restricted area)
+-- Criminals are always arrestable, inmates only sometimes
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local VIM = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 local connections = {}
 local active = true
 local tweenSpeed = -1
+
+-- inmates who failed arrest are probably in a safe zone, skip them temporarily
+local skipList = {} -- [playerName] = os.clock() when we gave up
 
 local function equipHandcuffs()
     pcall(function()
@@ -36,6 +40,15 @@ local function getTeamName(plr)
     return name
 end
 
+local function isCriminal(plr)
+    return getTeamName(plr):find("criminal") ~= nil
+end
+
+local function isInmate(plr)
+    local team = getTeamName(plr)
+    return (team:find("inmate") or team:find("prisoner")) ~= nil
+end
+
 local function hasKeycard(plr)
     if not plr.Character then return false end
     for _, child in ipairs(plr.Character:GetChildren()) do
@@ -49,14 +62,40 @@ local function hasKeycard(plr)
     return false
 end
 
+local function hasWeapon(plr)
+    if not plr.Character then return false end
+    for _, child in ipairs(plr.Character:GetChildren()) do
+        if child:IsA("Tool") then
+            local n = child.Name:lower()
+            if n:find("gun") or n:find("knife") or n:find("ak") or n:find("m4") or n:find("pistol") or n:find("shotgun") or n:find("remington") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function getPriority(plr)
-    local team = getTeamName(plr)
-    local isCriminal = team:find("criminal")
-    local isInmate = team:find("inmate") or team:find("prisoner")
-    if not isCriminal and not isInmate then return nil end
+    if plr == player then return nil end
+    if not plr.Character then return nil end
+
+    local criminal = isCriminal(plr)
+    local inmate = isInmate(plr)
+    if not criminal and not inmate then return nil end
+
+    -- skip inmates we recently failed to arrest (probably in safe zone)
+    if inmate and not criminal then
+        local skipTime = skipList[plr.Name]
+        if skipTime and os.clock() - skipTime < 15 then
+            return nil
+        end
+    end
+
     if hasKeycard(plr) then return 1 end
-    if isCriminal then return 2 end
-    return 3
+    if criminal then return 2 end
+    -- inmates with weapons are more likely in restricted area
+    if hasWeapon(plr) then return 3 end
+    return 4
 end
 
 local function getRoot(char)
@@ -67,6 +106,35 @@ end
 local function getTorso(plr)
     if not plr.Character then return nil end
     return plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
+end
+
+-- check if player got arrested: team changed OR arrest gui/timer appeared on them
+local function isArrested(plr)
+    if not plr.Parent then return true end
+    -- team changed off criminal/inmate
+    local team = getTeamName(plr)
+    if not (team:find("criminal") or team:find("inmate") or team:find("prisoner")) then
+        return true
+    end
+    -- check for arrest timer/billboard gui on their character
+    if plr.Character then
+        local head = plr.Character:FindFirstChild("Head")
+        if head then
+            for _, child in ipairs(head:GetChildren()) do
+                if child:IsA("BillboardGui") then
+                    -- arrest timer gui appeared
+                    return true
+                end
+            end
+        end
+        -- also check character root
+        for _, child in ipairs(plr.Character:GetChildren()) do
+            if child:IsA("BillboardGui") and child.Name ~= "NameTag" then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 -- IY exact tween
@@ -97,7 +165,22 @@ local function tweenTo(targetRoot)
     end)
 end
 
-local VIM = game:GetService("VirtualInputManager")
+local function clickAt(x, y)
+    -- VirtualInputManager: real mouse emulation
+    pcall(function()
+        VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
+        task.wait()
+        VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+    end)
+    -- mousemoveabs + mouse1click backup
+    pcall(function()
+        if mousemoveabs and mouse1click then
+            mousemoveabs(x, y)
+            task.wait()
+            mouse1click()
+        end
+    end)
+end
 
 local function arrestTarget(targetPlr)
     local torso = getTorso(targetPlr)
@@ -107,48 +190,7 @@ local function arrestTarget(targetPlr)
     local screenPos, onScreen = cam:WorldToScreenPoint(torso.Position)
     if not onScreen then return end
 
-    local x = screenPos.X
-    local y = screenPos.Y + 36 -- gui inset offset
-
-    -- method 1: VirtualInputManager (most reliable click emulation)
-    pcall(function()
-        VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
-        task.wait()
-        VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
-    end)
-
-    -- method 2: mousemoveabs + mouse1click
-    pcall(function()
-        if mousemoveabs and mouse1click then
-            mousemoveabs(x, y)
-            task.wait()
-            mouse1click()
-        end
-    end)
-
-    -- method 3: remote as last resort
-    pcall(function()
-        ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
-    end)
-end
-
-local function isArrested(plr)
-    -- player is arrested if they switched off criminal/inmate team
-    if not plr.Parent then return true end
-    local team = getTeamName(plr)
-    if team:find("criminal") or team:find("inmate") or team:find("prisoner") then
-        return false
-    end
-    return true
-end
-
-local function waitForArrest(plr, timeout)
-    local start = os.clock()
-    while os.clock() - start < timeout do
-        if isArrested(plr) then return true end
-        task.wait(0.1)
-    end
-    return isArrested(plr)
+    clickAt(screenPos.X, screenPos.Y + 36)
 end
 
 local function resetCharacter()
@@ -165,8 +207,7 @@ local function resetCharacter()
     end
 end
 
--- main loop: cycle through all targets repeatedly
--- cycling means by the time we get back to the first target, cooldown has passed
+-- main loop
 task.spawn(function()
     while active do
         local targets = {}
@@ -195,12 +236,19 @@ task.spawn(function()
             if not target.root or not target.root.Parent then continue end
             if not getPriority(target.player) then continue end
 
-            -- keep tweening and arresting until confirmed or give up
-            for attempt = 1, 15 do
-                if not active then break end
-                if isArrested(target.player) then break end
+            local isCrim = isCriminal(target.player)
+            -- criminals get more retries since they're always arrestable
+            -- inmates get fewer since they might be in a safe zone
+            local maxAttempts = isCrim and 15 or 3
 
-                -- re-grab their root each attempt since they're moving
+            local arrested = false
+            for attempt = 1, maxAttempts do
+                if not active then break end
+                if isArrested(target.player) then
+                    arrested = true
+                    break
+                end
+
                 local freshRoot = getRoot(target.player.Character)
                 if not freshRoot or not freshRoot.Parent then break end
 
@@ -209,15 +257,21 @@ task.spawn(function()
 
                 arrestTarget(target.player)
 
-                if waitForArrest(target.player, 0.3) then
+                -- quick check
+                task.wait(0.3)
+                if isArrested(target.player) then
+                    arrested = true
                     break
                 end
             end
 
-            -- only reset if we confirmed the arrest
-            if isArrested(target.player) then
+            if arrested then
+                -- confirmed arrest, reset to clear cooldown
                 resetCharacter()
                 equipHandcuffs()
+            elseif not isCrim then
+                -- inmate couldn't be arrested, probably in safe zone, skip for 15s
+                skipList[target.player.Name] = os.clock()
             end
         end
 
