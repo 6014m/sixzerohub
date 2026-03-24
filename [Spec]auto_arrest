@@ -1,6 +1,6 @@
 -- [Spec] Auto Arrest
--- CFrame desync: server sees you next to target, other players see you far away
--- Probe inmates with InvokeServer, only pursue if server confirms arrestable
+-- FE Invisible (R6): destroys + reclones HumanoidRootPart to hide from server
+-- Then tweens to targets and arrests them while invisible
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,50 +12,76 @@ local player = Players.LocalPlayer
 local connections = {}
 local active = true
 local tweenSpeed = -1
+local invisible = false
 
 local skipList = {}
 local SKIP_DURATION = 20
 
----------- CFRAME DESYNC ----------
+---------- FE INVISIBLE (R6) ----------
 
-local desyncEnabled = false
-local realCFrame = nil -- where the server thinks we are (next to target)
-local fakeCFrame = nil -- where we visually appear (far away)
-local FAKE_OFFSET = Vector3.new(0, 0, 9999) -- visual body way off in the distance
+local function goInvisible()
+    if invisible then return end
 
--- Stepped runs before physics replication: set REAL position so server sees it
-local steppedConn = RunService.Stepped:Connect(function()
-    if not active or not desyncEnabled or not realCFrame then return end
-    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    root.CFrame = realCFrame
-end)
-table.insert(connections, steppedConn)
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
 
--- RenderStepped runs before render: offset to FAKE position so others see it
-local renderConn = RunService.RenderStepped:Connect(function()
-    if not active or not desyncEnabled or not realCFrame then return end
-    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    root.CFrame = realCFrame + FAKE_OFFSET
-end)
-table.insert(connections, renderConn)
+    local savedPos = hrp.Position
 
-local function startDesync(targetCFrame)
-    realCFrame = targetCFrame
-    desyncEnabled = true
-end
+    -- create platform way up high
+    local box = Instance.new("Part", workspace)
+    box.Anchored = true
+    box.CanCollide = true
+    box.Size = Vector3.new(10, 1, 10)
+    box.Position = Vector3.new(0, 10000, 0)
+    box.Transparency = 1
+    box.Name = "InvisBox"
 
-local function stopDesync()
-    desyncEnabled = false
-    -- snap back to real position
-    pcall(function()
-        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if root and realCFrame then
-            root.CFrame = realCFrame
+    -- move character to the box
+    char:MoveTo(box.Position + Vector3.new(0, 3, 0))
+
+    -- wait for character to land on the box
+    local landed = false
+    local touchConn
+    touchConn = box.Touched:Connect(function(part)
+        if part.Parent and part.Parent.Name == player.Name then
+            if not landed then
+                landed = true
+
+                -- the trick: clone HRP, destroy original, parent clone back
+                local newHRP = hrp:Clone()
+                task.wait(0.25)
+                hrp:Destroy()
+                newHRP.Parent = char
+
+                -- move back to original position
+                char:MoveTo(savedPos)
+
+                invisible = true
+                touchConn:Disconnect()
+
+                -- cleanup the box after a moment
+                task.delay(1, function()
+                    pcall(function() box:Destroy() end)
+                end)
+            end
         end
     end)
-    realCFrame = nil
+
+    -- timeout safety
+    task.delay(5, function()
+        if not landed then
+            touchConn:Disconnect()
+            pcall(function() box:Destroy() end)
+        end
+    end)
+
+    -- wait for invisible to be set
+    local start = os.clock()
+    while not invisible and os.clock() - start < 5 do
+        task.wait(0.1)
+    end
 end
 
 ---------- TOOLS ----------
@@ -147,13 +173,6 @@ local function getTorso(plr)
     return plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
 end
 
--- move real position next to target (desync handles the visual)
-local function moveToTarget(targetRoot)
-    if not targetRoot or not targetRoot.Parent then return end
-    realCFrame = targetRoot.CFrame + Vector3.new(3, 0, 0)
-end
-
--- IY tween for when desync is off (initial approach)
 local function tweenTo(targetRoot)
     local root = getRoot(player.Character)
     if not root or not targetRoot or not targetRoot.Parent then return end
@@ -169,7 +188,7 @@ local function tweenTo(targetRoot)
     local tween = TweenService:Create(
         root,
         TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear),
-        {CFrame = targetRoot.CFrame + Vector3.new(3, 0, 0)}
+        {CFrame = targetRoot.CFrame + Vector3.new(3, 1, 0)}
     )
     tween:Play()
     tween.Completed:Wait()
@@ -221,7 +240,7 @@ end
 ---------- RESET ----------
 
 local function resetCharacter()
-    stopDesync()
+    invisible = false
     pcall(function()
         local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.Health = 0 end
@@ -262,9 +281,13 @@ task.spawn(function()
         table.sort(targets, function(a, b) return a.priority < b.priority end)
 
         if #targets == 0 then
-            stopDesync()
             task.wait(1)
             continue
+        end
+
+        -- go invisible before approaching anyone
+        if not invisible then
+            goInvisible()
         end
 
         equipHandcuffs()
@@ -274,9 +297,8 @@ task.spawn(function()
             if not target.player.Parent then continue end
             if isArrested(target.player) then continue end
 
-            -- for inmates: probe once to check if arrestable
+            -- inmates: probe once
             if not target.isCriminal then
-                -- tween close first
                 local freshRoot = getRoot(target.player.Character)
                 if not freshRoot then continue end
                 tweenTo(freshRoot)
@@ -286,24 +308,14 @@ task.spawn(function()
                     skipList[target.player.Name] = os.clock()
                     continue
                 else
-                    -- probe arrested them, reset cooldown
                     resetCharacter()
+                    goInvisible()
                     equipHandcuffs()
                     continue
                 end
             end
 
-            -- criminals: full desync pursuit
-            -- first tween close, then enable desync
-            local freshRoot = getRoot(target.player.Character)
-            if not freshRoot then continue end
-
-            tweenTo(freshRoot)
-            task.wait(0.1)
-
-            -- now enable desync: real pos stays near target, visual goes far away
-            startDesync(freshRoot.CFrame + Vector3.new(3, 0, 0))
-
+            -- criminals: full pursuit while invisible
             local arrested = false
             for attempt = 1, 15 do
                 if not active then break end
@@ -312,14 +324,12 @@ task.spawn(function()
                     break
                 end
 
-                -- update real position to follow moving target
-                local updatedRoot = getRoot(target.player.Character)
-                if not updatedRoot or not updatedRoot.Parent then break end
-                moveToTarget(updatedRoot)
+                local freshRoot = getRoot(target.player.Character)
+                if not freshRoot or not freshRoot.Parent then break end
 
+                tweenTo(freshRoot)
                 task.wait(0.05)
 
-                -- click + remote
                 clickOnPlayer(target.player)
                 task.wait(0.1)
                 fireArrestRemote(target.player)
@@ -331,10 +341,10 @@ task.spawn(function()
                 end
             end
 
-            stopDesync()
-
             if arrested then
+                -- reset clears cooldown + invisibility, then re-invis
                 resetCharacter()
+                goInvisible()
                 equipHandcuffs()
             end
         end
@@ -347,7 +357,13 @@ end)
 
 local function cleanup()
     active = false
-    stopDesync()
+    invisible = false
+    -- clean up any leftover invis boxes
+    for _, child in ipairs(workspace:GetChildren()) do
+        if child.Name == "InvisBox" then
+            pcall(function() child:Destroy() end)
+        end
+    end
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
 end
