@@ -1,5 +1,5 @@
 -- [Spec] Auto Arrest
--- Tweens to targets and arrests them with handcuffs
+-- Tweens to targets (-1 speed), arrests, resets to clear cooldown
 -- Priority: keycard holders > criminals > inmates
 
 local Players = game:GetService("Players")
@@ -9,18 +9,14 @@ local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local connections = {}
 local active = true
-local TWEEN_SPEED = 1 -- studs per second (negative means instant-ish, we use very fast)
-local ARREST_DELAY = 0.3
 
 local function equipHandcuffs()
     pcall(function()
-        local backpack = player:FindFirstChild("Backpack")
         local char = player.Character
         if not char then return end
-        -- check if already holding handcuffs
         local held = char:FindFirstChildOfClass("Tool")
         if held and held.Name:lower():find("cuff") then return end
-        -- find handcuffs in backpack
+        local backpack = player:FindFirstChild("Backpack")
         if backpack then
             for _, tool in ipairs(backpack:GetChildren()) do
                 if tool:IsA("Tool") and tool.Name:lower():find("cuff") then
@@ -41,22 +37,17 @@ end
 local function hasKeycard(plr)
     if not plr.Character then return false end
     for _, child in ipairs(plr.Character:GetChildren()) do
-        if child:IsA("Tool") and child.Name:lower():find("key") then
-            return true
-        end
+        if child:IsA("Tool") and child.Name:lower():find("key") then return true end
     end
     if plr:FindFirstChild("Backpack") then
         for _, child in ipairs(plr.Backpack:GetChildren()) do
-            if child:IsA("Tool") and child.Name:lower():find("key") then
-                return true
-            end
+            if child:IsA("Tool") and child.Name:lower():find("key") then return true end
         end
     end
     return false
 end
 
 local function getPriority(plr)
-    -- 1 = keycard holder (highest), 2 = criminal, 3 = inmate
     local team = getTeamName(plr)
     local isCriminal = team:find("criminal")
     local isInmate = team:find("inmate") or team:find("prisoner")
@@ -83,20 +74,12 @@ local function tweenTo(targetPart)
     local root = getRoot()
     if not root or not targetPart or not targetPart.Parent then return false end
 
-    local distance = (root.Position - targetPart.Position).Magnitude
-    if distance < 5 then return true end
-
-    -- speed -1 means basically instant, use very fast tween
-    local tweenTime = distance / 200 -- ~200 studs/sec, very fast but not instant teleport
-    if tweenTime < 0.05 then tweenTime = 0.05 end
-
     local targetCF = targetPart.CFrame * CFrame.new(0, 0, 3)
 
-    if currentTween then
-        currentTween:Cancel()
-    end
+    if currentTween then currentTween:Cancel() end
 
-    currentTween = TweenService:Create(root, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+    -- speed -1 = instant tween
+    currentTween = TweenService:Create(root, TweenInfo.new(-1, Enum.EasingStyle.Linear), {
         CFrame = targetCF
     })
     currentTween:Play()
@@ -111,10 +94,23 @@ local function arrest(torso)
     end)
 end
 
+local function resetCharacter()
+    local char = player.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.Health = 0 end
+
+    -- wait for new character
+    local newChar = player.CharacterAdded:Wait()
+    if newChar then
+        newChar:WaitForChild("HumanoidRootPart", 5)
+        task.wait(0.5)
+    end
+end
+
 -- main loop
 task.spawn(function()
     while active do
-        -- build sorted target list
         local targets = {}
         for _, plr in ipairs(Players:GetPlayers()) do
             local pri = getPriority(plr)
@@ -126,7 +122,6 @@ task.spawn(function()
             end
         end
 
-        -- sort by priority (1 first, then 2, then 3)
         table.sort(targets, function(a, b) return a.priority < b.priority end)
 
         if #targets == 0 then
@@ -134,23 +129,29 @@ task.spawn(function()
             continue
         end
 
-        equipHandcuffs()
-
         for _, target in ipairs(targets) do
             if not active then break end
             if not target.player.Parent then continue end
             if not target.torso or not target.torso.Parent then continue end
-
-            -- recheck they're still a valid target
             if not getPriority(target.player) then continue end
 
-            -- tween to them
+            -- equip cuffs
+            equipHandcuffs()
+            task.wait(0.1)
+
+            -- tween to target
             tweenTo(target.torso)
             task.wait(0.1)
 
-            -- fire arrest
+            -- arrest
             arrest(target.torso)
-            task.wait(ARREST_DELAY)
+            task.wait(0.2)
+
+            -- reset to clear cooldown
+            resetCharacter()
+
+            -- re-equip cuffs after respawn
+            equipHandcuffs()
         end
 
         task.wait(0.5)
@@ -161,12 +162,8 @@ end)
 
 local function cleanup()
     active = false
-    if currentTween then
-        pcall(function() currentTween:Cancel() end)
-    end
-    for _, c in ipairs(connections) do
-        pcall(function() c:Disconnect() end)
-    end
+    if currentTween then pcall(function() currentTween:Cancel() end) end
+    for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
 end
 
