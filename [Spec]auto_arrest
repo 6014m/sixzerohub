@@ -267,13 +267,17 @@ local function isInmate(plr)
     return (team:find("inmate") or team:find("prisoner")) ~= nil
 end
 
--- check if a prisoner has the chain icon meaning they're actually arrestable
-local function isInmateArrestable()
-    local ok, text = pcall(function()
-        return player.PlayerGui.Home.hud.Topbar.StatusLabel.Text
-    end)
-    if ok and text then
-        return text:find("\xF0\x9F\x94\x97") ~= nil -- 🔗
+-- check if a prisoner has the 🔗 chain before their display name (overhead BillboardGui)
+local function isInmateArrestable(plr)
+    if not plr.Character then return false end
+    -- check all BillboardGuis and TextLabels on the character for the chain emoji
+    for _, desc in ipairs(plr.Character:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+            local ok, text = pcall(function() return desc.Text end)
+            if ok and text and text:find("\xF0\x9F\x94\x97") then -- 🔗
+                return true
+            end
+        end
     end
     return false
 end
@@ -443,8 +447,8 @@ task.spawn(function()
             if crim then
                 local pri = hasKeycard(plr) and 1 or 2
                 table.insert(targets, { player = plr, root = root, priority = pri, isCriminal = true })
-            elseif inm then
-                -- inmates added as candidates, chain check happens after tweening close
+            elseif inm and isInmateArrestable(plr) then
+                -- only target inmates with 🔗 on their display name
                 table.insert(targets, { player = plr, root = root, priority = 10, isCriminal = false })
             end
         end
@@ -466,19 +470,6 @@ task.spawn(function()
             if not target.player.Parent then continue end
             if isArrested(target.player) or hasForceField(target.player) then continue end
 
-            -- for inmates: tween close first, then check if 🔗 chain appears
-            if not target.isCriminal then
-                local freshRoot = getRoot(target.player.Character)
-                if not freshRoot then continue end
-                tweenToTarget(freshRoot)
-                task.wait(0.3) -- give the game a moment to show the chain
-                if not isInmateArrestable() then
-                    -- no chain = not arrestable here, skip
-                    skipList[target.player.Name] = os.clock()
-                    continue
-                end
-            end
-
             -- pursue and arrest
             local arrested = false
             local maxAttempts = target.isCriminal and 15 or 8
@@ -489,8 +480,8 @@ task.spawn(function()
                     break
                 end
                 if hasForceField(target.player) then break end
-                -- if inmate, recheck chain each attempt in case we drifted
-                if not target.isCriminal and not isInmateArrestable() then break end
+                -- if inmate, recheck chain each attempt in case it disappeared
+                if not target.isCriminal and not isInmateArrestable(target.player) then break end
 
                 local freshRoot = getRoot(target.player.Character)
                 if not freshRoot or not freshRoot.Parent then break end
