@@ -1,6 +1,6 @@
 -- [Spec] Auto Arrest
--- FE Invisible (R6) using tweens only, no instant teleports
--- Keybind setting to toggle off
+-- Flips upside down (head underground to hide nametag), detaches accessories
+-- Tweens to targets, arrests, resets after confirmed
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,13 +13,13 @@ local player = Players.LocalPlayer
 local connections = {}
 local active = true
 local tweenSpeed = -1
-local invisible = false
-local killBind = Enum.KeyCode.P -- default, changeable via settings
+local hidden = false
+local killBind = Enum.KeyCode.P
 
 local skipList = {}
 local SKIP_DURATION = 20
 
----------- KEYBIND TO DEACTIVATE ----------
+---------- KEYBIND ----------
 
 local keybindConn = UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
@@ -47,52 +47,40 @@ local function tweenCFrame(root, targetCF)
     end)
 end
 
----------- FE INVISIBLE (R6) - TWEEN ONLY ----------
+---------- HIDE: FLIP UPSIDE DOWN + DETACH ACCESSORIES ----------
 
-local function goInvisible()
-    if invisible then return end
-
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    local savedCF = hrp.CFrame
-
-    -- create platform way up high
-    local box = Instance.new("Part", workspace)
-    box.Anchored = true
-    box.CanCollide = true
-    box.Size = Vector3.new(10, 1, 10)
-    box.Position = Vector3.new(savedCF.X, 10000, savedCF.Z)
-    box.Transparency = 1
-    box.Name = "InvisBox"
-
-    -- tween up to the box
-    tweenCFrame(hrp, CFrame.new(box.Position + Vector3.new(0, 3, 0)))
-    task.wait(0.5)
-
-    -- destroy HRP, wait, then create new one
-    local savedCFrameHRP = hrp.CFrame
-    hrp:Destroy()
-    wait()
-    local newHRP = Instance.new("Part")
-    newHRP.Name = "HumanoidRootPart"
-    newHRP.Size = Vector3.new(2, 2, 1)
-    newHRP.Transparency = 1
-    newHRP.CanCollide = false
-    newHRP.CFrame = savedCFrameHRP
-    newHRP.Parent = char
-
-    -- tween back down
-    tweenCFrame(newHRP, savedCF)
-
-    invisible = true
-
-    task.delay(1, function()
-        pcall(function() box:Destroy() end)
+local function detachAccessories()
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        for _, v in ipairs(char:GetDescendants()) do
+            if v:IsA("Accessory") then
+                for _, p in ipairs(v:GetDescendants()) do
+                    if p:IsA("Weld") then
+                        p:Destroy()
+                    end
+                end
+            end
+        end
     end)
 end
+
+local function hideCharacter()
+    if hidden then return end
+    detachAccessories()
+    hidden = true
+end
+
+-- keep character flipped upside down so head stays underground
+local flipConn = RunService.Heartbeat:Connect(function()
+    if not active or not hidden then return end
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    -- flip 180 on Z axis: head points down into the ground
+    local pos = root.Position
+    root.CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(180))
+end)
+table.insert(connections, flipConn)
 
 ---------- TOOLS ----------
 
@@ -195,7 +183,9 @@ local function tweenToTarget(targetRoot)
         end
     end)
 
-    tweenCFrame(root, targetRoot.CFrame + Vector3.new(3, 1, 0))
+    -- tween next to target, slightly below ground so flipped head is hidden
+    local targetPos = targetRoot.Position
+    tweenCFrame(root, CFrame.new(targetPos.X + 3, targetPos.Y - 2, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
 end
 
 ---------- ARREST ----------
@@ -238,7 +228,7 @@ end
 ---------- RESET ----------
 
 local function resetCharacter()
-    invisible = false
+    hidden = false
     pcall(function()
         local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.Health = 0 end
@@ -283,11 +273,8 @@ task.spawn(function()
             continue
         end
 
-        -- go invisible before approaching (tween up, trick, tween back)
-        if not invisible then
-            goInvisible()
-        end
-
+        -- hide: flip upside down + detach hats
+        hideCharacter()
         equipHandcuffs()
 
         for _, target in ipairs(targets) do
@@ -306,9 +293,8 @@ task.spawn(function()
                     skipList[target.player.Name] = os.clock()
                     continue
                 else
-                    -- arrested, reset + re-invis
                     resetCharacter()
-                    goInvisible()
+                    hideCharacter()
                     equipHandcuffs()
                     continue
                 end
@@ -341,9 +327,8 @@ task.spawn(function()
             end
 
             if arrested then
-                -- reset clears cooldown, then re-invis for next target
                 resetCharacter()
-                goInvisible()
+                hideCharacter()
                 equipHandcuffs()
             end
         end
@@ -356,12 +341,7 @@ end)
 
 local function cleanup()
     active = false
-    invisible = false
-    for _, child in ipairs(workspace:GetChildren()) do
-        if child.Name == "InvisBox" then
-            pcall(function() child:Destroy() end)
-        end
-    end
+    hidden = false
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
 end
