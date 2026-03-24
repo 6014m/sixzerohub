@@ -102,8 +102,28 @@ table.insert(connections, keybindConn)
 
 ---------- TWEEN HELPER ----------
 
+-- disable Horizontal Density so it doesn't fight the tween
+local function pauseHD()
+    pcall(function()
+        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        local hd = root:FindFirstChild("HDensityForce")
+        if hd then hd.MaxForce = 0 end
+    end)
+end
+
+local function resumeHD()
+    pcall(function()
+        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        local hd = root:FindFirstChild("HDensityForce")
+        if hd then hd.MaxForce = math.huge end
+    end)
+end
+
 local function tweenCFrame(root, targetCF)
     if not root or not root.Parent then return end
+    pauseHD()
     local tween = TweenService:Create(
         root,
         TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear),
@@ -116,6 +136,7 @@ local function tweenCFrame(root, targetCF)
         root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
     end)
+    resumeHD()
 end
 
 ---------- HIDE: FLIP UPSIDE DOWN + DETACH ACCESSORIES ----------
