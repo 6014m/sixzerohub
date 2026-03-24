@@ -151,8 +151,10 @@ local function unhideCharacter()
     noclipForce = nil
 end
 
--- find the ACTUAL terrain/baseplate ground, not roofs or thin floors above us
--- casts from very high up to find the lowest thick surface
+-- find best surface to bury head into
+-- if there's an enclosed ceiling above (roof), use the floor right under the target
+-- since nobody can see the nametag through the roof
+-- only go to the lowest ground if the area is open sky above
 local function getGroundY(position)
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
@@ -160,48 +162,44 @@ local function getGroundY(position)
     if player.Character then table.insert(filterList, player.Character) end
     params.FilterDescendantsInstances = filterList
 
-    -- cast from way up to find the ground
-    local origin = Vector3.new(position.X, 500, position.Z)
-    local hits = {}
+    -- first: find the surface directly under the target (what they're standing on)
+    local floorResult = workspace:Raycast(position + Vector3.new(0, 3, 0), Vector3.new(0, -50, 0), params)
+    if not floorResult then
+        return position.Y - 3, Vector3.new(0, 1, 0)
+    end
 
-    -- do multiple raycasts to find ALL surfaces, pick the lowest solid one
-    local currentY = 500
+    local floorY = floorResult.Position.Y
+    local floorNormal = floorResult.Normal
+
+    -- now check: is there a roof/ceiling ABOVE the target?
+    local ceilingResult = workspace:Raycast(position + Vector3.new(0, 1, 0), Vector3.new(0, 50, 0), params)
+    local hasRoof = ceilingResult ~= nil
+
+    if hasRoof then
+        -- enclosed area: safe to use the floor right here, head can poke through
+        -- the roof hides the nametag from above
+        return floorY, floorNormal
+    end
+
+    -- open sky: need to find the LOWEST ground so head is truly buried
+    local currentY = floorY - 0.1
+    local bestY = floorY
+    local bestNormal = floorNormal
     for _ = 1, 10 do
-        local result = workspace:Raycast(Vector3.new(position.X, currentY, position.Z), Vector3.new(0, -600, 0), params)
+        local result = workspace:Raycast(Vector3.new(position.X, currentY, position.Z), Vector3.new(0, -100, 0), params)
         if not result then break end
 
-        local hitPart = result.Instance
         local hitY = result.Position.Y
-        local normal = result.Normal
-
-        -- check if this is actual ground (thick part, terrain, or baseplate)
-        local isGround = false
-        if hitPart:IsA("Terrain") then
-            isGround = true
-        elseif hitPart.Size.Y >= 1 then
-            -- thick enough to be a real floor, not a thin ceiling
-            isGround = true
+        if result.Instance:IsA("Terrain") or result.Instance.Size.Y >= 1 then
+            bestY = hitY
+            bestNormal = result.Normal
         end
 
-        if isGround then
-            table.insert(hits, { y = hitY, normal = normal })
-        end
-
-        -- continue casting below this hit
         currentY = hitY - 0.1
         if currentY < -100 then break end
     end
 
-    if #hits > 0 then
-        -- use the lowest ground hit (most likely actual terrain, not a roof)
-        local lowest = hits[1]
-        for _, h in ipairs(hits) do
-            if h.y < lowest.y then lowest = h end
-        end
-        return lowest.y, lowest.normal
-    end
-
-    return position.Y - 3, Vector3.new(0, 1, 0)
+    return bestY, bestNormal
 end
 
 -- keep updating noclip target to be flipped underground
