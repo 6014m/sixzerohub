@@ -1,6 +1,7 @@
 -- [Spec] Auto Arrest
--- IY-style tween to targets, arrest with handcuffs, reset after each
+-- IY-style tween to targets, arrest with handcuffs
 -- Priority: keycard holders > criminals > inmates
+-- Cycles through targets to work around cooldown
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -68,12 +69,11 @@ local function getTorso(plr)
     return plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
 end
 
--- IY exact tween: TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear)
+-- IY exact tween
 local function tweenTo(targetRoot)
     local root = getRoot(player.Character)
     if not root or not targetRoot or not targetRoot.Parent then return end
 
-    -- unseat if sitting (IY does this)
     pcall(function()
         local hum = player.Character:FindFirstChildOfClass("Humanoid")
         if hum and hum.SeatPart then
@@ -82,7 +82,6 @@ local function tweenTo(targetRoot)
         end
     end)
 
-    -- IY exact: TweenInfo.new(tweenSpeed, Linear), target CFrame + offset
     local tween = TweenService:Create(
         root,
         TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear),
@@ -91,7 +90,6 @@ local function tweenTo(targetRoot)
     tween:Play()
     tween.Completed:Wait()
 
-    -- IY does breakvelocity after
     pcall(function()
         root.Velocity = Vector3.new(0, 0, 0)
         root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -100,7 +98,7 @@ local function tweenTo(targetRoot)
 end
 
 local function arrestTarget(targetPlr)
-    -- method 1: mouse click on the target
+    -- mouse click
     pcall(function()
         if mousemoveabs and mouse1click then
             local cam = workspace.CurrentCamera
@@ -116,7 +114,7 @@ local function arrestTarget(targetPlr)
         end
     end)
 
-    -- method 2: fire the remote directly as backup
+    -- remote backup
     pcall(function()
         local torso = getTorso(targetPlr)
         if torso then
@@ -125,22 +123,8 @@ local function arrestTarget(targetPlr)
     end)
 end
 
-local function resetCharacter()
-    pcall(function()
-        local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-        if hum then hum.Health = 0 end
-    end)
-
-    local ok, newChar = pcall(function()
-        return player.CharacterAdded:Wait()
-    end)
-    if ok and newChar then
-        newChar:WaitForChild("HumanoidRootPart", 5)
-        task.wait(0.5)
-    end
-end
-
--- main loop
+-- main loop: cycle through all targets repeatedly
+-- cycling means by the time we get back to the first target, cooldown has passed
 task.spawn(function()
     while active do
         local targets = {}
@@ -161,23 +145,19 @@ task.spawn(function()
             continue
         end
 
+        equipHandcuffs()
+
         for _, target in ipairs(targets) do
             if not active then break end
             if not target.player.Parent then continue end
             if not target.root or not target.root.Parent then continue end
             if not getPriority(target.player) then continue end
 
-            equipHandcuffs()
-            task.wait(0.1)
-
             tweenTo(target.root)
             task.wait(0.1)
 
             arrestTarget(target.player)
-            task.wait(0.2)
-
-            resetCharacter()
-            equipHandcuffs()
+            task.wait(0.5)
         end
 
         task.wait(0.5)
