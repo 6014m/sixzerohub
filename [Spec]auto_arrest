@@ -1,10 +1,10 @@
 -- [Spec] Auto Arrest
--- Tweens to targets (-1 speed), arrests, resets to clear cooldown
+-- Tweens to targets, clicks on them with handcuffs, resets after each
 -- Priority: keycard holders > criminals > inmates
 
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local Camera = workspace.CurrentCamera
 
 local player = Players.LocalPlayer
 local connections = {}
@@ -78,19 +78,23 @@ local function tweenTo(targetPart)
 
     if currentTween then currentTween:Cancel() end
 
-    -- speed -1 = instant tween
-    currentTween = TweenService:Create(root, TweenInfo.new(-1, Enum.EasingStyle.Linear), {
-        CFrame = targetCF
-    })
+    -- IY style tween: TweenInfo time = -1
+    local tweenInfo = TweenInfo.new(-1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+    currentTween = TweenService:Create(root, tweenInfo, {CFrame = targetCF})
     currentTween:Play()
     currentTween.Completed:Wait()
     currentTween = nil
     return true
 end
 
-local function arrest(torso)
+local function clickOnTarget(targetPart)
     pcall(function()
-        ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
+        local screenPos, onScreen = Camera:WorldToScreenPoint(targetPart.Position)
+        if onScreen then
+            mousemoveabs(screenPos.X, screenPos.Y + 36) -- +36 for gui inset
+            task.wait()
+            mouse1click()
+        end
     end)
 end
 
@@ -100,7 +104,6 @@ local function resetCharacter()
     local hum = char:FindFirstChildOfClass("Humanoid")
     if hum then hum.Health = 0 end
 
-    -- wait for new character
     local newChar = player.CharacterAdded:Wait()
     if newChar then
         newChar:WaitForChild("HumanoidRootPart", 5)
@@ -143,11 +146,11 @@ task.spawn(function()
             tweenTo(target.torso)
             task.wait(0.1)
 
-            -- arrest
-            arrest(target.torso)
+            -- click on the player to arrest
+            clickOnTarget(target.torso)
             task.wait(0.2)
 
-            -- reset to clear cooldown
+            -- reset to clear arrest cooldown
             resetCharacter()
 
             -- re-equip cuffs after respawn
