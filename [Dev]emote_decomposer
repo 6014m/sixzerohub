@@ -1,6 +1,5 @@
 -- [Dev] Emote Decomposer
 -- Watches for emote animations and logs how to trigger them
--- Detects animation IDs, remote calls, and emote inventory
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -8,77 +7,57 @@ local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
-
 local connections = {}
 local active = true
 
 local COLORS = {
-    background = Color3.fromRGB(47, 49, 54),
+    bg = Color3.fromRGB(47, 49, 54),
     sidebar = Color3.fromRGB(54, 57, 63),
     darker = Color3.fromRGB(32, 34, 37),
     accent = Color3.fromRGB(88, 101, 242),
     text = Color3.fromRGB(220, 221, 222),
-    textMuted = Color3.fromRGB(142, 146, 151),
+    muted = Color3.fromRGB(142, 146, 151),
     hover = Color3.fromRGB(64, 68, 75),
     green = Color3.fromRGB(87, 242, 135),
     orange = Color3.fromRGB(255, 165, 0),
     red = Color3.fromRGB(237, 66, 69),
 }
 
----------- DEFAULT ANIMATION BLACKLIST ----------
+---------- DEFAULT ANIM BLACKLIST ----------
 
--- collect all animation IDs from the Animate script so we can ignore them
 local defaultAnimIds = {}
 
-local function collectDefaultAnims()
+local function collectDefaults()
     pcall(function()
         local char = player.Character
         if not char then return end
         local animate = char:FindFirstChild("Animate")
         if not animate then return end
-        for _, child in ipairs(animate:GetDescendants()) do
-            if child:IsA("Animation") then
-                local id = tostring(child.AnimationId):match("%d+")
+        for _, desc in ipairs(animate:GetDescendants()) do
+            if desc:IsA("Animation") then
+                local id = tostring(desc.AnimationId):match("%d+")
                 if id then defaultAnimIds[id] = true end
             end
         end
     end)
-    -- also add well-known Roblox default animation IDs
-    local knownDefaults = {
-        -- R15 defaults
-        "507766666", "507766951", "507766388", -- walk, run, idle
-        "507765644", "507765000", -- jump, fall
-        "507765764", "507767714", -- climb, swim
-        "619528412", "619524662", -- swimidle, fall
-        "2510196951", "2510197257", -- new idle
-        "742637942", "742638445", -- tool none, slash
-        "507768375", -- sitting
-        -- R6 defaults
-        "180435571", "180435792", -- walk, run
-        "180435792", "125750702", -- idle
+    local known = {
+        "507766666","507766951","507766388","507765644","507765000",
+        "507765764","507767714","619528412","619524662","2510196951",
+        "2510197257","742637942","742638445","507768375",
+        "180435571","180435792","125750702",
     }
-    for _, id in ipairs(knownDefaults) do
-        defaultAnimIds[id] = true
-    end
-end
-
-local function isDefaultAnim(animId)
-    return defaultAnimIds[animId] == true
+    for _, id in ipairs(known) do defaultAnimIds[id] = true end
 end
 
 ---------- REMOTE TRACKING ----------
 
 local recentRemotes = {}
-local REMOTE_WINDOW = 0.5
-
 local oldNamecall
 local namecallHooked = false
 
 local function hookRemotes()
-    if namecallHooked then return end
-    if not hookmetamethod then return end
+    if namecallHooked or not hookmetamethod then return end
     namecallHooked = true
-
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
         if active and (method == "FireServer" or method == "InvokeServer") then
@@ -90,26 +69,14 @@ local function hookRemotes()
                     method = method,
                     args = args,
                 })
-                if #recentRemotes > 50 then
-                    table.remove(recentRemotes, 1)
-                end
+                if #recentRemotes > 50 then table.remove(recentRemotes, 1) end
             end
         end
         return oldNamecall(self, ...)
     end)
 end
 
-local function getRecentRemotes(since)
-    local results = {}
-    for _, entry in ipairs(recentRemotes) do
-        if entry.time >= since then
-            table.insert(results, entry)
-        end
-    end
-    return results
-end
-
-local function argsToString(args)
+local function argsToStr(args)
     local parts = {}
     for _, v in ipairs(args) do
         local t = typeof(v)
@@ -124,11 +91,11 @@ local function argsToString(args)
         elseif t == "table" then
             local inner = {}
             for k, val in pairs(v) do
-                local kStr = type(k) == "string" and ('["' .. k .. '"]') or ("[" .. tostring(k) .. "]")
-                local vStr = typeof(val) == "string" and ('"' .. val .. '"') or tostring(val)
-                table.insert(inner, kStr .. " = " .. vStr)
+                local kS = type(k) == "string" and ('["'..k..'"]') or ("["..tostring(k).."]")
+                local vS = typeof(val) == "string" and ('"'..val..'"') or tostring(val)
+                table.insert(inner, kS.." = "..vS)
             end
-            table.insert(parts, "{" .. table.concat(inner, ", ") .. "}")
+            table.insert(parts, "{"..table.concat(inner, ", ").."}")
         else
             table.insert(parts, tostring(v))
         end
@@ -140,8 +107,18 @@ end
 
 local detectedEmotes = {}
 local seenAnimIds = {}
+local detectedCount = 0
 
-local function onAnimationPlayed(track)
+local function makeDirectCode(idNum)
+    return 'local anim = Instance.new("Animation")\n'
+        .. 'anim.AnimationId = "rbxassetid://' .. idNum .. '"\n'
+        .. 'local track = game.Players.LocalPlayer.Character\n'
+        .. '  :FindFirstChildOfClass("Humanoid")\n'
+        .. '  :FindFirstChildOfClass("Animator"):LoadAnimation(anim)\n'
+        .. 'track:Play()'
+end
+
+local function processTrack(track, forceAdd)
     if not active then return end
     local anim = track.Animation
     if not anim then return end
@@ -150,10 +127,7 @@ local function onAnimationPlayed(track)
     local idNum = animId:match("%d+")
     if not idNum then return end
 
-    -- skip default roblox animations
-    if isDefaultAnim(idNum) then return end
-
-    -- skip if already logged
+    if not forceAdd and defaultAnimIds[idNum] then return end
     if seenAnimIds[idNum] then return end
     seenAnimIds[idNum] = true
 
@@ -161,167 +135,161 @@ local function onAnimationPlayed(track)
     if animName == "Animation" or animName == "" then
         animName = "Emote_" .. idNum
     end
-    local captureTime = os.clock()
-
-    local directCode = string.format(
-        [[local anim = Instance.new("Animation")
-anim.AnimationId = "rbxassetid://%s"
-local track = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator"):LoadAnimation(anim)
-track:Play()]],
-        idNum
-    )
 
     local remoteCode = nil
-    local remotes = getRecentRemotes(captureTime - REMOTE_WINDOW)
-    if #remotes > 0 then
-        local r = remotes[#remotes]
-        local argStr = argsToString(r.args)
-        remoteCode = r.remote .. ":" .. r.method .. "(" .. argStr .. ")"
+    local now = os.clock()
+    for i = #recentRemotes, 1, -1 do
+        local r = recentRemotes[i]
+        if now - r.time < 0.5 then
+            remoteCode = r.remote .. ":" .. r.method .. "(" .. argsToStr(r.args) .. ")"
+            break
+        end
     end
 
     table.insert(detectedEmotes, 1, {
         animId = idNum,
         name = animName,
-        directCode = directCode,
+        directCode = makeDirectCode(idNum),
         remoteCode = remoteCode,
-        time = captureTime,
     })
 
     warn("[EmoteDecomposer] Detected: " .. animName .. " (ID: " .. idNum .. ")")
 end
 
-local hookedHumanoids = {}
+local hookedObjs = {}
 
 local function hookHumanoid(hum)
-    if hookedHumanoids[hum] then return end
-    hookedHumanoids[hum] = true
-
-    local conn = hum.AnimationPlayed:Connect(onAnimationPlayed)
-    table.insert(connections, conn)
+    if hookedObjs[hum] then return end
+    hookedObjs[hum] = true
+    local c = hum.AnimationPlayed:Connect(function(track) processTrack(track, false) end)
+    table.insert(connections, c)
 end
 
 local function hookAnimator(animator)
-    if hookedHumanoids[animator] then return end
-    hookedHumanoids[animator] = true
-
-    local conn = animator.AnimationPlayed:Connect(onAnimationPlayed)
-    table.insert(connections, conn)
+    if hookedObjs[animator] then return end
+    hookedObjs[animator] = true
+    local c = animator.AnimationPlayed:Connect(function(track) processTrack(track, false) end)
+    table.insert(connections, c)
 end
 
 local function hookCharacter(char)
-    if not active then return end
+    if not active or not char then return end
     local hum = char:WaitForChild("Humanoid", 10)
-    if not hum or not active then return end
+    if not hum then return end
     hookHumanoid(hum)
-
-    -- also hook Animator directly as backup
     local animator = hum:FindFirstChildOfClass("Animator")
     if animator then hookAnimator(animator) end
-    local animConn = hum.ChildAdded:Connect(function(child)
+    local c = hum.ChildAdded:Connect(function(child)
         if child:IsA("Animator") then hookAnimator(child) end
     end)
-    table.insert(connections, animConn)
+    table.insert(connections, c)
 end
 
--- also watch OTHER characters in case game plays emotes server-side on local player
--- via a different mechanism
-local function hookAllCharacters()
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr.Character then
-            task.spawn(function()
-                local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-                if hum and plr == player then
-                    hookHumanoid(hum)
+local function scanPlaying()
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if not animator then return end
+        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+            processTrack(track, false)
+        end
+    end)
+end
+
+local function scanAllForce()
+    local char = player.Character
+    if not char then warn("[EmoteDecomposer] No character") return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then warn("[EmoteDecomposer] No humanoid") return end
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then warn("[EmoteDecomposer] No animator") return end
+
+    local tracks = animator:GetPlayingAnimationTracks()
+    warn("[EmoteDecomposer] === SHOW ALL: " .. #tracks .. " tracks ===")
+
+    for _, track in ipairs(tracks) do
+        local anim = track.Animation
+        if anim then
+            local id = tostring(anim.AnimationId):match("%d+")
+            if id then
+                local n = (anim.Name ~= "Animation" and anim.Name ~= "") and anim.Name or ("Anim_" .. id)
+                local isDef = defaultAnimIds[id] == true
+                warn("  " .. n .. " | ID: " .. id .. " | " .. tostring(track.Priority) .. (isDef and " [DEFAULT]" or " [CUSTOM]"))
+                if not isDef then
+                    processTrack(track, true)
                 end
-            end)
+            end
         end
     end
 end
 
----------- EMOTE INVENTORY SCANNER ----------
+---------- INVENTORY SCANNER ----------
 
-local function scanEmoteInventory()
+local function scanInventory()
     local results = {}
-
     pcall(function()
         local char = player.Character
-        if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                local desc = hum:GetAppliedDescription()
-                if desc then
-                    local emotes = desc:GetEmotes()
-                    for name, ids in pairs(emotes) do
-                        for _, id in ipairs(ids) do
-                            table.insert(results, {
-                                source = "HumanoidDescription",
-                                name = name,
-                                animId = tostring(id),
-                                code = string.format(
-                                    'game.Players.LocalPlayer.Character.Humanoid:PlayEmote("%s")',
-                                    name
-                                ),
-                            })
-                        end
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        local desc = hum:GetAppliedDescription()
+        if not desc then return end
+        local emotes = desc:GetEmotes()
+        for eName, ids in pairs(emotes) do
+            for _, id in ipairs(ids) do
+                table.insert(results, {
+                    source = "HumanoidDescription",
+                    name = eName,
+                    animId = tostring(id),
+                    code = 'game.Players.LocalPlayer.Character.Humanoid:PlayEmote("' .. eName .. '")',
+                })
+            end
+        end
+    end)
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local animate = char:FindFirstChild("Animate")
+        if not animate then return end
+        for _, child in ipairs(animate:GetChildren()) do
+            for _, a in ipairs(child:GetChildren()) do
+                if a:IsA("Animation") then
+                    local id = tostring(a.AnimationId):match("%d+")
+                    if id and not defaultAnimIds[id] then
+                        table.insert(results, {
+                            source = "Animate Script",
+                            name = child.Name .. "/" .. a.Name,
+                            animId = id,
+                            code = makeDirectCode(id),
+                        })
                     end
                 end
             end
         end
     end)
-
-    pcall(function()
-        local char = player.Character
-        if char then
-            local animate = char:FindFirstChild("Animate")
-            if animate then
-                for _, child in ipairs(animate:GetChildren()) do
-                    for _, anim in ipairs(child:GetChildren()) do
-                        if anim:IsA("Animation") then
-                            local id = tostring(anim.AnimationId):match("%d+")
-                            if id and not isDefaultAnim(id) then
-                                table.insert(results, {
-                                    source = "Animate Script",
-                                    name = child.Name .. "/" .. anim.Name,
-                                    animId = id,
-                                    code = string.format(
-                                        'local anim = Instance.new("Animation")\nanim.AnimationId = "rbxassetid://%s"\ngame.Players.LocalPlayer.Character.Humanoid.Animator:LoadAnimation(anim):Play()',
-                                        id
-                                    ),
-                                })
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end)
-
     return results
 end
 
----------- FORWARD DECLARES ----------
-
-local lastDetectedCount = 0
-local refreshDetectedList -- defined later
-
 ---------- GUI ----------
 
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "EmoteDecomposer"
-screenGui.ResetOnSpawn = false
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.DisplayOrder = 998
-screenGui.IgnoreGuiInset = true
-pcall(function() screenGui.Parent = game:GetService("CoreGui") end)
-if not screenGui.Parent then screenGui.Parent = playerGui end
+local gui = Instance.new("ScreenGui")
+gui.Name = "EmoteDecomposer"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 998
+gui.IgnoreGuiInset = true
+pcall(function() gui.Parent = game:GetService("CoreGui") end)
+if not gui.Parent then gui.Parent = playerGui end
 
 local main = Instance.new("Frame")
-main.Name = "Main"
 main.Size = UDim2.new(0, 440, 0, 380)
 main.Position = UDim2.new(0.5, -220, 0.5, -190)
 main.BackgroundColor3 = COLORS.sidebar
 main.BorderSizePixel = 0
-main.Parent = screenGui
+main.Parent = gui
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
 
 local shadow = Instance.new("ImageLabel")
@@ -336,6 +304,7 @@ shadow.SliceCenter = Rect.new(23, 23, 277, 277)
 shadow.ZIndex = -1
 shadow.Parent = main
 
+-- header
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 36)
 header.BackgroundColor3 = COLORS.darker
@@ -343,15 +312,13 @@ header.BorderSizePixel = 0
 header.Parent = main
 Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
 
-local headerFill = Instance.new("Frame")
-headerFill.Size = UDim2.new(1, 0, 0, 10)
-headerFill.Position = UDim2.new(0, 0, 1, -10)
-headerFill.BackgroundColor3 = COLORS.darker
-headerFill.BorderSizePixel = 0
-headerFill.Parent = header
+Instance.new("Frame", header).Size = UDim2.new(1, 0, 0, 10)
+header:FindFirstChildOfClass("Frame").Position = UDim2.new(0, 0, 1, -10)
+header:FindFirstChildOfClass("Frame").BackgroundColor3 = COLORS.darker
+header:FindFirstChildOfClass("Frame").BorderSizePixel = 0
 
 local titleLbl = Instance.new("TextLabel")
-titleLbl.Size = UDim2.new(1, -40, 1, 0)
+titleLbl.Size = UDim2.new(0, 160, 1, 0)
 titleLbl.Position = UDim2.new(0, 10, 0, 0)
 titleLbl.BackgroundTransparency = 1
 titleLbl.Text = "Emote Decomposer"
@@ -361,10 +328,10 @@ titleLbl.Font = Enum.Font.GothamBold
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 titleLbl.Parent = header
 
--- "Show All" button - dumps every animation on the character, ignoring filters
+-- Show All button
 local showAllBtn = Instance.new("TextButton")
-showAllBtn.Size = UDim2.new(0, 60, 0, 22)
-showAllBtn.Position = UDim2.new(1, -100, 0, 7)
+showAllBtn.Size = UDim2.new(0, 58, 0, 22)
+showAllBtn.Position = UDim2.new(1, -98, 0, 7)
 showAllBtn.BackgroundColor3 = COLORS.orange
 showAllBtn.BorderSizePixel = 0
 showAllBtn.Text = "Show All"
@@ -375,486 +342,344 @@ showAllBtn.AutoButtonColor = false
 showAllBtn.Parent = header
 Instance.new("UICorner", showAllBtn).CornerRadius = UDim.new(0, 4)
 
-local showAllTooltip = Instance.new("TextLabel")
-showAllTooltip.Size = UDim2.new(0, 160, 0, 20)
-showAllTooltip.Position = UDim2.new(0.5, -80, 1, 4)
-showAllTooltip.BackgroundColor3 = COLORS.darker
-showAllTooltip.BorderSizePixel = 0
-showAllTooltip.Text = "Show ALL anims (ignore filters)"
-showAllTooltip.TextColor3 = COLORS.text
-showAllTooltip.TextSize = 10
-showAllTooltip.Font = Enum.Font.Gotham
-showAllTooltip.Visible = false
-showAllTooltip.ZIndex = 10
-showAllTooltip.Parent = showAllBtn
-Instance.new("UICorner", showAllTooltip).CornerRadius = UDim.new(0, 4)
-
 showAllBtn.MouseEnter:Connect(function()
-    showAllTooltip.Visible = true
     TweenService:Create(showAllBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(220, 140, 0)}):Play()
 end)
 showAllBtn.MouseLeave:Connect(function()
-    showAllTooltip.Visible = false
     TweenService:Create(showAllBtn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.orange}):Play()
 end)
 
 showAllBtn.MouseButton1Click:Connect(function()
-    pcall(function()
-        local char = player.Character
-        if not char then warn("[EmoteDecomposer] No character") return end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum then warn("[EmoteDecomposer] No humanoid") return end
-        local animator = hum:FindFirstChildOfClass("Animator")
-        if not animator then warn("[EmoteDecomposer] No animator") return end
-
-        local tracks = animator:GetPlayingAnimationTracks()
-        warn("[EmoteDecomposer] === SHOW ALL: " .. #tracks .. " tracks ===")
-
-        local found = 0
-        for _, track in ipairs(tracks) do
-            local anim = track.Animation
-            if anim then
-                local animId = tostring(anim.AnimationId)
-                local idNum = animId:match("%d+")
-                if idNum then
-                    found = found + 1
-                    local animName = anim.Name ~= "Animation" and anim.Name ~= "" and anim.Name or ("Anim_" .. idNum)
-                    local isDef = isDefaultAnim(idNum)
-                    warn("  " .. animName .. " | ID: " .. idNum .. " | Playing: " .. tostring(track.IsPlaying) .. " | Priority: " .. tostring(track.Priority) .. (isDef and " [DEFAULT]" or " [CUSTOM]"))
-
-                    -- force-add custom ones even if already seen
-                    if not isDef and not seenAnimIds[idNum] then
-                        seenAnimIds[idNum] = true
-
-                        local directCode = 'local anim = Instance.new("Animation")\n'
-                            .. 'anim.AnimationId = "rbxassetid://' .. idNum .. '"\n'
-                            .. 'local track = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator"):LoadAnimation(anim)\n'
-                            .. 'track:Play()'
-
-                        table.insert(detectedEmotes, 1, {
-                            animId = idNum,
-                            name = animName,
-                            directCode = directCode,
-                            remoteCode = nil,
-                            time = os.clock(),
-                        })
-                    end
-                end
-            end
-        end
-
-        if found == 0 then
-            warn("[EmoteDecomposer] No animation tracks found at all")
-        end
-
-        lastDetectedCount = -1 -- force refresh
-        refreshDetectedList()
-    end)
+    pcall(scanAllForce)
+    detectedCount = -1
+    refreshDetected()
 end)
 
+-- close button
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 26, 0, 26)
 closeBtn.Position = UDim2.new(1, -31, 0, 5)
 closeBtn.BackgroundTransparency = 1
 closeBtn.Text = "X"
-closeBtn.TextColor3 = COLORS.textMuted
+closeBtn.TextColor3 = COLORS.muted
 closeBtn.TextSize = 16
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.Parent = header
 
 closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100) end)
-closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = COLORS.textMuted end)
+closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = COLORS.muted end)
+closeBtn.MouseButton1Click:Connect(function() gui.Visible = false end)
 
+-- draggable
 do
-    local isDragging, dragStart, frameStart
+    local dragging, dragStart, frameStart
     header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = true
-            dragStart = input.Position
-            frameStart = main.Position
+            dragging = true; dragStart = input.Position; frameStart = main.Position
         end
     end)
     header.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = false
+            dragging = false
         end
     end)
     UserInputService.InputChanged:Connect(function(input)
-        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            main.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local d = input.Position - dragStart
+            main.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + d.X, frameStart.Y.Scale, frameStart.Y.Offset + d.Y)
         end
     end)
 end
 
+-- tabs
 local tabBar = Instance.new("Frame")
 tabBar.Size = UDim2.new(1, 0, 0, 28)
 tabBar.Position = UDim2.new(0, 0, 0, 36)
-tabBar.BackgroundColor3 = COLORS.background
+tabBar.BackgroundColor3 = COLORS.bg
 tabBar.BorderSizePixel = 0
 tabBar.Parent = main
 
-local detectedTabBtn = Instance.new("TextButton")
-detectedTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
-detectedTabBtn.BackgroundColor3 = COLORS.sidebar
-detectedTabBtn.BorderSizePixel = 0
-detectedTabBtn.Text = "Detected"
-detectedTabBtn.TextColor3 = COLORS.text
-detectedTabBtn.TextSize = 12
-detectedTabBtn.Font = Enum.Font.GothamBold
-detectedTabBtn.AutoButtonColor = false
-detectedTabBtn.Parent = tabBar
+local detTabBtn = Instance.new("TextButton")
+detTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+detTabBtn.BackgroundColor3 = COLORS.sidebar
+detTabBtn.BorderSizePixel = 0
+detTabBtn.Text = "Detected"
+detTabBtn.TextColor3 = COLORS.text
+detTabBtn.TextSize = 12
+detTabBtn.Font = Enum.Font.GothamBold
+detTabBtn.AutoButtonColor = false
+detTabBtn.Parent = tabBar
 
-local inventoryTabBtn = Instance.new("TextButton")
-inventoryTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
-inventoryTabBtn.Position = UDim2.new(0.5, 0, 0, 0)
-inventoryTabBtn.BackgroundColor3 = COLORS.background
-inventoryTabBtn.BorderSizePixel = 0
-inventoryTabBtn.Text = "Emote Inventory"
-inventoryTabBtn.TextColor3 = COLORS.textMuted
-inventoryTabBtn.TextSize = 12
-inventoryTabBtn.Font = Enum.Font.GothamBold
-inventoryTabBtn.AutoButtonColor = false
-inventoryTabBtn.Parent = tabBar
+local invTabBtn = Instance.new("TextButton")
+invTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+invTabBtn.Position = UDim2.new(0.5, 0, 0, 0)
+invTabBtn.BackgroundColor3 = COLORS.bg
+invTabBtn.BorderSizePixel = 0
+invTabBtn.Text = "Emote Inventory"
+invTabBtn.TextColor3 = COLORS.muted
+invTabBtn.TextSize = 12
+invTabBtn.Font = Enum.Font.GothamBold
+invTabBtn.AutoButtonColor = false
+invTabBtn.Parent = tabBar
 
+-- status
 local statusBar = Instance.new("TextLabel")
 statusBar.Size = UDim2.new(1, 0, 0, 20)
 statusBar.Position = UDim2.new(0, 0, 1, -20)
 statusBar.BackgroundColor3 = COLORS.darker
 statusBar.BorderSizePixel = 0
-statusBar.Text = "  Watching for emotes... click an emote in-game"
-statusBar.TextColor3 = COLORS.textMuted
+statusBar.Text = "  Watching... play an emote in-game"
+statusBar.TextColor3 = COLORS.muted
 statusBar.TextSize = 10
 statusBar.Font = Enum.Font.Gotham
 statusBar.TextXAlignment = Enum.TextXAlignment.Left
 statusBar.Parent = main
 
-local detectedList = Instance.new("ScrollingFrame")
-detectedList.Name = "DetectedList"
-detectedList.Size = UDim2.new(1, -10, 1, -90)
-detectedList.Position = UDim2.new(0, 5, 0, 68)
-detectedList.BackgroundTransparency = 1
-detectedList.BorderSizePixel = 0
-detectedList.ScrollBarThickness = 3
-detectedList.ScrollBarImageColor3 = COLORS.textMuted
-detectedList.CanvasSize = UDim2.new(0, 0, 0, 0)
-detectedList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-detectedList.Parent = main
+-- content frames
+local detList = Instance.new("ScrollingFrame")
+detList.Size = UDim2.new(1, -10, 1, -90)
+detList.Position = UDim2.new(0, 5, 0, 68)
+detList.BackgroundTransparency = 1
+detList.BorderSizePixel = 0
+detList.ScrollBarThickness = 3
+detList.ScrollBarImageColor3 = COLORS.muted
+detList.CanvasSize = UDim2.new(0, 0, 0, 0)
+detList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+detList.Parent = main
+Instance.new("UIListLayout", detList).Padding = UDim.new(0, 4)
 
-Instance.new("UIListLayout", detectedList).Padding = UDim.new(0, 4)
+local invList = Instance.new("ScrollingFrame")
+invList.Size = UDim2.new(1, -10, 1, -90)
+invList.Position = UDim2.new(0, 5, 0, 68)
+invList.BackgroundTransparency = 1
+invList.BorderSizePixel = 0
+invList.ScrollBarThickness = 3
+invList.ScrollBarImageColor3 = COLORS.muted
+invList.CanvasSize = UDim2.new(0, 0, 0, 0)
+invList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+invList.Visible = false
+invList.Parent = main
+Instance.new("UIListLayout", invList).Padding = UDim.new(0, 4)
 
-local inventoryList = Instance.new("ScrollingFrame")
-inventoryList.Name = "InventoryList"
-inventoryList.Size = UDim2.new(1, -10, 1, -90)
-inventoryList.Position = UDim2.new(0, 5, 0, 68)
-inventoryList.BackgroundTransparency = 1
-inventoryList.BorderSizePixel = 0
-inventoryList.ScrollBarThickness = 3
-inventoryList.ScrollBarImageColor3 = COLORS.textMuted
-inventoryList.CanvasSize = UDim2.new(0, 0, 0, 0)
-inventoryList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-inventoryList.Visible = false
-inventoryList.Parent = main
-
-Instance.new("UIListLayout", inventoryList).Padding = UDim.new(0, 4)
-
-local currentTab = "detected"
+local curTab = "detected"
 
 local function switchTab(tab)
-    currentTab = tab
-    detectedList.Visible = (tab == "detected")
-    inventoryList.Visible = (tab == "inventory")
-    detectedTabBtn.BackgroundColor3 = tab == "detected" and COLORS.sidebar or COLORS.background
-    detectedTabBtn.TextColor3 = tab == "detected" and COLORS.text or COLORS.textMuted
-    inventoryTabBtn.BackgroundColor3 = tab == "inventory" and COLORS.sidebar or COLORS.background
-    inventoryTabBtn.TextColor3 = tab == "inventory" and COLORS.text or COLORS.textMuted
+    curTab = tab
+    detList.Visible = (tab == "detected")
+    invList.Visible = (tab == "inventory")
+    detTabBtn.BackgroundColor3 = tab == "detected" and COLORS.sidebar or COLORS.bg
+    detTabBtn.TextColor3 = tab == "detected" and COLORS.text or COLORS.muted
+    invTabBtn.BackgroundColor3 = tab == "inventory" and COLORS.sidebar or COLORS.bg
+    invTabBtn.TextColor3 = tab == "inventory" and COLORS.text or COLORS.muted
 end
 
-detectedTabBtn.MouseButton1Click:Connect(function() switchTab("detected") end)
-inventoryTabBtn.MouseButton1Click:Connect(function() switchTab("inventory") end)
-
----------- COPY ----------
-
-local function copyToClipboard(text)
-    pcall(function()
-        if setclipboard then
-            setclipboard(text)
-        elseif toclipboard then
-            toclipboard(text)
-        end
-    end)
-end
+detTabBtn.MouseButton1Click:Connect(function() switchTab("detected") end)
+invTabBtn.MouseButton1Click:Connect(function() switchTab("inventory") end)
 
 ---------- RENDERING ----------
 
-local function createCodeRow(parent, label, code, color, layoutOrder)
+local function copyText(text)
+    pcall(function()
+        if setclipboard then setclipboard(text)
+        elseif toclipboard then toclipboard(text) end
+    end)
+end
+
+local function makeCodeRow(parent, label, code, color, order)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, -4, 0, 0)
     row.AutomaticSize = Enum.AutomaticSize.Y
     row.BackgroundColor3 = COLORS.hover
     row.BorderSizePixel = 0
-    row.LayoutOrder = layoutOrder or 0
+    row.LayoutOrder = order or 0
     row.Parent = parent
     Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
     Instance.new("UIPadding", row).PaddingBottom = UDim.new(0, 6)
 
-    local headerRow = Instance.new("Frame")
-    headerRow.Size = UDim2.new(1, 0, 0, 28)
-    headerRow.BackgroundTransparency = 1
-    headerRow.Parent = row
+    local hdr = Instance.new("Frame")
+    hdr.Size = UDim2.new(1, 0, 0, 28)
+    hdr.BackgroundTransparency = 1
+    hdr.Parent = row
 
-    local nameLbl = Instance.new("TextLabel")
-    nameLbl.Size = UDim2.new(1, -70, 1, 0)
-    nameLbl.Position = UDim2.new(0, 8, 0, 0)
-    nameLbl.BackgroundTransparency = 1
-    nameLbl.Text = label
-    nameLbl.TextColor3 = color or COLORS.text
-    nameLbl.TextSize = 12
-    nameLbl.Font = Enum.Font.GothamBold
-    nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-    nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
-    nameLbl.Parent = headerRow
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -70, 1, 0)
+    lbl.Position = UDim2.new(0, 8, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = label
+    lbl.TextColor3 = color or COLORS.text
+    lbl.TextSize = 12
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.TextTruncate = Enum.TextTruncate.AtEnd
+    lbl.Parent = hdr
 
-    local copyBtn = Instance.new("TextButton")
-    copyBtn.Size = UDim2.new(0, 55, 0, 20)
-    copyBtn.Position = UDim2.new(1, -60, 0, 4)
-    copyBtn.BackgroundColor3 = COLORS.accent
-    copyBtn.BorderSizePixel = 0
-    copyBtn.Text = "Copy"
-    copyBtn.TextColor3 = COLORS.text
-    copyBtn.TextSize = 10
-    copyBtn.Font = Enum.Font.GothamBold
-    copyBtn.AutoButtonColor = false
-    copyBtn.Parent = headerRow
-    Instance.new("UICorner", copyBtn).CornerRadius = UDim.new(0, 4)
+    local cpBtn = Instance.new("TextButton")
+    cpBtn.Size = UDim2.new(0, 55, 0, 20)
+    cpBtn.Position = UDim2.new(1, -60, 0, 4)
+    cpBtn.BackgroundColor3 = COLORS.accent
+    cpBtn.BorderSizePixel = 0
+    cpBtn.Text = "Copy"
+    cpBtn.TextColor3 = COLORS.text
+    cpBtn.TextSize = 10
+    cpBtn.Font = Enum.Font.GothamBold
+    cpBtn.AutoButtonColor = false
+    cpBtn.Parent = hdr
+    Instance.new("UICorner", cpBtn).CornerRadius = UDim.new(0, 4)
 
-    copyBtn.MouseEnter:Connect(function()
-        TweenService:Create(copyBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(71, 82, 196)}):Play()
-    end)
-    copyBtn.MouseLeave:Connect(function()
-        TweenService:Create(copyBtn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.accent}):Play()
-    end)
-
-    copyBtn.MouseButton1Click:Connect(function()
-        copyToClipboard(code)
-        copyBtn.Text = "Copied!"
-        task.delay(1.5, function()
-            if copyBtn.Parent then copyBtn.Text = "Copy" end
-        end)
+    cpBtn.MouseButton1Click:Connect(function()
+        copyText(code)
+        cpBtn.Text = "Copied!"
+        task.delay(1.5, function() if cpBtn.Parent then cpBtn.Text = "Copy" end end)
     end)
 
-    local codeBox = Instance.new("TextLabel")
-    codeBox.Size = UDim2.new(1, -16, 0, 0)
-    codeBox.AutomaticSize = Enum.AutomaticSize.Y
-    codeBox.Position = UDim2.new(0, 8, 0, 28)
-    codeBox.BackgroundColor3 = COLORS.darker
-    codeBox.BorderSizePixel = 0
-    codeBox.Text = "  " .. code:gsub("\n", "\n  ") .. "  "
-    codeBox.TextColor3 = COLORS.green
-    codeBox.TextSize = 10
-    codeBox.Font = Enum.Font.Code
-    codeBox.TextXAlignment = Enum.TextXAlignment.Left
-    codeBox.TextYAlignment = Enum.TextYAlignment.Top
-    codeBox.TextWrapped = true
-    codeBox.Parent = row
-    Instance.new("UICorner", codeBox).CornerRadius = UDim.new(0, 4)
-    local codePad = Instance.new("UIPadding", codeBox)
-    codePad.PaddingTop = UDim.new(0, 4)
-    codePad.PaddingBottom = UDim.new(0, 4)
-
-    return row
+    local box = Instance.new("TextLabel")
+    box.Size = UDim2.new(1, -16, 0, 0)
+    box.AutomaticSize = Enum.AutomaticSize.Y
+    box.Position = UDim2.new(0, 8, 0, 28)
+    box.BackgroundColor3 = COLORS.darker
+    box.BorderSizePixel = 0
+    box.Text = "  " .. code:gsub("\n", "\n  ") .. "  "
+    box.TextColor3 = COLORS.green
+    box.TextSize = 10
+    box.Font = Enum.Font.Code
+    box.TextXAlignment = Enum.TextXAlignment.Left
+    box.TextYAlignment = Enum.TextYAlignment.Top
+    box.TextWrapped = true
+    box.Parent = row
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+    local p = Instance.new("UIPadding", box)
+    p.PaddingTop = UDim.new(0, 4)
+    p.PaddingBottom = UDim.new(0, 4)
 end
 
-local function refreshDetectedList()
-    if #detectedEmotes == lastDetectedCount then return end
-    lastDetectedCount = #detectedEmotes
+function refreshDetected()
+    if #detectedEmotes == detectedCount then return end
+    detectedCount = #detectedEmotes
 
-    for _, child in ipairs(detectedList:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
+    for _, ch in ipairs(detList:GetChildren()) do
+        if ch:IsA("Frame") then ch:Destroy() end
     end
 
     if #detectedEmotes == 0 then
-        local empty = Instance.new("TextLabel")
-        empty.Size = UDim2.new(1, 0, 0, 40)
-        empty.BackgroundTransparency = 1
-        empty.Text = "Click an emote in-game to detect it"
-        empty.TextColor3 = COLORS.textMuted
-        empty.TextSize = 13
-        empty.Font = Enum.Font.Gotham
-        empty.Parent = detectedList
+        local e = Instance.new("TextLabel")
+        e.Size = UDim2.new(1, 0, 0, 40)
+        e.BackgroundTransparency = 1
+        e.Text = "Click an emote in-game to detect it\nor press Show All while playing one"
+        e.TextColor3 = COLORS.muted
+        e.TextSize = 13
+        e.Font = Enum.Font.Gotham
+        e.TextWrapped = true
+        e.Parent = detList
         return
     end
 
     statusBar.Text = "  " .. #detectedEmotes .. " emote(s) detected"
 
-    for i, emote in ipairs(detectedEmotes) do
-        createCodeRow(
-            detectedList,
-            emote.name .. "  (ID: " .. emote.animId .. ")  [Direct Play]",
-            emote.directCode,
-            COLORS.green,
-            i * 2 - 1
-        )
-
-        if emote.remoteCode then
-            createCodeRow(
-                detectedList,
-                emote.name .. "  [Remote Method]",
-                emote.remoteCode,
-                COLORS.orange,
-                i * 2
-            )
+    for i, em in ipairs(detectedEmotes) do
+        makeCodeRow(detList, em.name .. "  (ID: " .. em.animId .. ")  [Direct]", em.directCode, COLORS.green, i * 2 - 1)
+        if em.remoteCode then
+            makeCodeRow(detList, em.name .. "  [Remote]", em.remoteCode, COLORS.orange, i * 2)
         end
     end
 end
 
-local function refreshInventoryList()
-    for _, child in ipairs(inventoryList:GetChildren()) do
-        if child:IsA("Frame") or (child:IsA("TextLabel") and child.Name == "Empty") then child:Destroy() end
+local function refreshInventory()
+    for _, ch in ipairs(invList:GetChildren()) do
+        if ch:IsA("Frame") or (ch:IsA("TextLabel") and ch.Name == "Empty") then ch:Destroy() end
     end
 
-    local inventory = scanEmoteInventory()
+    local inv = scanInventory()
 
-    if #inventory == 0 then
-        local empty = Instance.new("TextLabel")
-        empty.Name = "Empty"
-        empty.Size = UDim2.new(1, 0, 0, 60)
-        empty.BackgroundTransparency = 1
-        empty.Text = "No emotes found in HumanoidDescription or Animate script.\nThis game may use custom emote systems."
-        empty.TextColor3 = COLORS.textMuted
-        empty.TextSize = 12
-        empty.Font = Enum.Font.Gotham
-        empty.TextWrapped = true
-        empty.Parent = inventoryList
+    if #inv == 0 then
+        local e = Instance.new("TextLabel")
+        e.Name = "Empty"
+        e.Size = UDim2.new(1, 0, 0, 50)
+        e.BackgroundTransparency = 1
+        e.Text = "No emotes found in HumanoidDescription\nor Animate script. Game may use custom system."
+        e.TextColor3 = COLORS.muted
+        e.TextSize = 12
+        e.Font = Enum.Font.Gotham
+        e.TextWrapped = true
+        e.Parent = invList
 
-        createCodeRow(
-            inventoryList,
-            "Tip: Find custom emote remotes",
-            '-- Search ReplicatedStorage for emote-related remotes:\nfor _, v in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do\n    if (v:IsA("RemoteEvent") or v:IsA("RemoteFunction")) and v.Name:lower():find("emote") then\n        print(v:GetFullName())\n    end\nend',
-            COLORS.accent,
-            1
-        )
-
-        createCodeRow(
-            inventoryList,
-            "Tip: List all current AnimationTracks",
-            '-- See what animations are loaded on your character:\nlocal animator = game.Players.LocalPlayer.Character.Humanoid:FindFirstChildOfClass("Animator")\nfor _, track in ipairs(animator:GetPlayingAnimationTracks()) do\n    print(track.Name, track.Animation.AnimationId, track.IsPlaying and "PLAYING" or "stopped")\nend',
-            COLORS.accent,
-            2
-        )
-
+        makeCodeRow(invList, "Tip: Find emote remotes", 'for _, v in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do\n    if (v:IsA("RemoteEvent") or v:IsA("RemoteFunction"))\n       and v.Name:lower():find("emote") then\n        print(v:GetFullName())\n    end\nend', COLORS.accent, 1)
         return
     end
 
+    local order = 0
     local bySource = {}
-    for _, item in ipairs(inventory) do
+    for _, item in ipairs(inv) do
         if not bySource[item.source] then bySource[item.source] = {} end
         table.insert(bySource[item.source], item)
     end
 
-    local order = 0
     for source, items in pairs(bySource) do
         order = order + 1
-        local divider = Instance.new("Frame")
-        divider.Size = UDim2.new(1, -4, 0, 22)
-        divider.BackgroundTransparency = 1
-        divider.LayoutOrder = order
-        divider.Parent = inventoryList
+        local div = Instance.new("Frame")
+        div.Size = UDim2.new(1, -4, 0, 22)
+        div.BackgroundTransparency = 1
+        div.LayoutOrder = order
+        div.Parent = invList
 
-        local line = Instance.new("Frame")
+        local line = Instance.new("Frame", div)
         line.Size = UDim2.new(1, 0, 0, 1)
         line.Position = UDim2.new(0, 0, 0.5, 0)
         line.BackgroundColor3 = COLORS.accent
         line.BackgroundTransparency = 0.5
         line.BorderSizePixel = 0
-        line.Parent = divider
 
-        local srcLabel = Instance.new("TextLabel")
-        srcLabel.Size = UDim2.new(0, 0, 1, 0)
-        srcLabel.AutomaticSize = Enum.AutomaticSize.X
-        srcLabel.Position = UDim2.new(0, 6, 0, 0)
-        srcLabel.BackgroundColor3 = COLORS.sidebar
-        srcLabel.BorderSizePixel = 0
-        srcLabel.Text = "  " .. source .. "  "
-        srcLabel.TextColor3 = COLORS.accent
-        srcLabel.TextSize = 11
-        srcLabel.Font = Enum.Font.GothamBold
-        srcLabel.Parent = divider
+        local sl = Instance.new("TextLabel", div)
+        sl.Size = UDim2.new(0, 0, 1, 0)
+        sl.AutomaticSize = Enum.AutomaticSize.X
+        sl.Position = UDim2.new(0, 6, 0, 0)
+        sl.BackgroundColor3 = COLORS.sidebar
+        sl.BorderSizePixel = 0
+        sl.Text = "  " .. source .. "  "
+        sl.TextColor3 = COLORS.accent
+        sl.TextSize = 11
+        sl.Font = Enum.Font.GothamBold
 
         for _, item in ipairs(items) do
             order = order + 1
-            createCodeRow(
-                inventoryList,
-                item.name .. "  (ID: " .. item.animId .. ")",
-                item.code,
-                COLORS.green,
-                order
-            )
+            makeCodeRow(invList, item.name .. "  (ID: " .. item.animId .. ")", item.code, COLORS.green, order)
         end
     end
 end
 
-inventoryTabBtn.MouseButton1Click:Connect(function()
+invTabBtn.MouseButton1Click:Connect(function()
     switchTab("inventory")
-    refreshInventoryList()
-end)
-
-closeBtn.MouseButton1Click:Connect(function()
-    screenGui.Visible = false
+    refreshInventory()
 end)
 
 ---------- INIT ----------
 
 hookRemotes()
-collectDefaultAnims()
+collectDefaults()
 
-if player.Character then
-    task.spawn(hookCharacter, player.Character)
-end
+if player.Character then task.spawn(hookCharacter, player.Character) end
 
-local charConn = player.CharacterAdded:Connect(function(char)
+local cc = player.CharacterAdded:Connect(function(char)
     task.spawn(function()
         hookCharacter(char)
-        -- re-collect defaults for new character
         task.wait(2)
-        collectDefaultAnims()
+        collectDefaults()
     end)
 end)
-table.insert(connections, charConn)
+table.insert(connections, cc)
 
--- actively scan playing animations (catches what AnimationPlayed misses)
-local function scanPlayingAnims()
-    pcall(function()
-        local char = player.Character
-        if not char then return end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum then return end
-        local animator = hum:FindFirstChildOfClass("Animator")
-        if not animator then return end
-
-        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-            onAnimationPlayed(track)
-        end
-    end)
-end
-
--- periodic refresh + active scanning
 task.spawn(function()
-    while active and screenGui and screenGui.Parent do
-        -- keep hooking
+    while active and gui and gui.Parent do
         if player.Character then
             local hum = player.Character:FindFirstChildOfClass("Humanoid")
             if hum then
                 hookHumanoid(hum)
-                local animator = hum:FindFirstChildOfClass("Animator")
-                if animator then hookAnimator(animator) end
+                local anim = hum:FindFirstChildOfClass("Animator")
+                if anim then hookAnimator(anim) end
             end
         end
-        -- active scan for playing animations
-        scanPlayingAnims()
-        -- refresh gui
-        if screenGui.Visible and currentTab == "detected" then
-            refreshDetectedList()
+        scanPlaying()
+        if gui.Visible and curTab == "detected" then
+            refreshDetected()
         end
         task.wait(1)
     end
@@ -864,16 +689,14 @@ end)
 
 local function cleanup()
     active = false
-    for _, c in ipairs(connections) do
-        pcall(function() c:Disconnect() end)
-    end
+    for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
     pcall(function()
         if oldNamecall and hookmetamethod then
             hookmetamethod(game, "__namecall", oldNamecall)
         end
     end)
-    pcall(function() screenGui:Destroy() end)
+    pcall(function() gui:Destroy() end)
 end
 
 if _G.SixZeroHubRegister then
