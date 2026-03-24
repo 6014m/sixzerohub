@@ -72,10 +72,16 @@ local function goInvisible()
     tweenCFrame(hrp, CFrame.new(box.Position + Vector3.new(0, 3, 0)))
     task.wait(0.5)
 
-    -- the trick: clone HRP, destroy original, WAIT, parent clone back
-    local newHRP = hrp:Clone()
+    -- destroy HRP, wait, then create new one
+    local savedCFrameHRP = hrp.CFrame
     hrp:Destroy()
-    wait() -- critical wait for server to register the deletion
+    wait()
+    local newHRP = Instance.new("Part")
+    newHRP.Name = "HumanoidRootPart"
+    newHRP.Size = Vector3.new(2, 2, 1)
+    newHRP.Transparency = 1
+    newHRP.CanCollide = false
+    newHRP.CFrame = savedCFrameHRP
     newHRP.Parent = char
 
     -- tween back down
