@@ -1,14 +1,15 @@
 -- [Spec] Auto Arrest
--- Tweens to targets, arrests with handcuffs, resets after each
+-- IY-style tween to targets, arrest with handcuffs, reset after each
 -- Priority: keycard holders > criminals > inmates
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
-local mouse = player:GetMouse()
 local connections = {}
 local active = true
+local tweenSpeed = -1
 
 local function equipHandcuffs()
     pcall(function()
@@ -26,17 +27,6 @@ local function equipHandcuffs()
             end
         end
     end)
-end
-
-local function getHandcuffs()
-    local char = player.Character
-    if not char then return nil end
-    for _, child in ipairs(char:GetChildren()) do
-        if child:IsA("Tool") and child.Name:lower():find("cuff") then
-            return child
-        end
-    end
-    return nil
 end
 
 local function getTeamName(plr)
@@ -68,78 +58,76 @@ local function getPriority(plr)
     return 3
 end
 
+local function getRoot(char)
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
 local function getTorso(plr)
     if not plr.Character then return nil end
     return plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
 end
 
-local function getRoot()
-    local char = player.Character
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart")
-end
+-- IY exact tween: TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear)
+local function tweenTo(targetRoot)
+    local root = getRoot(player.Character)
+    if not root or not targetRoot or not targetRoot.Parent then return end
 
-local currentTween = nil
-
-local function tweenTo(targetPart)
-    local root = getRoot()
-    if not root or not targetPart or not targetPart.Parent then return false end
-
-    local targetCF = targetPart.CFrame * CFrame.new(0, 0, 3)
-
-    if currentTween then
-        pcall(function() currentTween:Cancel() end)
-    end
-
-    local ok, err = pcall(function()
-        local tweenInfo = TweenInfo.new(0, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-        currentTween = TweenService:Create(root, tweenInfo, {CFrame = targetCF})
-        currentTween:Play()
-        currentTween.Completed:Wait()
+    -- unseat if sitting (IY does this)
+    pcall(function()
+        local hum = player.Character:FindFirstChildOfClass("Humanoid")
+        if hum and hum.SeatPart then
+            hum.Sit = false
+            task.wait(0.1)
+        end
     end)
-    currentTween = nil
 
-    if not ok then
-        -- fallback: direct CFrame set
-        pcall(function()
-            root.CFrame = targetCF
-        end)
-    end
-    return true
+    -- IY exact: TweenInfo.new(tweenSpeed, Linear), target CFrame + offset
+    local tween = TweenService:Create(
+        root,
+        TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear),
+        {CFrame = targetRoot.CFrame + Vector3.new(3, 1, 0)}
+    )
+    tween:Play()
+    tween.Completed:Wait()
+
+    -- IY does breakvelocity after
+    pcall(function()
+        root.Velocity = Vector3.new(0, 0, 0)
+        root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    end)
 end
 
-local function clickOnTarget(targetPart)
-    -- method 1: mousemoveabs + mouse1click (most executors)
-    local done = false
+local function arrestTarget(targetPlr)
+    -- method 1: mouse click on the target
     pcall(function()
         if mousemoveabs and mouse1click then
             local cam = workspace.CurrentCamera
-            local screenPos, onScreen = cam:WorldToScreenPoint(targetPart.Position)
-            if onScreen then
-                mousemoveabs(screenPos.X, screenPos.Y + 36)
-                task.wait()
-                mouse1click()
-                done = true
+            local torso = getTorso(targetPlr)
+            if torso then
+                local screenPos, onScreen = cam:WorldToScreenPoint(torso.Position)
+                if onScreen then
+                    mousemoveabs(screenPos.X, screenPos.Y + 36)
+                    task.wait()
+                    mouse1click()
+                end
             end
         end
     end)
 
-    -- method 2: activate the tool directly
-    if not done then
-        pcall(function()
-            local tool = getHandcuffs()
-            if tool then
-                tool:Activate()
-            end
-        end)
-    end
+    -- method 2: fire the remote directly as backup
+    pcall(function()
+        local torso = getTorso(targetPlr)
+        if torso then
+            ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
+        end
+    end)
 end
 
 local function resetCharacter()
     pcall(function()
-        local char = player.Character
-        if not char then return end
-        local hum = char:FindFirstChildOfClass("Humanoid")
+        local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.Health = 0 end
     end)
 
@@ -159,9 +147,9 @@ task.spawn(function()
         for _, plr in ipairs(Players:GetPlayers()) do
             local pri = getPriority(plr)
             if pri then
-                local torso = getTorso(plr)
-                if torso then
-                    table.insert(targets, { player = plr, torso = torso, priority = pri })
+                local root = getRoot(plr.Character)
+                if root then
+                    table.insert(targets, { player = plr, root = root, priority = pri })
                 end
             end
         end
@@ -176,20 +164,19 @@ task.spawn(function()
         for _, target in ipairs(targets) do
             if not active then break end
             if not target.player.Parent then continue end
-            if not target.torso or not target.torso.Parent then continue end
+            if not target.root or not target.root.Parent then continue end
             if not getPriority(target.player) then continue end
 
             equipHandcuffs()
             task.wait(0.1)
 
-            tweenTo(target.torso)
+            tweenTo(target.root)
             task.wait(0.1)
 
-            clickOnTarget(target.torso)
+            arrestTarget(target.player)
             task.wait(0.2)
 
             resetCharacter()
-
             equipHandcuffs()
         end
 
@@ -201,7 +188,6 @@ end)
 
 local function cleanup()
     active = false
-    if currentTween then pcall(function() currentTween:Cancel() end) end
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
 end
