@@ -186,19 +186,21 @@ task.spawn(function()
             if not target.root or not target.root.Parent then continue end
             if not getPriority(target.player) then continue end
 
-            -- tween to target
-            tweenTo(target.root)
-            task.wait(0.1)
-
-            -- try arresting, retry a few times
-            for attempt = 1, 5 do
+            -- keep tweening and arresting until confirmed or give up
+            for attempt = 1, 15 do
                 if not active then break end
                 if isArrested(target.player) then break end
 
+                -- re-grab their root each attempt since they're moving
+                local freshRoot = getRoot(target.player.Character)
+                if not freshRoot or not freshRoot.Parent then break end
+
+                tweenTo(freshRoot)
+                task.wait(0.05)
+
                 arrestTarget(target.player)
 
-                -- wait up to 1s to confirm arrest
-                if waitForArrest(target.player, 1) then
+                if waitForArrest(target.player, 0.3) then
                     break
                 end
             end
