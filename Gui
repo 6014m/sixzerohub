@@ -1344,6 +1344,20 @@ rebuildSortOrder(specContent)
 local MarketplaceService = game:GetService("MarketplaceService")
 local TeleportService = game:GetService("TeleportService")
 
+-- check if current game allows teleporting to other experiences
+local canTeleportOut = true
+pcall(function()
+    local ok, err = pcall(function()
+        TeleportService:Teleport(0, player)
+    end)
+    if not ok then
+        local errStr = tostring(err):lower()
+        if errStr:find("third") or errStr:find("not enabled") or errStr:find("disabled") or errStr:find("not allowed") then
+            canTeleportOut = false
+        end
+    end
+end)
+
 -- load server history
 local serverHistory = {}
 pcall(function()
@@ -2318,7 +2332,7 @@ local function refreshFavGamesListImpl()
             dragHandle.Parent = row
 
             local gameLbl = Instance.new("TextLabel")
-            gameLbl.Size = UDim2.new(1, (hasVip and -140 or -110), 0, 22)
+            gameLbl.Size = UDim2.new(1, (canTeleportOut and (hasVip and -140 or -110) or -40), 0, 22)
             gameLbl.Position = UDim2.new(0, 24, 0, 2)
             gameLbl.BackgroundTransparency = 1
             gameLbl.Text = entry.gameName or ("Place " .. tostring(entry.placeId))
@@ -2340,8 +2354,10 @@ local function refreshFavGamesListImpl()
             idLbl.TextXAlignment = Enum.TextXAlignment.Left
             idLbl.Parent = row
 
-            -- green arrow join button
+            -- join buttons (only if teleporting out is allowed)
             local btnOffset = hasVip and -140 or -110
+            if not canTeleportOut then btnOffset = -40 end
+            if canTeleportOut then
             local joinBtn = Instance.new("TextButton")
             joinBtn.Size = UDim2.new(0, 32, 0, 32)
             joinBtn.Position = UDim2.new(1, btnOffset, 0.5, -16)
@@ -2441,6 +2457,7 @@ local function refreshFavGamesListImpl()
                     end)
                 end)
             end
+            end -- canTeleportOut
 
             -- remove button
             local removeBtn = Instance.new("TextButton")
