@@ -1,7 +1,6 @@
 -- [Spec] Auto Arrest
--- Hides underground, noclip + detached camera
--- Uses InvokeServer return to verify arrest is possible before committing
--- Reads activity from HUD, only pursues inmates the server confirms are arrestable
+-- CFrame desync: server sees you next to target, other players see you far away
+-- Probe inmates with InvokeServer, only pursue if server confirms arrestable
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,33 +12,50 @@ local player = Players.LocalPlayer
 local connections = {}
 local active = true
 local tweenSpeed = -1
-local noclipEnabled = false
 
--- inmates confirmed not arrestable right now, skip for a while
-local skipList = {} -- [playerName] = os.clock()
+local skipList = {}
 local SKIP_DURATION = 20
 
----------- NOCLIP ----------
+---------- CFRAME DESYNC ----------
 
-local noclipConn = RunService.Stepped:Connect(function()
-    if not active or not noclipEnabled then return end
-    local char = player.Character
-    if not char then return end
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-        end
-    end
+local desyncEnabled = false
+local realCFrame = nil -- where the server thinks we are (next to target)
+local fakeCFrame = nil -- where we visually appear (far away)
+local FAKE_OFFSET = Vector3.new(0, 0, 9999) -- visual body way off in the distance
+
+-- Stepped runs before physics replication: set REAL position so server sees it
+local steppedConn = RunService.Stepped:Connect(function()
+    if not active or not desyncEnabled or not realCFrame then return end
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    root.CFrame = realCFrame
 end)
-table.insert(connections, noclipConn)
+table.insert(connections, steppedConn)
 
----------- ACTIVITY ----------
+-- RenderStepped runs before render: offset to FAKE position so others see it
+local renderConn = RunService.RenderStepped:Connect(function()
+    if not active or not desyncEnabled or not realCFrame then return end
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    root.CFrame = realCFrame + FAKE_OFFSET
+end)
+table.insert(connections, renderConn)
 
-local function getCurrentActivity()
-    local ok, text = pcall(function()
-        return player.PlayerGui.Home.hud.Topbar.titleBar.Title.Text
+local function startDesync(targetCFrame)
+    realCFrame = targetCFrame
+    desyncEnabled = true
+end
+
+local function stopDesync()
+    desyncEnabled = false
+    -- snap back to real position
+    pcall(function()
+        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if root and realCFrame then
+            root.CFrame = realCFrame
+        end
     end)
-    return ok and text and text:lower() or ""
+    realCFrame = nil
 end
 
 ---------- TOOLS ----------
@@ -94,8 +110,7 @@ end
 
 local function isSkipped(plr)
     local t = skipList[plr.Name]
-    if t and os.clock() - t < SKIP_DURATION then return true end
-    return false
+    return t and os.clock() - t < SKIP_DURATION
 end
 
 local function isArrested(plr)
@@ -120,26 +135,6 @@ local function isArrested(plr)
     return false
 end
 
----------- ARREST PROBE ----------
-
--- try the remote once and check if it actually did anything
--- InvokeServer returns a value - if arrest fails the server tells us
-local function tryArrestRemote(plr)
-    local torso = plr.Character and (plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso"))
-    if not torso then return false end
-
-    local result = nil
-    local ok = pcall(function()
-        result = ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
-    end)
-
-    -- give it a moment to register
-    task.wait(0.3)
-
-    -- check if arrest actually went through
-    return isArrested(plr)
-end
-
 ---------- MOVEMENT ----------
 
 local function getRoot(char)
@@ -147,7 +142,19 @@ local function getRoot(char)
     return char:FindFirstChild("HumanoidRootPart")
 end
 
-local function tweenUnder(targetRoot)
+local function getTorso(plr)
+    if not plr.Character then return nil end
+    return plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
+end
+
+-- move real position next to target (desync handles the visual)
+local function moveToTarget(targetRoot)
+    if not targetRoot or not targetRoot.Parent then return end
+    realCFrame = targetRoot.CFrame + Vector3.new(3, 0, 0)
+end
+
+-- IY tween for when desync is off (initial approach)
+local function tweenTo(targetRoot)
     local root = getRoot(player.Character)
     if not root or not targetRoot or not targetRoot.Parent then return end
 
@@ -159,16 +166,10 @@ local function tweenUnder(targetRoot)
         end
     end)
 
-    local targetCF = CFrame.new(
-        targetRoot.Position.X + 3,
-        targetRoot.Position.Y - 15,
-        targetRoot.Position.Z
-    )
-
     local tween = TweenService:Create(
         root,
         TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear),
-        {CFrame = targetCF}
+        {CFrame = targetRoot.CFrame + Vector3.new(3, 0, 0)}
     )
     tween:Play()
     tween.Completed:Wait()
@@ -180,60 +181,47 @@ local function tweenUnder(targetRoot)
     end)
 end
 
----------- CLICK ----------
+---------- ARREST ----------
 
-local function clickAt(x, y)
+local function clickOnPlayer(plr)
+    local torso = getTorso(plr)
+    if not torso then return end
+    local cam = workspace.CurrentCamera
+    local screenPos, onScreen = cam:WorldToScreenPoint(torso.Position)
+    if not onScreen then return end
     pcall(function()
-        VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
+        VIM:SendMouseButtonEvent(screenPos.X, screenPos.Y + 36, 0, true, game, 1)
         task.wait()
-        VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+        VIM:SendMouseButtonEvent(screenPos.X, screenPos.Y + 36, 0, false, game, 1)
     end)
     pcall(function()
         if mousemoveabs and mouse1click then
-            mousemoveabs(x, y)
+            mousemoveabs(screenPos.X, screenPos.Y + 36)
             task.wait()
             mouse1click()
         end
     end)
 end
 
-local function clickOnPlayer(plr)
-    local torso = plr.Character and (plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso"))
-    if not torso then return end
-    local cam = workspace.CurrentCamera
-    local screenPos, onScreen = cam:WorldToScreenPoint(torso.Position)
-    if not onScreen then return end
-    clickAt(screenPos.X, screenPos.Y + 36)
-end
-
----------- CAMERA ----------
-
-local function setupCamera()
+local function fireArrestRemote(plr)
     pcall(function()
-        workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+        local torso = getTorso(plr)
+        if torso then
+            ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
+        end
     end)
 end
 
-local function pointCameraAt(targetPos)
-    pcall(function()
-        local camPos = targetPos + Vector3.new(0, 15, 15)
-        workspace.CurrentCamera.CFrame = CFrame.new(camPos, targetPos)
-    end)
-end
-
-local function resetCamera()
-    pcall(function()
-        local cam = workspace.CurrentCamera
-        cam.CameraType = Enum.CameraType.Custom
-        cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
-    end)
+local function tryArrestProbe(plr)
+    fireArrestRemote(plr)
+    task.wait(0.3)
+    return isArrested(plr)
 end
 
 ---------- RESET ----------
 
 local function resetCharacter()
-    noclipEnabled = false
-    resetCamera()
+    stopDesync()
     pcall(function()
         local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.Health = 0 end
@@ -251,13 +239,10 @@ end
 
 task.spawn(function()
     while active do
-        -- build target list
         local targets = {}
         for _, plr in ipairs(Players:GetPlayers()) do
-            if plr == player then continue end
-            if not plr.Character then continue end
-            if isSkipped(plr) then continue end
-            if isArrested(plr) then continue end
+            if plr == player or not plr.Character then continue end
+            if isSkipped(plr) or isArrested(plr) then continue end
 
             local crim = isCriminal(plr)
             local inm = isInmate(plr)
@@ -266,22 +251,18 @@ task.spawn(function()
             local root = getRoot(plr.Character)
             if not root then continue end
 
-            -- criminals always go in, with priority
             if crim then
                 local pri = hasKeycard(plr) and 1 or 2
                 table.insert(targets, { player = plr, root = root, priority = pri, isCriminal = true })
             elseif inm then
-                -- for inmates: probe with remote first to see if server allows arrest
-                -- only add if the probe succeeds
-                table.insert(targets, { player = plr, root = root, priority = 10, isCriminal = false, needsProbe = true })
+                table.insert(targets, { player = plr, root = root, priority = 10, isCriminal = false })
             end
         end
 
         table.sort(targets, function(a, b) return a.priority < b.priority end)
 
         if #targets == 0 then
-            noclipEnabled = false
-            resetCamera()
+            stopDesync()
             task.wait(1)
             continue
         end
@@ -293,35 +274,35 @@ task.spawn(function()
             if not target.player.Parent then continue end
             if isArrested(target.player) then continue end
 
-            -- for inmates, probe first: tween close, try remote once
-            -- if server says no, skip them
-            if target.needsProbe then
-                noclipEnabled = true
+            -- for inmates: probe once to check if arrestable
+            if not target.isCriminal then
+                -- tween close first
                 local freshRoot = getRoot(target.player.Character)
                 if not freshRoot then continue end
-
-                tweenUnder(freshRoot)
+                tweenTo(freshRoot)
                 task.wait(0.1)
 
-                local probeWorked = tryArrestRemote(target.player)
-                if not probeWorked then
-                    -- server didn't arrest them, they're in a safe zone
+                if not tryArrestProbe(target.player) then
                     skipList[target.player.Name] = os.clock()
-                    noclipEnabled = false
                     continue
                 else
-                    -- probe arrested them! confirm and reset
-                    noclipEnabled = false
-                    resetCamera()
+                    -- probe arrested them, reset cooldown
                     resetCharacter()
                     equipHandcuffs()
                     continue
                 end
             end
 
-            -- criminals: full pursuit
-            noclipEnabled = true
-            setupCamera()
+            -- criminals: full desync pursuit
+            -- first tween close, then enable desync
+            local freshRoot = getRoot(target.player.Character)
+            if not freshRoot then continue end
+
+            tweenTo(freshRoot)
+            task.wait(0.1)
+
+            -- now enable desync: real pos stays near target, visual goes far away
+            startDesync(freshRoot.CFrame + Vector3.new(3, 0, 0))
 
             local arrested = false
             for attempt = 1, 15 do
@@ -331,24 +312,17 @@ task.spawn(function()
                     break
                 end
 
-                local freshRoot = getRoot(target.player.Character)
-                if not freshRoot or not freshRoot.Parent then break end
+                -- update real position to follow moving target
+                local updatedRoot = getRoot(target.player.Character)
+                if not updatedRoot or not updatedRoot.Parent then break end
+                moveToTarget(updatedRoot)
 
-                tweenUnder(freshRoot)
-                task.wait(0.05)
-
-                pointCameraAt(freshRoot.Position)
                 task.wait(0.05)
 
                 -- click + remote
                 clickOnPlayer(target.player)
                 task.wait(0.1)
-                pcall(function()
-                    local torso = target.player.Character:FindFirstChild("Torso") or target.player.Character:FindFirstChild("UpperTorso")
-                    if torso then
-                        ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
-                    end
-                end)
+                fireArrestRemote(target.player)
 
                 task.wait(0.3)
                 if isArrested(target.player) then
@@ -357,8 +331,7 @@ task.spawn(function()
                 end
             end
 
-            noclipEnabled = false
-            resetCamera()
+            stopDesync()
 
             if arrested then
                 resetCharacter()
@@ -374,8 +347,7 @@ end)
 
 local function cleanup()
     active = false
-    noclipEnabled = false
-    resetCamera()
+    stopDesync()
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
 end
