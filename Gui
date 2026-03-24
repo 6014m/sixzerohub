@@ -1936,17 +1936,36 @@ pcall(function()
         local raw = readfile(FAV_GAMES_FILE)
         local decoded = HttpService:JSONDecode(raw)
         if type(decoded) == "table" then
+            -- restore placeIds from strings back to numbers
+            for _, entry in ipairs(decoded) do
+                if entry.type ~= "divider" and entry.placeId then
+                    entry.placeId = tonumber(entry.placeId) or entry.placeId
+                end
+            end
             favGamesList = decoded
         end
     end
 end)
 
 local function saveFavGames()
-    pcall(function()
-        if writefile then
-            writefile(FAV_GAMES_FILE, HttpService:JSONEncode(favGamesList))
+    local ok, err = pcall(function()
+        if not writefile then return end
+        -- sanitize for JSON: convert placeId to string to avoid precision loss
+        local toSave = {}
+        for _, entry in ipairs(favGamesList) do
+            if entry.type == "divider" then
+                table.insert(toSave, { type = "divider", name = entry.name or "Section" })
+            else
+                table.insert(toSave, {
+                    placeId = tostring(entry.placeId),
+                    gameName = entry.gameName or "",
+                    vipLink = entry.vipLink,
+                })
+            end
         end
+        writefile(FAV_GAMES_FILE, HttpService:JSONEncode(toSave))
     end)
+    if not ok then warn("[SixZeroHub] Failed to save fav games: " .. tostring(err)) end
 end
 
 local refreshFavGamesList -- forward declare
@@ -2099,7 +2118,7 @@ addConfirmBtn.MouseButton1Click:Connect(function()
 
     -- check for duplicate
     for _, entry in ipairs(favGamesList) do
-        if entry.placeId == placeId then
+        if entry.placeId and tonumber(entry.placeId) == placeId then
             addDialogError.Text = "Game already in favorites"
             return
         end
