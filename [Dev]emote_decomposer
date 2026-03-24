@@ -356,6 +356,100 @@ titleLbl.Font = Enum.Font.GothamBold
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 titleLbl.Parent = header
 
+-- "Show All" button - dumps every animation on the character, ignoring filters
+local showAllBtn = Instance.new("TextButton")
+showAllBtn.Size = UDim2.new(0, 60, 0, 22)
+showAllBtn.Position = UDim2.new(1, -100, 0, 7)
+showAllBtn.BackgroundColor3 = COLORS.orange
+showAllBtn.BorderSizePixel = 0
+showAllBtn.Text = "Show All"
+showAllBtn.TextColor3 = COLORS.darker
+showAllBtn.TextSize = 10
+showAllBtn.Font = Enum.Font.GothamBold
+showAllBtn.AutoButtonColor = false
+showAllBtn.Parent = header
+Instance.new("UICorner", showAllBtn).CornerRadius = UDim.new(0, 4)
+
+local showAllTooltip = Instance.new("TextLabel")
+showAllTooltip.Size = UDim2.new(0, 160, 0, 20)
+showAllTooltip.Position = UDim2.new(0.5, -80, 1, 4)
+showAllTooltip.BackgroundColor3 = COLORS.darker
+showAllTooltip.BorderSizePixel = 0
+showAllTooltip.Text = "Show ALL anims (ignore filters)"
+showAllTooltip.TextColor3 = COLORS.text
+showAllTooltip.TextSize = 10
+showAllTooltip.Font = Enum.Font.Gotham
+showAllTooltip.Visible = false
+showAllTooltip.ZIndex = 10
+showAllTooltip.Parent = showAllBtn
+Instance.new("UICorner", showAllTooltip).CornerRadius = UDim.new(0, 4)
+
+showAllBtn.MouseEnter:Connect(function()
+    showAllTooltip.Visible = true
+    TweenService:Create(showAllBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(220, 140, 0)}):Play()
+end)
+showAllBtn.MouseLeave:Connect(function()
+    showAllTooltip.Visible = false
+    TweenService:Create(showAllBtn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.orange}):Play()
+end)
+
+showAllBtn.MouseButton1Click:Connect(function()
+    pcall(function()
+        local char = player.Character
+        if not char then warn("[EmoteDecomposer] No character") return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then warn("[EmoteDecomposer] No humanoid") return end
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if not animator then warn("[EmoteDecomposer] No animator") return end
+
+        local tracks = animator:GetPlayingAnimationTracks()
+        warn("[EmoteDecomposer] === SHOW ALL: " .. #tracks .. " tracks ===")
+
+        local found = 0
+        for _, track in ipairs(tracks) do
+            local anim = track.Animation
+            if anim then
+                local animId = tostring(anim.AnimationId)
+                local idNum = animId:match("%d+")
+                if idNum then
+                    found = found + 1
+                    local animName = anim.Name ~= "Animation" and anim.Name ~= "" and anim.Name or ("Anim_" .. idNum)
+                    local isDef = isDefaultAnim(idNum)
+                    warn("  " .. animName .. " | ID: " .. idNum .. " | Playing: " .. tostring(track.IsPlaying) .. " | Priority: " .. tostring(track.Priority) .. (isDef and " [DEFAULT]" or " [CUSTOM]"))
+
+                    -- force-add custom ones even if already seen
+                    if not isDef and not seenAnimIds[idNum] then
+                        seenAnimIds[idNum] = true
+
+                        local directCode = string.format(
+                            "local anim = Instance.new("Animation")
+anim.AnimationId = "rbxassetid://%s"
+local track = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator"):LoadAnimation(anim)
+track:Play()",
+                            idNum
+                        )
+
+                        table.insert(detectedEmotes, 1, {
+                            animId = idNum,
+                            name = animName,
+                            directCode = directCode,
+                            remoteCode = nil,
+                            time = os.clock(),
+                        })
+                    end
+                end
+            end
+        end
+
+        if found == 0 then
+            warn("[EmoteDecomposer] No animation tracks found at all")
+        end
+
+        lastDetectedCount = -1 -- force refresh
+        refreshDetectedList()
+    end)
+end)
+
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 26, 0, 26)
 closeBtn.Position = UDim2.new(1, -31, 0, 5)
@@ -728,16 +822,39 @@ local charConn = player.CharacterAdded:Connect(function(char)
 end)
 table.insert(connections, charConn)
 
--- periodic refresh + re-hook on respawn
+-- actively scan playing animations (catches what AnimationPlayed misses)
+local function scanPlayingAnims()
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if not animator then return end
+
+        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+            onAnimationPlayed(track)
+        end
+    end)
+end
+
+-- periodic refresh + active scanning
 task.spawn(function()
     while active and screenGui and screenGui.Parent do
-        if screenGui.Visible and currentTab == "detected" then
-            refreshDetectedList()
-        end
-        -- keep hooking in case character respawns
+        -- keep hooking
         if player.Character then
             local hum = player.Character:FindFirstChildOfClass("Humanoid")
-            if hum then hookHumanoid(hum) end
+            if hum then
+                hookHumanoid(hum)
+                local animator = hum:FindFirstChildOfClass("Animator")
+                if animator then hookAnimator(animator) end
+            end
+        end
+        -- active scan for playing animations
+        scanPlayingAnims()
+        -- refresh gui
+        if screenGui.Visible and currentTab == "detected" then
+            refreshDetectedList()
         end
         task.wait(1)
     end
