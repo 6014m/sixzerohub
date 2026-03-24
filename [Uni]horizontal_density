@@ -49,6 +49,14 @@ local function onCharacterAdded(character)
 
     local lastCFrame = hrp.CFrame
     local lastTick = tick()
+    local skipFrames = 5 -- grace period after spawn
+
+    -- reset tracking on state changes (teleports often change state)
+    connections[#connections + 1] = humanoid.StateChanged:Connect(function()
+        lastCFrame = hrp.CFrame
+        lastTick = tick()
+        skipFrames = 3
+    end)
 
     connections[#connections + 1] = RunService.Heartbeat:Connect(function()
         if not hrp or not hrp.Parent or not humanoid or not humanoid.Parent then return end
@@ -76,6 +84,22 @@ local function onCharacterAdded(character)
         -- detect and revert CFrame-based horizontal pushing
         local now = tick()
         local dt = now - lastTick
+
+        -- skip CFrame correction during grace period or lag spikes
+        if skipFrames > 0 then
+            skipFrames = skipFrames - 1
+            lastCFrame = hrp.CFrame
+            lastTick = now
+            return
+        end
+
+        if dt > 0.5 then
+            -- lag spike or loading, reset tracking
+            lastCFrame = hrp.CFrame
+            lastTick = now
+            return
+        end
+
         if dt > 0 and lastCFrame then
             local posDelta = hrp.CFrame.Position - lastCFrame.Position
             local expectedX = intendedX * dt
@@ -84,12 +108,11 @@ local function onCharacterAdded(character)
             local cframePushX = posDelta.X - expectedX
             local cframePushZ = posDelta.Z - expectedZ
 
-            -- if theres a big unexpected horizontal shift, revert it
-            -- but allow real game teleports (large distances)
             local threshold = walkSpeed * dt * 1.5
             local pushDist = math.sqrt(cframePushX * cframePushX + cframePushZ * cframePushZ)
-            local teleportThreshold = 50
-            if pushDist > threshold and pushDist < teleportThreshold then
+
+            -- only revert small-medium pushes; large shifts are game teleports
+            if pushDist > threshold and pushDist < 30 then
                 hrp.CFrame = hrp.CFrame - Vector3.new(
                     cframePushX * STRENGTH,
                     0,
