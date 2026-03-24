@@ -1,5 +1,5 @@
 -- [Spec] Auto Arrest
--- Automatically arrests all criminals and inmates
+-- Spam-arrests all criminals/inmates nearby, no teleporting
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,97 +8,35 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local connections = {}
 local active = true
-local ARREST_COOLDOWN = 0.5
+local ARREST_DELAY = 0.15
 
-local function getTargets()
-    local targets = {}
+local function isTarget(plr)
+    if plr == player or not plr.Character then return false end
+    local teamName = ""
+    pcall(function() teamName = tostring(plr.Team and plr.Team.Name or ""):lower() end)
+    return teamName:find("criminal") or teamName:find("inmate") or teamName:find("prisoner")
+end
+
+local function getTorso(plr)
+    if not plr.Character then return nil end
+    return plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
+end
+
+local conn = RunService.Heartbeat:Connect(function()
+    if not active then return end
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character then
-            local teamName = ""
-            pcall(function() teamName = tostring(plr.Team and plr.Team.Name or ""):lower() end)
-            if teamName:find("criminal") or teamName:find("inmate") or teamName:find("prisoner") then
-                local torso = plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
-                if torso then
-                    table.insert(targets, { player = plr, torso = torso, name = plr.Name })
-                end
+        if not active then break end
+        if isTarget(plr) then
+            local torso = getTorso(plr)
+            if torso then
+                pcall(function()
+                    ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
+                end)
             end
         end
-    end
-    return targets
-end
-
-local function teleportTo(targetCFrame)
-    local char = player.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    root.CFrame = targetCFrame
-end
-
-local function arrest(torso)
-    local ok, err = pcall(function()
-        ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
-    end)
-    return ok
-end
-
-local function respawn()
-    local char = player.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.Health = 0
-    end
-    -- wait for respawn
-    if not player.CharacterAdded:Wait() then return end
-    task.wait(1)
-    -- wait for humanoid to be ready
-    local newChar = player.Character
-    if newChar then
-        newChar:WaitForChild("HumanoidRootPart", 5)
-        task.wait(0.5)
-    end
-end
-
--- main loop
-task.spawn(function()
-    while active do
-        local targets = getTargets()
-
-        if #targets == 0 then
-            task.wait(2)
-            continue
-        end
-
-        for _, target in ipairs(targets) do
-            if not active then break end
-
-            -- check target still valid
-            if not target.player.Parent then continue end
-            if not target.torso or not target.torso.Parent then continue end
-
-            -- check still on criminal/inmate team
-            local teamName = ""
-            pcall(function() teamName = tostring(target.player.Team and target.player.Team.Name or ""):lower() end)
-            if not (teamName:find("criminal") or teamName:find("inmate") or teamName:find("prisoner")) then
-                continue
-            end
-
-            -- teleport to target
-            teleportTo(target.torso.CFrame * CFrame.new(0, 0, 3))
-            task.wait(0.2)
-
-            -- attempt arrest
-            arrest(target.torso)
-            task.wait(ARREST_COOLDOWN)
-
-            -- respawn to reset cooldown
-            respawn()
-        end
-
-        task.wait(1)
     end
 end)
+table.insert(connections, conn)
 
 ---------- SIXZEROHUB REGISTRATION ----------
 
