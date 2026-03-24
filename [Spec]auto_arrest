@@ -1,20 +1,73 @@
 -- [Spec] Auto Arrest
--- IY-style tween, click arrest, reset after confirmed arrest
--- Priority: keycard holders > criminals > inmates (only if in restricted area)
--- Criminals are always arrestable, inmates only sometimes
+-- Hides underground below targets, noclip + detached camera
+-- Reads activity from HUD to know when inmates are arrestable
+-- Priority: keycard holders > criminals > out-of-place inmates
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local VIM = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 local connections = {}
 local active = true
 local tweenSpeed = -1
+local noclipEnabled = false
 
--- inmates who failed arrest are probably in a safe zone, skip them temporarily
-local skipList = {} -- [playerName] = os.clock() when we gave up
+local skipList = {}
+
+---------- NOCLIP ----------
+
+local function setNoclip(state)
+    noclipEnabled = state
+end
+
+local noclipConn = RunService.Stepped:Connect(function()
+    if not active then return end
+    if not noclipEnabled then return end
+    local char = player.Character
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+end)
+table.insert(connections, noclipConn)
+
+---------- ACTIVITY DETECTION ----------
+
+local function getCurrentActivity()
+    local ok, text = pcall(function()
+        return player.PlayerGui.Home.hud.Topbar.titleBar.Title.Text
+    end)
+    if ok and text then
+        return text:lower()
+    end
+    return ""
+end
+
+-- Prison Life schedule zones:
+-- "yard" = inmates must be in yard area
+-- "lunch" / "eat" = inmates must be in cafeteria
+-- "lights out" / "night" / "bed" / "sleep" = inmates must be in cells
+-- "roll call" / "morning" = inmates must be at roll call area
+-- "free time" / "leisure" = inmates can roam most indoor areas
+-- If an inmate is NOT where they should be during these, they can be arrested
+
+local function isRestrictiveTime()
+    local activity = getCurrentActivity()
+    -- during these activities, inmates have specific required locations
+    -- so more of them will be out of place and arrestable
+    if activity:find("yard") then return true, "yard" end
+    if activity:find("lunch") or activity:find("eat") or activity:find("dinner") or activity:find("breakfast") then return true, "cafeteria" end
+    if activity:find("night") or activity:find("lights") or activity:find("bed") or activity:find("sleep") then return true, "cells" end
+    if activity:find("roll") or activity:find("morning") then return true, "rollcall" end
+    return false, "free"
+end
+
+---------- TOOLS ----------
 
 local function equipHandcuffs()
     pcall(function()
@@ -33,6 +86,8 @@ local function equipHandcuffs()
         end
     end)
 end
+
+---------- PLAYER CHECKS ----------
 
 local function getTeamName(plr)
     local name = ""
@@ -67,7 +122,8 @@ local function hasWeapon(plr)
     for _, child in ipairs(plr.Character:GetChildren()) do
         if child:IsA("Tool") then
             local n = child.Name:lower()
-            if n:find("gun") or n:find("knife") or n:find("ak") or n:find("m4") or n:find("pistol") or n:find("shotgun") or n:find("remington") then
+            if n:find("gun") or n:find("knife") or n:find("ak") or n:find("m4")
+                or n:find("pistol") or n:find("shotgun") or n:find("remington") then
                 return true
             end
         end
@@ -79,12 +135,12 @@ local function getPriority(plr)
     if plr == player then return nil end
     if not plr.Character then return nil end
 
-    local criminal = isCriminal(plr)
-    local inmate = isInmate(plr)
-    if not criminal and not inmate then return nil end
+    local crim = isCriminal(plr)
+    local inm = isInmate(plr)
+    if not crim and not inm then return nil end
 
-    -- skip inmates we recently failed to arrest (probably in safe zone)
-    if inmate and not criminal then
+    -- skip inmates we recently failed on
+    if inm and not crim then
         local skipTime = skipList[plr.Name]
         if skipTime and os.clock() - skipTime < 15 then
             return nil
@@ -92,11 +148,18 @@ local function getPriority(plr)
     end
 
     if hasKeycard(plr) then return 1 end
-    if criminal then return 2 end
-    -- inmates with weapons are more likely in restricted area
+    if crim then return 2 end
     if hasWeapon(plr) then return 3 end
-    return 4
+
+    -- during restrictive times, inmates are more likely arrestable
+    local restrictive = isRestrictiveTime()
+    if restrictive then return 4 end
+
+    -- during free time, only try inmates who look suspicious (near exits, outside, etc)
+    return 5
 end
+
+---------- MOVEMENT ----------
 
 local function getRoot(char)
     if not char then return nil end
@@ -108,37 +171,8 @@ local function getTorso(plr)
     return plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
 end
 
--- check if player got arrested: team changed OR arrest gui/timer appeared on them
-local function isArrested(plr)
-    if not plr.Parent then return true end
-    -- team changed off criminal/inmate
-    local team = getTeamName(plr)
-    if not (team:find("criminal") or team:find("inmate") or team:find("prisoner")) then
-        return true
-    end
-    -- check for arrest timer/billboard gui on their character
-    if plr.Character then
-        local head = plr.Character:FindFirstChild("Head")
-        if head then
-            for _, child in ipairs(head:GetChildren()) do
-                if child:IsA("BillboardGui") then
-                    -- arrest timer gui appeared
-                    return true
-                end
-            end
-        end
-        -- also check character root
-        for _, child in ipairs(plr.Character:GetChildren()) do
-            if child:IsA("BillboardGui") and child.Name ~= "NameTag" then
-                return true
-            end
-        end
-    end
-    return false
-end
-
--- IY exact tween
-local function tweenTo(targetRoot)
+-- IY tween but go UNDERGROUND below the target
+local function tweenUnder(targetRoot)
     local root = getRoot(player.Character)
     if not root or not targetRoot or not targetRoot.Parent then return end
 
@@ -150,10 +184,17 @@ local function tweenTo(targetRoot)
         end
     end)
 
+    -- position underground below target
+    local targetCF = CFrame.new(
+        targetRoot.Position.X + 3,
+        targetRoot.Position.Y - 15,
+        targetRoot.Position.Z
+    )
+
     local tween = TweenService:Create(
         root,
         TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear),
-        {CFrame = targetRoot.CFrame + Vector3.new(3, 1, 0)}
+        {CFrame = targetCF}
     )
     tween:Play()
     tween.Completed:Wait()
@@ -165,14 +206,37 @@ local function tweenTo(targetRoot)
     end)
 end
 
+---------- ARREST ----------
+
+local function isArrested(plr)
+    if not plr.Parent then return true end
+    local team = getTeamName(plr)
+    if not (team:find("criminal") or team:find("inmate") or team:find("prisoner")) then
+        return true
+    end
+    -- check for arrest timer billboard gui
+    if plr.Character then
+        local head = plr.Character:FindFirstChild("Head")
+        if head then
+            for _, child in ipairs(head:GetChildren()) do
+                if child:IsA("BillboardGui") then return true end
+            end
+        end
+        for _, child in ipairs(plr.Character:GetChildren()) do
+            if child:IsA("BillboardGui") and child.Name ~= "NameTag" then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function clickAt(x, y)
-    -- VirtualInputManager: real mouse emulation
     pcall(function()
         VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
         task.wait()
         VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
     end)
-    -- mousemoveabs + mouse1click backup
     pcall(function()
         if mousemoveabs and mouse1click then
             mousemoveabs(x, y)
@@ -194,6 +258,7 @@ local function arrestTarget(targetPlr)
 end
 
 local function resetCharacter()
+    setNoclip(false)
     pcall(function()
         local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.Health = 0 end
@@ -207,7 +272,35 @@ local function resetCharacter()
     end
 end
 
--- main loop
+---------- CAMERA CONTROL ----------
+
+-- detach camera so it stays at a good viewing angle while character is underground
+local function setupCamera()
+    pcall(function()
+        local cam = workspace.CurrentCamera
+        cam.CameraType = Enum.CameraType.Scriptable
+    end)
+end
+
+local function pointCameraAt(targetPos)
+    pcall(function()
+        local cam = workspace.CurrentCamera
+        -- position camera above and slightly behind the target for good view
+        local camPos = targetPos + Vector3.new(0, 15, 15)
+        cam.CFrame = CFrame.new(camPos, targetPos)
+    end)
+end
+
+local function resetCamera()
+    pcall(function()
+        local cam = workspace.CurrentCamera
+        cam.CameraType = Enum.CameraType.Custom
+        cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
+    end)
+end
+
+---------- MAIN LOOP ----------
+
 task.spawn(function()
     while active do
         local targets = {}
@@ -224,6 +317,8 @@ task.spawn(function()
         table.sort(targets, function(a, b) return a.priority < b.priority end)
 
         if #targets == 0 then
+            setNoclip(false)
+            resetCamera()
             task.wait(1)
             continue
         end
@@ -237,9 +332,11 @@ task.spawn(function()
             if not getPriority(target.player) then continue end
 
             local isCrim = isCriminal(target.player)
-            -- criminals get more retries since they're always arrestable
-            -- inmates get fewer since they might be in a safe zone
             local maxAttempts = isCrim and 15 or 3
+
+            -- enable noclip and detach camera
+            setNoclip(true)
+            setupCamera()
 
             local arrested = false
             for attempt = 1, maxAttempts do
@@ -252,25 +349,32 @@ task.spawn(function()
                 local freshRoot = getRoot(target.player.Character)
                 if not freshRoot or not freshRoot.Parent then break end
 
-                tweenTo(freshRoot)
+                -- go underground below them
+                tweenUnder(freshRoot)
+                task.wait(0.05)
+
+                -- point camera at target so click lands on them
+                pointCameraAt(freshRoot.Position)
                 task.wait(0.05)
 
                 arrestTarget(target.player)
-
-                -- quick check
                 task.wait(0.3)
+
                 if isArrested(target.player) then
                     arrested = true
                     break
                 end
             end
 
+            -- restore camera between targets
+            resetCamera()
+            setNoclip(false)
+
             if arrested then
-                -- confirmed arrest, reset to clear cooldown
                 resetCharacter()
                 equipHandcuffs()
+                setNoclip(false)
             elseif not isCrim then
-                -- inmate couldn't be arrested, probably in safe zone, skip for 15s
                 skipList[target.player.Name] = os.clock()
             end
         end
@@ -283,6 +387,8 @@ end)
 
 local function cleanup()
     active = false
+    setNoclip(false)
+    resetCamera()
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
 end
