@@ -1,7 +1,7 @@
 -- [Spec] Auto Arrest
--- Hides underground below targets, noclip + detached camera
--- Reads activity from HUD to know when inmates are arrestable
--- Priority: keycard holders > criminals > out-of-place inmates
+-- Hides underground, noclip + detached camera
+-- Uses InvokeServer return to verify arrest is possible before committing
+-- Reads activity from HUD, only pursues inmates the server confirms are arrestable
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,17 +15,14 @@ local active = true
 local tweenSpeed = -1
 local noclipEnabled = false
 
-local skipList = {}
+-- inmates confirmed not arrestable right now, skip for a while
+local skipList = {} -- [playerName] = os.clock()
+local SKIP_DURATION = 20
 
 ---------- NOCLIP ----------
 
-local function setNoclip(state)
-    noclipEnabled = state
-end
-
 local noclipConn = RunService.Stepped:Connect(function()
-    if not active then return end
-    if not noclipEnabled then return end
+    if not active or not noclipEnabled then return end
     local char = player.Character
     if not char then return end
     for _, part in ipairs(char:GetDescendants()) do
@@ -36,35 +33,13 @@ local noclipConn = RunService.Stepped:Connect(function()
 end)
 table.insert(connections, noclipConn)
 
----------- ACTIVITY DETECTION ----------
+---------- ACTIVITY ----------
 
 local function getCurrentActivity()
     local ok, text = pcall(function()
         return player.PlayerGui.Home.hud.Topbar.titleBar.Title.Text
     end)
-    if ok and text then
-        return text:lower()
-    end
-    return ""
-end
-
--- Prison Life schedule zones:
--- "yard" = inmates must be in yard area
--- "lunch" / "eat" = inmates must be in cafeteria
--- "lights out" / "night" / "bed" / "sleep" = inmates must be in cells
--- "roll call" / "morning" = inmates must be at roll call area
--- "free time" / "leisure" = inmates can roam most indoor areas
--- If an inmate is NOT where they should be during these, they can be arrested
-
-local function isRestrictiveTime()
-    local activity = getCurrentActivity()
-    -- during these activities, inmates have specific required locations
-    -- so more of them will be out of place and arrestable
-    if activity:find("yard") then return true, "yard" end
-    if activity:find("lunch") or activity:find("eat") or activity:find("dinner") or activity:find("breakfast") then return true, "cafeteria" end
-    if activity:find("night") or activity:find("lights") or activity:find("bed") or activity:find("sleep") then return true, "cells" end
-    if activity:find("roll") or activity:find("morning") then return true, "rollcall" end
-    return false, "free"
+    return ok and text and text:lower() or ""
 end
 
 ---------- TOOLS ----------
@@ -117,13 +92,27 @@ local function hasKeycard(plr)
     return false
 end
 
-local function hasWeapon(plr)
-    if not plr.Character then return false end
-    for _, child in ipairs(plr.Character:GetChildren()) do
-        if child:IsA("Tool") then
-            local n = child.Name:lower()
-            if n:find("gun") or n:find("knife") or n:find("ak") or n:find("m4")
-                or n:find("pistol") or n:find("shotgun") or n:find("remington") then
+local function isSkipped(plr)
+    local t = skipList[plr.Name]
+    if t and os.clock() - t < SKIP_DURATION then return true end
+    return false
+end
+
+local function isArrested(plr)
+    if not plr.Parent then return true end
+    local team = getTeamName(plr)
+    if not (team:find("criminal") or team:find("inmate") or team:find("prisoner")) then
+        return true
+    end
+    if plr.Character then
+        local head = plr.Character:FindFirstChild("Head")
+        if head then
+            for _, child in ipairs(head:GetChildren()) do
+                if child:IsA("BillboardGui") then return true end
+            end
+        end
+        for _, child in ipairs(plr.Character:GetChildren()) do
+            if child:IsA("BillboardGui") and child.Name ~= "NameTag" then
                 return true
             end
         end
@@ -131,32 +120,24 @@ local function hasWeapon(plr)
     return false
 end
 
-local function getPriority(plr)
-    if plr == player then return nil end
-    if not plr.Character then return nil end
+---------- ARREST PROBE ----------
 
-    local crim = isCriminal(plr)
-    local inm = isInmate(plr)
-    if not crim and not inm then return nil end
+-- try the remote once and check if it actually did anything
+-- InvokeServer returns a value - if arrest fails the server tells us
+local function tryArrestRemote(plr)
+    local torso = plr.Character and (plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso"))
+    if not torso then return false end
 
-    -- skip inmates we recently failed on
-    if inm and not crim then
-        local skipTime = skipList[plr.Name]
-        if skipTime and os.clock() - skipTime < 15 then
-            return nil
-        end
-    end
+    local result = nil
+    local ok = pcall(function()
+        result = ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
+    end)
 
-    if hasKeycard(plr) then return 1 end
-    if crim then return 2 end
-    if hasWeapon(plr) then return 3 end
+    -- give it a moment to register
+    task.wait(0.3)
 
-    -- during restrictive times, inmates are more likely arrestable
-    local restrictive = isRestrictiveTime()
-    if restrictive then return 4 end
-
-    -- during free time, only try inmates who look suspicious (near exits, outside, etc)
-    return 5
+    -- check if arrest actually went through
+    return isArrested(plr)
 end
 
 ---------- MOVEMENT ----------
@@ -166,12 +147,6 @@ local function getRoot(char)
     return char:FindFirstChild("HumanoidRootPart")
 end
 
-local function getTorso(plr)
-    if not plr.Character then return nil end
-    return plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
-end
-
--- IY tween but go UNDERGROUND below the target
 local function tweenUnder(targetRoot)
     local root = getRoot(player.Character)
     if not root or not targetRoot or not targetRoot.Parent then return end
@@ -184,7 +159,6 @@ local function tweenUnder(targetRoot)
         end
     end)
 
-    -- position underground below target
     local targetCF = CFrame.new(
         targetRoot.Position.X + 3,
         targetRoot.Position.Y - 15,
@@ -206,30 +180,7 @@ local function tweenUnder(targetRoot)
     end)
 end
 
----------- ARREST ----------
-
-local function isArrested(plr)
-    if not plr.Parent then return true end
-    local team = getTeamName(plr)
-    if not (team:find("criminal") or team:find("inmate") or team:find("prisoner")) then
-        return true
-    end
-    -- check for arrest timer billboard gui
-    if plr.Character then
-        local head = plr.Character:FindFirstChild("Head")
-        if head then
-            for _, child in ipairs(head:GetChildren()) do
-                if child:IsA("BillboardGui") then return true end
-            end
-        end
-        for _, child in ipairs(plr.Character:GetChildren()) do
-            if child:IsA("BillboardGui") and child.Name ~= "NameTag" then
-                return true
-            end
-        end
-    end
-    return false
-end
+---------- CLICK ----------
 
 local function clickAt(x, y)
     pcall(function()
@@ -246,19 +197,43 @@ local function clickAt(x, y)
     end)
 end
 
-local function arrestTarget(targetPlr)
-    local torso = getTorso(targetPlr)
+local function clickOnPlayer(plr)
+    local torso = plr.Character and (plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso"))
     if not torso then return end
-
     local cam = workspace.CurrentCamera
     local screenPos, onScreen = cam:WorldToScreenPoint(torso.Position)
     if not onScreen then return end
-
     clickAt(screenPos.X, screenPos.Y + 36)
 end
 
+---------- CAMERA ----------
+
+local function setupCamera()
+    pcall(function()
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+    end)
+end
+
+local function pointCameraAt(targetPos)
+    pcall(function()
+        local camPos = targetPos + Vector3.new(0, 15, 15)
+        workspace.CurrentCamera.CFrame = CFrame.new(camPos, targetPos)
+    end)
+end
+
+local function resetCamera()
+    pcall(function()
+        local cam = workspace.CurrentCamera
+        cam.CameraType = Enum.CameraType.Custom
+        cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
+    end)
+end
+
+---------- RESET ----------
+
 local function resetCharacter()
-    setNoclip(false)
+    noclipEnabled = false
+    resetCamera()
     pcall(function()
         local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.Health = 0 end
@@ -272,52 +247,40 @@ local function resetCharacter()
     end
 end
 
----------- CAMERA CONTROL ----------
-
--- detach camera so it stays at a good viewing angle while character is underground
-local function setupCamera()
-    pcall(function()
-        local cam = workspace.CurrentCamera
-        cam.CameraType = Enum.CameraType.Scriptable
-    end)
-end
-
-local function pointCameraAt(targetPos)
-    pcall(function()
-        local cam = workspace.CurrentCamera
-        -- position camera above and slightly behind the target for good view
-        local camPos = targetPos + Vector3.new(0, 15, 15)
-        cam.CFrame = CFrame.new(camPos, targetPos)
-    end)
-end
-
-local function resetCamera()
-    pcall(function()
-        local cam = workspace.CurrentCamera
-        cam.CameraType = Enum.CameraType.Custom
-        cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
-    end)
-end
-
 ---------- MAIN LOOP ----------
 
 task.spawn(function()
     while active do
+        -- build target list
         local targets = {}
         for _, plr in ipairs(Players:GetPlayers()) do
-            local pri = getPriority(plr)
-            if pri then
-                local root = getRoot(plr.Character)
-                if root then
-                    table.insert(targets, { player = plr, root = root, priority = pri })
-                end
+            if plr == player then continue end
+            if not plr.Character then continue end
+            if isSkipped(plr) then continue end
+            if isArrested(plr) then continue end
+
+            local crim = isCriminal(plr)
+            local inm = isInmate(plr)
+            if not crim and not inm then continue end
+
+            local root = getRoot(plr.Character)
+            if not root then continue end
+
+            -- criminals always go in, with priority
+            if crim then
+                local pri = hasKeycard(plr) and 1 or 2
+                table.insert(targets, { player = plr, root = root, priority = pri, isCriminal = true })
+            elseif inm then
+                -- for inmates: probe with remote first to see if server allows arrest
+                -- only add if the probe succeeds
+                table.insert(targets, { player = plr, root = root, priority = 10, isCriminal = false, needsProbe = true })
             end
         end
 
         table.sort(targets, function(a, b) return a.priority < b.priority end)
 
         if #targets == 0 then
-            setNoclip(false)
+            noclipEnabled = false
             resetCamera()
             task.wait(1)
             continue
@@ -328,18 +291,40 @@ task.spawn(function()
         for _, target in ipairs(targets) do
             if not active then break end
             if not target.player.Parent then continue end
-            if not target.root or not target.root.Parent then continue end
-            if not getPriority(target.player) then continue end
+            if isArrested(target.player) then continue end
 
-            local isCrim = isCriminal(target.player)
-            local maxAttempts = isCrim and 15 or 3
+            -- for inmates, probe first: tween close, try remote once
+            -- if server says no, skip them
+            if target.needsProbe then
+                noclipEnabled = true
+                local freshRoot = getRoot(target.player.Character)
+                if not freshRoot then continue end
 
-            -- enable noclip and detach camera
-            setNoclip(true)
+                tweenUnder(freshRoot)
+                task.wait(0.1)
+
+                local probeWorked = tryArrestRemote(target.player)
+                if not probeWorked then
+                    -- server didn't arrest them, they're in a safe zone
+                    skipList[target.player.Name] = os.clock()
+                    noclipEnabled = false
+                    continue
+                else
+                    -- probe arrested them! confirm and reset
+                    noclipEnabled = false
+                    resetCamera()
+                    resetCharacter()
+                    equipHandcuffs()
+                    continue
+                end
+            end
+
+            -- criminals: full pursuit
+            noclipEnabled = true
             setupCamera()
 
             local arrested = false
-            for attempt = 1, maxAttempts do
+            for attempt = 1, 15 do
                 if not active then break end
                 if isArrested(target.player) then
                     arrested = true
@@ -349,33 +334,35 @@ task.spawn(function()
                 local freshRoot = getRoot(target.player.Character)
                 if not freshRoot or not freshRoot.Parent then break end
 
-                -- go underground below them
                 tweenUnder(freshRoot)
                 task.wait(0.05)
 
-                -- point camera at target so click lands on them
                 pointCameraAt(freshRoot.Position)
                 task.wait(0.05)
 
-                arrestTarget(target.player)
-                task.wait(0.3)
+                -- click + remote
+                clickOnPlayer(target.player)
+                task.wait(0.1)
+                pcall(function()
+                    local torso = target.player.Character:FindFirstChild("Torso") or target.player.Character:FindFirstChild("UpperTorso")
+                    if torso then
+                        ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
+                    end
+                end)
 
+                task.wait(0.3)
                 if isArrested(target.player) then
                     arrested = true
                     break
                 end
             end
 
-            -- restore camera between targets
+            noclipEnabled = false
             resetCamera()
-            setNoclip(false)
 
             if arrested then
                 resetCharacter()
                 equipHandcuffs()
-                setNoclip(false)
-            elseif not isCrim then
-                skipList[target.player.Name] = os.clock()
             end
         end
 
@@ -387,7 +374,7 @@ end)
 
 local function cleanup()
     active = false
-    setNoclip(false)
+    noclipEnabled = false
     resetCamera()
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
