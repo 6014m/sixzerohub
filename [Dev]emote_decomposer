@@ -299,6 +299,11 @@ local function scanEmoteInventory()
     return results
 end
 
+---------- FORWARD DECLARES ----------
+
+local lastDetectedCount = 0
+local refreshDetectedList -- defined later
+
 ---------- GUI ----------
 
 local screenGui = Instance.new("ScreenGui")
@@ -662,8 +667,6 @@ local function createCodeRow(parent, label, code, color, layoutOrder)
 
     return row
 end
-
-local lastDetectedCount = 0
 
 local function refreshDetectedList()
     if #detectedEmotes == lastDetectedCount then return end
