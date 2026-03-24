@@ -1117,6 +1117,7 @@ local DEV_SCRIPTS = {
     { name = "Game ID Copier", file = "[Dev]gameid_copier" },
     { name = "Dex", file = "[Dev]dex" },
     { name = "Emote Decomposer", file = "[Dev]emote_decomposer" },
+    { name = "Remote Spy", file = "[Dev]remote_spy" },
 }
 
 local SPEC_SCRIPTS = {
