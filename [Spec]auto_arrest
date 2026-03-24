@@ -1,11 +1,9 @@
 -- [Spec] Auto Arrest
--- Rapidly tweens to target, spectates them, clicks to arrest, resets after
--- Head buried in ground, accessories detached
+-- Tween to target, arrest, tween away, reset. Simple.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local VIM = game:GetService("VirtualInputManager")
 
@@ -16,7 +14,6 @@ local tweenSpeed = -1
 local killBind = Enum.KeyCode.P
 
 local skipList = {}
-local SKIP_DURATION = 20
 
 ---------- KEYBIND ----------
 
@@ -39,9 +36,7 @@ table.insert(connections, keybindConn)
 
 local function detachAccessories()
     pcall(function()
-        local char = player.Character
-        if not char then return end
-        for _, v in ipairs(char:GetDescendants()) do
+        for _, v in ipairs(player.Character:GetDescendants()) do
             if v:IsA("Accessory") then
                 for _, p in ipairs(v:GetDescendants()) do
                     if p:IsA("Weld") then p:Destroy() end
@@ -49,44 +44,6 @@ local function detachAccessories()
             end
         end
     end)
-end
-
----------- GROUND DETECTION ----------
-
-local function getGroundY(position)
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    local filterList = {}
-    if player.Character then table.insert(filterList, player.Character) end
-    params.FilterDescendantsInstances = filterList
-
-    local floorResult = workspace:Raycast(position + Vector3.new(0, 3, 0), Vector3.new(0, -50, 0), params)
-    if not floorResult then
-        return position.Y - 3
-    end
-
-    local floorY = floorResult.Position.Y
-
-    -- check for roof above
-    local ceilingResult = workspace:Raycast(position + Vector3.new(0, 1, 0), Vector3.new(0, 50, 0), params)
-    if ceilingResult then
-        return floorY
-    end
-
-    -- open sky: find lowest ground
-    local currentY = floorY - 0.1
-    local bestY = floorY
-    for _ = 1, 10 do
-        local result = workspace:Raycast(Vector3.new(position.X, currentY, position.Z), Vector3.new(0, -100, 0), params)
-        if not result then break end
-        if result.Instance:IsA("Terrain") or result.Instance.Size.Y >= 1 then
-            bestY = result.Position.Y
-        end
-        currentY = result.Position.Y - 0.1
-        if currentY < -100 then break end
-    end
-
-    return bestY
 end
 
 ---------- TOOLS ----------
@@ -121,9 +78,19 @@ local function isCriminal(plr)
     return getTeamName(plr):find("criminal") ~= nil
 end
 
-local function isInmate(plr)
-    local team = getTeamName(plr)
-    return (team:find("inmate") or team:find("prisoner")) ~= nil
+local function isInmateArrestable(plr)
+    if not plr.Character then return false end
+    for _, desc in ipairs(plr.Character:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+            local ok, text = pcall(function() return desc.Text end)
+            if ok and text and text:find("\xF0\x9F\x94\x97") then return true end
+        end
+    end
+    return false
+end
+
+local function hasForceField(plr)
+    return plr.Character and plr.Character:FindFirstChildOfClass("ForceField") ~= nil
 end
 
 local function hasKeycard(plr)
@@ -139,46 +106,13 @@ local function hasKeycard(plr)
     return false
 end
 
-local function hasForceField(plr)
-    if not plr.Character then return false end
-    return plr.Character:FindFirstChildOfClass("ForceField") ~= nil
-end
-
-local function isInmateArrestable(plr)
-    if not plr.Character then return false end
-    for _, desc in ipairs(plr.Character:GetDescendants()) do
-        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
-            local ok, text = pcall(function() return desc.Text end)
-            if ok and text and text:find("\xF0\x9F\x94\x97") then
-                return true
-            end
-        end
-    end
-    return false
-end
-
-local function isSkipped(plr)
-    local t = skipList[plr.Name]
-    return t and os.clock() - t < SKIP_DURATION
-end
-
 local function isArrested(plr)
     if not plr.Parent then return true end
     local team = getTeamName(plr)
-    if not (team:find("criminal") or team:find("inmate") or team:find("prisoner")) then
-        return true
-    end
+    if not (team:find("criminal") or team:find("inmate") or team:find("prisoner")) then return true end
     if plr.Character then
-        local head = plr.Character:FindFirstChild("Head")
-        if head then
-            for _, child in ipairs(head:GetChildren()) do
-                if child:IsA("BillboardGui") then return true end
-            end
-        end
-        for _, child in ipairs(plr.Character:GetChildren()) do
-            if child:IsA("BillboardGui") and child.Name ~= "NameTag" then
-                return true
-            end
+        for _, child in ipairs(plr.Character:GetDescendants()) do
+            if child:IsA("BillboardGui") and child.Name ~= "NameTag" then return true end
         end
     end
     return false
@@ -187,36 +121,23 @@ end
 ---------- MOVEMENT ----------
 
 local function getRoot(char)
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart")
+    return char and char:FindFirstChild("HumanoidRootPart")
 end
 
 local function getTorso(plr)
-    if not plr.Character then return nil end
-    return plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
+    return plr.Character and (plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso"))
 end
 
-local function snapTo(targetRoot)
+local function tweenTo(targetCF)
     local root = getRoot(player.Character)
-    if not root or not targetRoot or not targetRoot.Parent then return end
-
+    if not root then return end
     pcall(function()
         local hum = player.Character:FindFirstChildOfClass("Humanoid")
         if hum and hum.Sit then hum.Sit = false end
     end)
-
-    local targetPos = targetRoot.Position
-    local groundY = getGroundY(targetPos)
-
-    -- body at surface, head flipped into ground (HRP at groundY+1, head at groundY-1.5)
-    local tween = TweenService:Create(
-        root,
-        TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear),
-        {CFrame = CFrame.new(targetPos.X + 3, groundY + 1, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180))}
-    )
+    local tween = TweenService:Create(root, TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear), {CFrame = targetCF})
     tween:Play()
     tween.Completed:Wait()
-
     pcall(function()
         root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
@@ -225,11 +146,9 @@ end
 
 ---------- CAMERA ----------
 
-local function spectatePlayer(plr)
+local function spectate(plr)
     pcall(function()
-        if not plr.Character then return end
         local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-        if not hum then return end
         workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
         workspace.CurrentCamera.CameraSubject = hum
         player.CameraMinZoomDistance = 3
@@ -240,7 +159,7 @@ end
 local function resetCamera()
     pcall(function()
         workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-        workspace.CurrentCamera.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
+        workspace.CurrentCamera.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
         player.CameraMinZoomDistance = 0.5
         player.CameraMaxZoomDistance = 128
     end)
@@ -248,66 +167,34 @@ end
 
 ---------- ARREST ----------
 
-local function clickOnPlayer(plr)
+local function clickOn(plr)
     local torso = getTorso(plr)
     if not torso then return end
-    local cam = workspace.CurrentCamera
-
-    local screenPos, onScreen = cam:WorldToScreenPoint(torso.Position)
+    local screenPos, onScreen = workspace.CurrentCamera:WorldToScreenPoint(torso.Position)
     if not onScreen then
-        local viewSize = cam.ViewportSize
-        screenPos = Vector3.new(viewSize.X / 2, viewSize.Y / 2, 0)
+        local vs = workspace.CurrentCamera.ViewportSize
+        screenPos = Vector3.new(vs.X / 2, vs.Y / 2, 0)
     end
-
     local x, y = screenPos.X, screenPos.Y + 36
-
-    pcall(function()
-        VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
-        task.wait()
-        VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
-    end)
-    pcall(function()
-        if mousemoveabs and mouse1click then
-            mousemoveabs(x, y)
-            task.wait()
-            mouse1click()
-        end
-    end)
+    pcall(function() VIM:SendMouseButtonEvent(x, y, 0, true, game, 1); task.wait(); VIM:SendMouseButtonEvent(x, y, 0, false, game, 1) end)
+    pcall(function() if mousemoveabs and mouse1click then mousemoveabs(x, y); task.wait(); mouse1click() end end)
 end
 
-local function fireArrestRemote(plr)
+local function fireRemote(plr)
     pcall(function()
         local torso = getTorso(plr)
-        if torso then
-            ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
-        end
+        if torso then ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso) end
     end)
 end
 
 ---------- RESET ----------
-
-local function tweenToHiddenSpot()
-    local root = getRoot(player.Character)
-    if not root then return end
-    local pos = root.Position
-    local groundY = getGroundY(pos + Vector3.new(200, 0, 200))
-    local tween = TweenService:Create(
-        root,
-        TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear),
-        {CFrame = CFrame.new(pos.X + 200, groundY - 10, pos.Z + 200)}
-    )
-    tween:Play()
-    tween.Completed:Wait()
-end
 
 local function resetCharacter()
     pcall(function()
         local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.Health = 0 end
     end)
-    local ok, newChar = pcall(function()
-        return player.CharacterAdded:Wait()
-    end)
+    local ok, newChar = pcall(function() return player.CharacterAdded:Wait() end)
     if ok and newChar then
         newChar:WaitForChild("HumanoidRootPart", 5)
         task.wait(0.5)
@@ -321,21 +208,20 @@ task.spawn(function()
         local targets = {}
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr == player or not plr.Character then continue end
-            if isSkipped(plr) or isArrested(plr) or hasForceField(plr) then continue end
+            if isArrested(plr) or hasForceField(plr) then continue end
 
             local crim = isCriminal(plr)
-            local inm = isInmate(plr)
+            local inm = not crim and isInmateArrestable(plr)
             if not crim and not inm then continue end
 
             local root = getRoot(plr.Character)
             if not root then continue end
 
-            if crim then
-                local pri = hasKeycard(plr) and 1 or 2
-                table.insert(targets, { player = plr, root = root, priority = pri, isCriminal = true })
-            elseif inm and isInmateArrestable(plr) then
-                table.insert(targets, { player = plr, root = root, priority = 10, isCriminal = false })
-            end
+            local pri = 10
+            if crim and hasKeycard(plr) then pri = 1
+            elseif crim then pri = 2 end
+
+            table.insert(targets, { player = plr, priority = pri, isCriminal = crim })
         end
 
         table.sort(targets, function(a, b) return a.priority < b.priority end)
@@ -350,44 +236,62 @@ task.spawn(function()
 
         for _, target in ipairs(targets) do
             if not active then break end
-            if not target.player.Parent then continue end
             if isArrested(target.player) or hasForceField(target.player) then continue end
+            if not target.isCriminal and not isInmateArrestable(target.player) then continue end
 
-            spectatePlayer(target.player)
+            local targetRoot = getRoot(target.player.Character)
+            if not targetRoot then continue end
 
-            local arrested = false
-            local maxAttempts = target.isCriminal and 15 or 8
-            for attempt = 1, maxAttempts do
-                if not active then break end
-                if isArrested(target.player) then
-                    arrested = true
-                    break
-                end
-                if hasForceField(target.player) then break end
-                if not target.isCriminal and not isInmateArrestable(target.player) then break end
+            -- spectate them
+            spectate(target.player)
 
-                local freshRoot = getRoot(target.player.Character)
-                if not freshRoot or not freshRoot.Parent then break end
+            -- tween to them
+            tweenTo(targetRoot.CFrame + Vector3.new(3, 1, 0))
+            task.wait(0.05)
 
-                -- rapidly tween to them every attempt
-                snapTo(freshRoot)
+            -- arrest
+            clickOn(target.player)
+            fireRemote(target.player)
+            task.wait(0.2)
 
-                -- click + remote
-                clickOnPlayer(target.player)
-                fireArrestRemote(target.player)
-
-                task.wait(0.15)
-            end
-
-            if arrested then
+            -- check
+            if isArrested(target.player) then
+                -- tween far away then reset
                 resetCamera()
-                tweenToHiddenSpot()
-                task.wait(0.1)
+                local myRoot = getRoot(player.Character)
+                if myRoot then
+                    tweenTo(CFrame.new(myRoot.Position.X + 200, myRoot.Position.Y, myRoot.Position.Z + 200))
+                end
                 resetCharacter()
                 detachAccessories()
                 equipHandcuffs()
             else
-                resetCamera()
+                -- retry a few times
+                for retry = 1, 10 do
+                    if not active then break end
+                    if isArrested(target.player) then break end
+
+                    targetRoot = getRoot(target.player.Character)
+                    if not targetRoot then break end
+
+                    tweenTo(targetRoot.CFrame + Vector3.new(3, 1, 0))
+                    clickOn(target.player)
+                    fireRemote(target.player)
+                    task.wait(0.15)
+                end
+
+                if isArrested(target.player) then
+                    resetCamera()
+                    local myRoot = getRoot(player.Character)
+                    if myRoot then
+                        tweenTo(CFrame.new(myRoot.Position.X + 200, myRoot.Position.Y, myRoot.Position.Z + 200))
+                    end
+                    resetCharacter()
+                    detachAccessories()
+                    equipHandcuffs()
+                else
+                    resetCamera()
+                end
             end
         end
 
