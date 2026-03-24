@@ -98,6 +98,11 @@ local SLANT_REACH = 140 -- how far the corner triangle extends
 local TWEEN_SPEED = 0.3
 local guiVisible = true
 
+local SERVERS_FILE = "SixZeroHub_servers.json"
+local UPDATES_LOG_FILE = "SixZeroHub_updates.json"
+local MAX_SERVERS = 25
+local SERVER_MAX_AGE = 43200 -- 12 hours in seconds
+
 ---------- SCREEN GUI ----------
 
 local screenGui = Instance.new("ScreenGui")
@@ -1043,6 +1048,56 @@ local toggleSpecMenu, closeSpecMenu, isSpecMenuOpen = createPopupToggle(specMenu
 specBtn.MouseButton1Click:Connect(toggleSpecMenu)
 specCloseBtn.MouseButton1Click:Connect(closeSpecMenu)
 
+
+---------- MEMORY BUTTON (BOTTOM RIGHT) ----------
+
+local brainBtn = Instance.new("TextButton")
+brainBtn.Name = "BrainButton"
+brainBtn.Size = UDim2.new(0, 36, 0, 36)
+brainBtn.Position = UDim2.new(1, -46, 1, -46)
+brainBtn.BackgroundColor3 = COLORS.darker
+brainBtn.BorderSizePixel = 0
+brainBtn.Text = "\xF0\x9F\xA7\xA0"
+brainBtn.TextColor3 = COLORS.text
+brainBtn.TextSize = 18
+brainBtn.Font = Enum.Font.GothamBold
+brainBtn.AutoButtonColor = false
+brainBtn.Parent = screenGui
+
+Instance.new("UICorner", brainBtn).CornerRadius = UDim.new(0, 8)
+
+local brainStroke = Instance.new("UIStroke", brainBtn)
+brainStroke.Color = COLORS.border
+brainStroke.Thickness = 1
+
+local brainTooltip = Instance.new("Frame")
+brainTooltip.Size = UDim2.new(0, 70, 0, 28)
+brainTooltip.Position = UDim2.new(-1.2, -10, 0.5, -14)
+brainTooltip.BackgroundColor3 = COLORS.darker
+brainTooltip.BorderSizePixel = 0
+brainTooltip.Visible = false
+brainTooltip.Parent = brainBtn
+Instance.new("UICorner", brainTooltip).CornerRadius = UDim.new(0, 6)
+
+local brainTipLabel = Instance.new("TextLabel")
+brainTipLabel.Size = UDim2.new(1, 0, 1, 0)
+brainTipLabel.BackgroundTransparency = 1
+brainTipLabel.Text = "Memory"
+brainTipLabel.TextColor3 = COLORS.text
+brainTipLabel.TextSize = 12
+brainTipLabel.Font = Enum.Font.Gotham
+brainTipLabel.Parent = brainTooltip
+
+brainBtn.MouseEnter:Connect(function()
+    brainTooltip.Visible = true
+    TweenService:Create(brainBtn, TweenInfo.new(0.15), {BackgroundColor3 = COLORS.hover}):Play()
+end)
+brainBtn.MouseLeave:Connect(function()
+    brainTooltip.Visible = false
+    TweenService:Create(brainBtn, TweenInfo.new(0.15), {BackgroundColor3 = COLORS.darker}):Play()
+end)
+
+
 ---------- SCRIPT ENTRIES ----------
 
 local REPO_BASE = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
@@ -1283,6 +1338,524 @@ if specEmpty then
 end
 rebuildSortOrder(specContent)
 
+---------- MEMORY SYSTEM ----------
+
+local MarketplaceService = game:GetService("MarketplaceService")
+local TeleportService = game:GetService("TeleportService")
+
+-- load server history
+local serverHistory = {}
+pcall(function()
+    if isfile and isfile(SERVERS_FILE) then
+        local raw = readfile(SERVERS_FILE)
+        local decoded = HttpService:JSONDecode(raw)
+        if type(decoded) == "table" then
+            serverHistory = decoded
+        end
+    end
+end)
+
+-- load update history
+local updateHistory = {}
+pcall(function()
+    if isfile and isfile(UPDATES_LOG_FILE) then
+        local raw = readfile(UPDATES_LOG_FILE)
+        local decoded = HttpService:JSONDecode(raw)
+        if type(decoded) == "table" then
+            updateHistory = decoded
+        end
+    end
+end)
+
+local function saveServerHistory()
+    pcall(function()
+        if writefile then
+            writefile(SERVERS_FILE, HttpService:JSONEncode(serverHistory))
+        end
+    end)
+end
+
+local function saveUpdateHistory()
+    pcall(function()
+        if writefile then
+            writefile(UPDATES_LOG_FILE, HttpService:JSONEncode(updateHistory))
+        end
+    end)
+end
+
+local function logUpdate(scriptName)
+    table.insert(updateHistory, 1, {
+        name = scriptName,
+        time = os.time(),
+    })
+    saveUpdateHistory()
+end
+
+local _logUpdate = logUpdate
+
+local function getGameName(placeId)
+    local ok, info = pcall(function()
+        return MarketplaceService:GetProductInfo(placeId)
+    end)
+    if ok and info and info.Name then
+        return info.Name
+    end
+    return "Place " .. tostring(placeId)
+end
+
+local function formatTimeSince(timestamp)
+    local diff = os.time() - timestamp
+    if diff < 60 then return "just now" end
+    if diff < 3600 then return math.floor(diff / 60) .. "m ago" end
+    if diff < 86400 then return math.floor(diff / 3600) .. "h ago" end
+    return math.floor(diff / 86400) .. "d ago"
+end
+
+local function cleanServerHistory()
+    local now = os.time()
+    local cleaned = {}
+    for _, entry in ipairs(serverHistory) do
+        if now - entry.time < SERVER_MAX_AGE then
+            table.insert(cleaned, entry)
+        end
+    end
+    serverHistory = cleaned
+    saveServerHistory()
+end
+
+local function recordCurrentServer()
+    local jobId = game.JobId
+    local placeId = game.PlaceId
+    if jobId == "" then return end
+
+    for i = #serverHistory, 1, -1 do
+        if serverHistory[i].jobId == jobId then
+            table.remove(serverHistory, i)
+        end
+    end
+
+    local gameName = getGameName(placeId)
+    table.insert(serverHistory, 1, {
+        jobId = jobId,
+        placeId = placeId,
+        gameName = gameName,
+        time = os.time(),
+    })
+
+    while #serverHistory > MAX_SERVERS do
+        table.remove(serverHistory)
+    end
+
+    saveServerHistory()
+end
+
+---------- MEMORY POPUP GUI ----------
+
+local memoryMenu = Instance.new("Frame")
+memoryMenu.Name = "MemoryMenu"
+memoryMenu.Size = UDim2.new(0, 420, 0, 340)
+memoryMenu.Position = UDim2.new(0.5, -210, 0.5, -170)
+memoryMenu.BackgroundColor3 = COLORS.sidebar
+memoryMenu.BorderSizePixel = 0
+memoryMenu.Visible = false
+memoryMenu.Parent = screenGui
+Instance.new("UICorner", memoryMenu).CornerRadius = UDim.new(0, 8)
+
+local memShadow = Instance.new("ImageLabel")
+memShadow.Size = UDim2.new(1, 20, 1, 20)
+memShadow.Position = UDim2.new(0, -10, 0, -10)
+memShadow.BackgroundTransparency = 1
+memShadow.Image = "rbxassetid://5554236805"
+memShadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+memShadow.ImageTransparency = 0.6
+memShadow.ScaleType = Enum.ScaleType.Slice
+memShadow.SliceCenter = Rect.new(23, 23, 277, 277)
+memShadow.ZIndex = -1
+memShadow.Parent = memoryMenu
+
+local memHeader = Instance.new("Frame")
+memHeader.Name = "Header"
+memHeader.Size = UDim2.new(1, 0, 0, 40)
+memHeader.BackgroundColor3 = COLORS.darker
+memHeader.BorderSizePixel = 0
+memHeader.Parent = memoryMenu
+Instance.new("UICorner", memHeader).CornerRadius = UDim.new(0, 8)
+
+local memHeaderFill = Instance.new("Frame")
+memHeaderFill.Size = UDim2.new(1, 0, 0, 10)
+memHeaderFill.Position = UDim2.new(0, 0, 1, -10)
+memHeaderFill.BackgroundColor3 = COLORS.darker
+memHeaderFill.BorderSizePixel = 0
+memHeaderFill.Parent = memHeader
+
+local memTitle = Instance.new("TextLabel")
+memTitle.Size = UDim2.new(1, -80, 1, 0)
+memTitle.Position = UDim2.new(0, 38, 0, 0)
+memTitle.BackgroundTransparency = 1
+memTitle.Text = "\xF0\x9F\xA7\xA0 Memory"
+memTitle.TextColor3 = COLORS.text
+memTitle.TextSize = 16
+memTitle.Font = Enum.Font.GothamBold
+memTitle.TextXAlignment = Enum.TextXAlignment.Left
+memTitle.Parent = memHeader
+
+local memCloseBtn = Instance.new("TextButton")
+memCloseBtn.Name = "Close"
+memCloseBtn.Size = UDim2.new(0, 30, 0, 30)
+memCloseBtn.Position = UDim2.new(0, 5, 0, 5)
+memCloseBtn.BackgroundTransparency = 1
+memCloseBtn.Text = "X"
+memCloseBtn.TextColor3 = COLORS.textMuted
+memCloseBtn.TextSize = 16
+memCloseBtn.Font = Enum.Font.GothamBold
+memCloseBtn.Parent = memHeader
+
+memCloseBtn.MouseEnter:Connect(function()
+    memCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+end)
+memCloseBtn.MouseLeave:Connect(function()
+    memCloseBtn.TextColor3 = COLORS.textMuted
+end)
+
+makeDraggable(memHeader, memoryMenu)
+
+-- tab bar
+local tabBar = Instance.new("Frame")
+tabBar.Name = "TabBar"
+tabBar.Size = UDim2.new(1, 0, 0, 30)
+tabBar.Position = UDim2.new(0, 0, 0, 40)
+tabBar.BackgroundColor3 = COLORS.background
+tabBar.BorderSizePixel = 0
+tabBar.Parent = memoryMenu
+
+local serversTabBtn = Instance.new("TextButton")
+serversTabBtn.Name = "ServersTab"
+serversTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+serversTabBtn.Position = UDim2.new(0, 0, 0, 0)
+serversTabBtn.BackgroundColor3 = COLORS.sidebar
+serversTabBtn.BorderSizePixel = 0
+serversTabBtn.Text = "Server Memory"
+serversTabBtn.TextColor3 = COLORS.text
+serversTabBtn.TextSize = 13
+serversTabBtn.Font = Enum.Font.GothamBold
+serversTabBtn.AutoButtonColor = false
+serversTabBtn.Parent = tabBar
+
+local updatesTabBtn = Instance.new("TextButton")
+updatesTabBtn.Name = "UpdatesTab"
+updatesTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+updatesTabBtn.Position = UDim2.new(0.5, 0, 0, 0)
+updatesTabBtn.BackgroundColor3 = COLORS.background
+updatesTabBtn.BorderSizePixel = 0
+updatesTabBtn.Text = "Update History"
+updatesTabBtn.TextColor3 = COLORS.textMuted
+updatesTabBtn.TextSize = 13
+updatesTabBtn.Font = Enum.Font.GothamBold
+updatesTabBtn.AutoButtonColor = false
+updatesTabBtn.Parent = tabBar
+
+-- tab content frames
+local serversContent = Instance.new("ScrollingFrame")
+serversContent.Name = "ServersContent"
+serversContent.Size = UDim2.new(1, -12, 1, -78)
+serversContent.Position = UDim2.new(0, 6, 0, 74)
+serversContent.BackgroundTransparency = 1
+serversContent.BorderSizePixel = 0
+serversContent.ScrollBarThickness = 3
+serversContent.ScrollBarImageColor3 = COLORS.textMuted
+serversContent.CanvasSize = UDim2.new(0, 0, 0, 0)
+serversContent.AutomaticCanvasSize = Enum.AutomaticSize.Y
+serversContent.Visible = true
+serversContent.Parent = memoryMenu
+
+local serversLayout = Instance.new("UIListLayout")
+serversLayout.SortOrder = Enum.SortOrder.LayoutOrder
+serversLayout.Padding = UDim.new(0, 4)
+serversLayout.Parent = serversContent
+
+local updatesContent = Instance.new("ScrollingFrame")
+updatesContent.Name = "UpdatesContent"
+updatesContent.Size = UDim2.new(1, -12, 1, -78)
+updatesContent.Position = UDim2.new(0, 6, 0, 74)
+updatesContent.BackgroundTransparency = 1
+updatesContent.BorderSizePixel = 0
+updatesContent.ScrollBarThickness = 3
+updatesContent.ScrollBarImageColor3 = COLORS.textMuted
+updatesContent.CanvasSize = UDim2.new(0, 0, 0, 0)
+updatesContent.AutomaticCanvasSize = Enum.AutomaticSize.Y
+updatesContent.Visible = false
+updatesContent.Parent = memoryMenu
+
+local updatesLayout = Instance.new("UIListLayout")
+updatesLayout.SortOrder = Enum.SortOrder.LayoutOrder
+updatesLayout.Padding = UDim.new(0, 4)
+updatesLayout.Parent = updatesContent
+
+-- tab switching
+local activeTab = "servers"
+
+local function switchTab(tab)
+    activeTab = tab
+    if tab == "servers" then
+        serversContent.Visible = true
+        updatesContent.Visible = false
+        serversTabBtn.BackgroundColor3 = COLORS.sidebar
+        serversTabBtn.TextColor3 = COLORS.text
+        updatesTabBtn.BackgroundColor3 = COLORS.background
+        updatesTabBtn.TextColor3 = COLORS.textMuted
+    else
+        serversContent.Visible = false
+        updatesContent.Visible = true
+        updatesTabBtn.BackgroundColor3 = COLORS.sidebar
+        updatesTabBtn.TextColor3 = COLORS.text
+        serversTabBtn.BackgroundColor3 = COLORS.background
+        serversTabBtn.TextColor3 = COLORS.textMuted
+    end
+end
+
+serversTabBtn.MouseButton1Click:Connect(function() switchTab("servers") end)
+updatesTabBtn.MouseButton1Click:Connect(function() switchTab("updates") end)
+
+-- populate servers list
+local function refreshServersList()
+    for _, child in ipairs(serversContent:GetChildren()) do
+        if child:IsA("Frame") or (child:IsA("TextLabel") and child.Name == "Empty") then child:Destroy() end
+    end
+
+    cleanServerHistory()
+
+    if #serverHistory == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Name = "Empty"
+        empty.Size = UDim2.new(1, 0, 0, 40)
+        empty.BackgroundTransparency = 1
+        empty.Text = "No servers remembered"
+        empty.TextColor3 = COLORS.textMuted
+        empty.TextSize = 14
+        empty.Font = Enum.Font.Gotham
+        empty.Parent = serversContent
+        return
+    end
+
+    for i, entry in ipairs(serverHistory) do
+        local row = Instance.new("Frame")
+        row.Name = "Server_" .. i
+        row.Size = UDim2.new(1, -4, 0, 46)
+        row.BackgroundColor3 = COLORS.hover
+        row.BorderSizePixel = 0
+        row.LayoutOrder = i
+        row.Parent = serversContent
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+        local gameLbl = Instance.new("TextLabel")
+        gameLbl.Size = UDim2.new(1, -120, 0, 22)
+        gameLbl.Position = UDim2.new(0, 10, 0, 2)
+        gameLbl.BackgroundTransparency = 1
+        gameLbl.Text = entry.gameName or ("Place " .. tostring(entry.placeId))
+        gameLbl.TextColor3 = COLORS.text
+        gameLbl.TextSize = 13
+        gameLbl.Font = Enum.Font.GothamBold
+        gameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        gameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        gameLbl.Parent = row
+
+        local timeLbl = Instance.new("TextLabel")
+        timeLbl.Size = UDim2.new(1, -120, 0, 18)
+        timeLbl.Position = UDim2.new(0, 10, 0, 24)
+        timeLbl.BackgroundTransparency = 1
+        timeLbl.Text = formatTimeSince(entry.time)
+        timeLbl.TextColor3 = COLORS.textMuted
+        timeLbl.TextSize = 11
+        timeLbl.Font = Enum.Font.Gotham
+        timeLbl.TextXAlignment = Enum.TextXAlignment.Left
+        timeLbl.Parent = row
+
+        if entry.jobId == game.JobId then
+            local currentLbl = Instance.new("TextLabel")
+            currentLbl.Size = UDim2.new(0, 50, 0, 18)
+            currentLbl.Position = UDim2.new(0, 70, 0, 24)
+            currentLbl.BackgroundTransparency = 1
+            currentLbl.Text = "(current)"
+            currentLbl.TextColor3 = Color3.fromRGB(87, 242, 135)
+            currentLbl.TextSize = 11
+            currentLbl.Font = Enum.Font.GothamBold
+            currentLbl.TextXAlignment = Enum.TextXAlignment.Left
+            currentLbl.Parent = row
+        end
+
+        local rejoinServerBtn = Instance.new("TextButton")
+        rejoinServerBtn.Size = UDim2.new(0, 60, 0, 28)
+        rejoinServerBtn.Position = UDim2.new(1, -108, 0.5, -14)
+        rejoinServerBtn.BackgroundColor3 = COLORS.accent
+        rejoinServerBtn.BorderSizePixel = 0
+        rejoinServerBtn.Text = "Rejoin"
+        rejoinServerBtn.TextColor3 = COLORS.text
+        rejoinServerBtn.TextSize = 11
+        rejoinServerBtn.Font = Enum.Font.GothamBold
+        rejoinServerBtn.AutoButtonColor = false
+        rejoinServerBtn.Parent = row
+        Instance.new("UICorner", rejoinServerBtn).CornerRadius = UDim.new(0, 4)
+
+        rejoinServerBtn.MouseEnter:Connect(function()
+            TweenService:Create(rejoinServerBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(71, 82, 196)}):Play()
+        end)
+        rejoinServerBtn.MouseLeave:Connect(function()
+            TweenService:Create(rejoinServerBtn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.accent}):Play()
+        end)
+
+        local capturedJobId = entry.jobId
+        local capturedPlaceId = entry.placeId
+        rejoinServerBtn.MouseButton1Click:Connect(function()
+            if capturedJobId == game.JobId then
+                rejoinServerBtn.Text = "Already here"
+                task.delay(1.5, function()
+                    if rejoinServerBtn.Parent then rejoinServerBtn.Text = "Rejoin" end
+                end)
+                return
+            end
+            rejoinServerBtn.Text = "Joining..."
+            local ok, err = pcall(function()
+                TeleportService:TeleportToPlaceInstance(capturedPlaceId, capturedJobId, player)
+            end)
+            if not ok then
+                rejoinServerBtn.Text = "Dead"
+                rejoinServerBtn.BackgroundColor3 = Color3.fromRGB(237, 66, 69)
+                for j = #serverHistory, 1, -1 do
+                    if serverHistory[j].jobId == capturedJobId then
+                        table.remove(serverHistory, j)
+                    end
+                end
+                saveServerHistory()
+                task.delay(1.5, function()
+                    refreshServersList()
+                end)
+            end
+        end)
+
+        local removeBtn = Instance.new("TextButton")
+        removeBtn.Size = UDim2.new(0, 28, 0, 28)
+        removeBtn.Position = UDim2.new(1, -40, 0.5, -14)
+        removeBtn.BackgroundColor3 = COLORS.darker
+        removeBtn.BorderSizePixel = 0
+        removeBtn.Text = "X"
+        removeBtn.TextColor3 = COLORS.textMuted
+        removeBtn.TextSize = 12
+        removeBtn.Font = Enum.Font.GothamBold
+        removeBtn.AutoButtonColor = false
+        removeBtn.Parent = row
+        Instance.new("UICorner", removeBtn).CornerRadius = UDim.new(0, 4)
+
+        removeBtn.MouseEnter:Connect(function()
+            removeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+        end)
+        removeBtn.MouseLeave:Connect(function()
+            removeBtn.TextColor3 = COLORS.textMuted
+        end)
+
+        local capturedJobId2 = entry.jobId
+        removeBtn.MouseButton1Click:Connect(function()
+            for j = #serverHistory, 1, -1 do
+                if serverHistory[j].jobId == capturedJobId2 then
+                    table.remove(serverHistory, j)
+                end
+            end
+            saveServerHistory()
+            refreshServersList()
+        end)
+    end
+end
+
+-- populate updates list
+local function refreshUpdatesList()
+    for _, child in ipairs(updatesContent:GetChildren()) do
+        if child:IsA("Frame") or (child:IsA("TextLabel") and child.Name == "Empty") then child:Destroy() end
+    end
+
+    if #updateHistory == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Name = "Empty"
+        empty.Size = UDim2.new(1, 0, 0, 40)
+        empty.BackgroundTransparency = 1
+        empty.Text = "No updates yet"
+        empty.TextColor3 = COLORS.textMuted
+        empty.TextSize = 14
+        empty.Font = Enum.Font.Gotham
+        empty.Parent = updatesContent
+        return
+    end
+
+    for i, entry in ipairs(updateHistory) do
+        local row = Instance.new("Frame")
+        row.Name = "Update_" .. i
+        row.Size = UDim2.new(1, -4, 0, 36)
+        row.BackgroundColor3 = COLORS.hover
+        row.BorderSizePixel = 0
+        row.LayoutOrder = i
+        row.Parent = updatesContent
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size = UDim2.new(1, -100, 1, 0)
+        nameLbl.Position = UDim2.new(0, 10, 0, 0)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Text = entry.name or "Unknown"
+        nameLbl.TextColor3 = COLORS.text
+        nameLbl.TextSize = 13
+        nameLbl.Font = Enum.Font.Gotham
+        nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLbl.Parent = row
+
+        local timeLbl = Instance.new("TextLabel")
+        timeLbl.Size = UDim2.new(0, 80, 1, 0)
+        timeLbl.Position = UDim2.new(1, -90, 0, 0)
+        timeLbl.BackgroundTransparency = 1
+        timeLbl.Text = formatTimeSince(entry.time)
+        timeLbl.TextColor3 = COLORS.textMuted
+        timeLbl.TextSize = 11
+        timeLbl.Font = Enum.Font.Gotham
+        timeLbl.TextXAlignment = Enum.TextXAlignment.Right
+        timeLbl.Parent = row
+    end
+end
+
+-- memory popup toggle
+local memoryMenuOpen = false
+
+local function toggleMemoryMenu()
+    memoryMenuOpen = not memoryMenuOpen
+    if memoryMenuOpen then
+        refreshServersList()
+        refreshUpdatesList()
+        memoryMenu.Visible = true
+        memoryMenu.Size = UDim2.new(0, 420, 0, 0)
+        TweenService:Create(memoryMenu, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 420, 0, 340)
+        }):Play()
+    else
+        local tween = TweenService:Create(memoryMenu, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+            Size = UDim2.new(0, 420, 0, 0)
+        })
+        tween:Play()
+        tween.Completed:Connect(function()
+            if not memoryMenuOpen then memoryMenu.Visible = false end
+        end)
+    end
+end
+
+local function closeMemoryMenu()
+    if memoryMenuOpen then toggleMemoryMenu() end
+end
+
+brainBtn.MouseButton1Click:Connect(toggleMemoryMenu)
+memCloseBtn.MouseButton1Click:Connect(closeMemoryMenu)
+
+-- record current server on load
+task.spawn(function()
+    task.wait(3)
+    recordCurrentServer()
+end)
+
 ---------- GUI OFFSET MANAGEMENT ----------
 
 local movedScreenGuis = {}
@@ -1472,6 +2045,7 @@ local function toggleGuiVisibility()
         devBtn.Visible = true
         specBtn.Visible = true
         uniBtn.Visible = true
+        brainBtn.Visible = true
         moveChat(true)
         shiftGameGuis(true)
         findAndWatchLockOnGuis()
@@ -1483,6 +2057,7 @@ local function toggleGuiVisibility()
         devBtn.Visible = false
         specBtn.Visible = false
         uniBtn.Visible = false
+        brainBtn.Visible = false
         moveChat(false)
         shiftGameGuis(false)
         unshiftAllLockOnChildren()
@@ -1490,6 +2065,7 @@ local function toggleGuiVisibility()
         closeDevMenu()
         closeSpecMenu()
         closeActiveMenu()
+        closeMemoryMenu()
     end
 
     _G.SixZeroHubVisible = guiVisible
@@ -1733,6 +2309,9 @@ task.spawn(function()
                         end)
                         loadedScripts[fileKey] = true
 
+                        -- log the update
+                        _logUpdate(info.name)
+
                         -- reload compat if needed
                         if info.compat then
                             task.delay(1, function()
@@ -1784,6 +2363,7 @@ task.spawn(function()
                     "yesno"
                 )
                 if answer == "yes" then
+                    _logUpdate("Six Zero Hub (self)")
                     pcall(function()
                         loadstring(game:HttpGet(HUB_URL, true))()
                     end)
