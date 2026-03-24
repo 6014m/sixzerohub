@@ -34,13 +34,16 @@ end
 
 local function getLasers(round)
     local lasers = {}
-    for _, child in ipairs(round:GetChildren()) do
-        if child.Name:match("^Lasers%d+$") and child:IsA("BasePart") then
-            table.insert(lasers, child)
+    -- check both direct children and descendants for Lasers parts
+    for _, desc in ipairs(round:GetDescendants()) do
+        if desc:IsA("BasePart") and desc.Name:match("^Lasers%d+$") then
+            table.insert(lasers, desc)
         end
     end
     return lasers
 end
+
+local debugged = false
 
 local conn = RunService.Heartbeat:Connect(function()
     if not active then return end
@@ -54,6 +57,23 @@ local conn = RunService.Heartbeat:Connect(function()
 
     local round = findActiveRound()
     if not round then return end
+
+    -- one-time debug: print what we find
+    if not debugged then
+        debugged = true
+        warn("[LaserJumper] Found round: " .. round:GetFullName())
+        local found = getLasers(round)
+        warn("[LaserJumper] Found " .. #found .. " laser parts:")
+        for _, p in ipairs(found) do
+            warn("  " .. p:GetFullName() .. " (" .. p.ClassName .. ")")
+        end
+        if #found == 0 then
+            warn("[LaserJumper] No Lasers parts found. Children of round:")
+            for _, ch in ipairs(round:GetChildren()) do
+                warn("  " .. ch.Name .. " (" .. ch.ClassName .. ")")
+            end
+        end
+    end
 
     local rootPos = root.Position
 
