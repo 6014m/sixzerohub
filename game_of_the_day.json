@@ -148,5 +148,30 @@
     "placeId": 3721281542,
     "name": "Flee the Facility",
     "desc": "Asymmetric horror escape game"
+  },
+  {
+    "placeId": 233916280,
+    "name": "Breaking Point",
+    "desc": "Russian roulette party game with twists"
+  },
+  {
+    "placeId": 11177785498,
+    "name": "Absolvement",
+    "desc": "Souls-like combat with deep progression"
+  },
+  {
+    "placeId": 9770498692,
+    "name": "Arcane Lineage",
+    "desc": "Turn-based RPG with class branching"
+  },
+  {
+    "placeId": 7885679042,
+    "name": "Project Smash",
+    "desc": "Smash Bros-style platform fighter"
+  },
+  {
+    "placeId": 10895881498,
+    "name": "Age of Honor",
+    "desc": "Medieval warfare and conquest"
   }
 ]
