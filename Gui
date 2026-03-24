@@ -2646,7 +2646,27 @@ gotdJoinBtn.MouseLeave:Connect(function()
     TweenService:Create(gotdJoinBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(87, 242, 135)}):Play()
 end)
 
+-- dismiss / not interested button
+local gotdDismissBtn = Instance.new("TextButton")
+gotdDismissBtn.Size = UDim2.new(0, 20, 0, 20)
+gotdDismissBtn.Position = UDim2.new(1, -22, 0, 2)
+gotdDismissBtn.BackgroundTransparency = 1
+gotdDismissBtn.Text = "X"
+gotdDismissBtn.TextColor3 = COLORS.textMuted
+gotdDismissBtn.TextSize = 11
+gotdDismissBtn.Font = Enum.Font.GothamBold
+gotdDismissBtn.Parent = gotdCard
+
+gotdDismissBtn.MouseEnter:Connect(function()
+    gotdDismissBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+end)
+gotdDismissBtn.MouseLeave:Connect(function()
+    gotdDismissBtn.TextColor3 = COLORS.textMuted
+end)
+
 local gotdPlaceId = nil
+local gotdGames = nil
+local gotdDayNum = nil
 
 gotdJoinBtn.MouseButton1Click:Connect(function()
     if gotdPlaceId then
@@ -2654,6 +2674,64 @@ gotdJoinBtn.MouseButton1Click:Connect(function()
         pcall(function()
             game:GetService("TeleportService"):Teleport(gotdPlaceId, player)
         end)
+    end
+end)
+
+-- dismissed games for today (saved per-day so resets next day)
+local GOTD_DISMISS_FILE = "SixZeroHub_gotd_dismiss.json"
+local dismissedGames = {}
+pcall(function()
+    if isfile and isfile(GOTD_DISMISS_FILE) then
+        local raw = readfile(GOTD_DISMISS_FILE)
+        local decoded = HttpService:JSONDecode(raw)
+        if type(decoded) == "table" and decoded.day == math.floor(os.time() / 86400) then
+            dismissedGames = decoded.dismissed or {}
+        end
+    end
+end)
+
+local function saveDismissed()
+    pcall(function()
+        if writefile then
+            writefile(GOTD_DISMISS_FILE, HttpService:JSONEncode({
+                day = math.floor(os.time() / 86400),
+                dismissed = dismissedGames,
+            }))
+        end
+    end)
+end
+
+local function showGotdGame()
+    if not gotdGames or #gotdGames == 0 then return end
+
+    -- find a non-dismissed game starting from today's pick
+    local dayNum = gotdDayNum or math.floor(os.time() / 86400)
+    local found = false
+    for offset = 0, #gotdGames - 1 do
+        local idx = ((dayNum + offset) % #gotdGames) + 1
+        local game = gotdGames[idx]
+        local key = tostring(game.placeId)
+        if not dismissedGames[key] then
+            gotdPlaceId = game.placeId
+            gotdName.Text = game.name or "Unknown"
+            gotdDesc.Text = game.desc or ""
+            gotdTooltip.Text = "  Join " .. (game.name or "game") .. "  "
+            gotdCard.Visible = guiVisible
+            found = true
+            break
+        end
+    end
+
+    if not found then
+        gotdCard.Visible = false
+    end
+end
+
+gotdDismissBtn.MouseButton1Click:Connect(function()
+    if gotdPlaceId then
+        dismissedGames[tostring(gotdPlaceId)] = true
+        saveDismissed()
+        showGotdGame()
     end
 end)
 
@@ -2675,15 +2753,9 @@ task.spawn(function()
         return
     end
 
-    -- pick based on day
-    local dayNum = math.floor(os.time() / 86400)
-    local idx = (dayNum % #games) + 1
-    local todayGame = games[idx]
-
-    gotdPlaceId = todayGame.placeId
-    gotdName.Text = todayGame.name or "Unknown"
-    gotdDesc.Text = todayGame.desc or ""
-    gotdTooltip.Text = "  Join " .. (todayGame.name or "game") .. "  "
+    gotdGames = games
+    gotdDayNum = math.floor(os.time() / 86400)
+    showGotdGame()
 end)
 
 ---------- GUI OFFSET MANAGEMENT ----------
