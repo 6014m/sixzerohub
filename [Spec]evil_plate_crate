@@ -7,7 +7,7 @@ local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 local connections = {}
 local active = true
-local CLICK_RANGE = 32
+local clickRange = 32
 
 local conn = RunService.Heartbeat:Connect(function()
     if not active then return end
@@ -16,22 +16,14 @@ local conn = RunService.Heartbeat:Connect(function()
     local root = char:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    -- use setting if available
-    local range = CLICK_RANGE
-    if _G.SixZeroHubSettings and _G.SixZeroHubSettings["[Spec]evil_plate_crate"] then
-        local s = _G.SixZeroHubSettings["[Spec]evil_plate_crate"]
-        if s.click_range then range = s.click_range end
-    end
-
     local airdrop = workspace:FindFirstChild("Airdrop")
     if not airdrop then return end
 
-    -- single pass: find distance, prompt, and click detector all at once
     local inRange = false
     local prompt, detector
     for _, desc in ipairs(airdrop:GetDescendants()) do
         if not inRange and desc:IsA("BasePart") then
-            if (desc.Position - root.Position).Magnitude <= range then
+            if (desc.Position - root.Position).Magnitude <= clickRange then
                 inRange = true
             end
         end
@@ -67,9 +59,22 @@ if _G.SixZeroHubRegister then
     _G.SixZeroHubRegister("Auto Crate", "[Spec]evil_plate_crate", cleanup, "spec")
 end
 
-if _G.SixZeroHubRegisterSettings then
-    _G.SixZeroHubRegisterSettings("[Spec]evil_plate_crate", {
-        _title = "Auto Crate",
-        { name = "click_range", label = "Click Distance", type = "slider", default = 32, min = 5, max = 100, step = 1 },
-    })
-end
+task.delay(2, function()
+    if _G.SixZeroHubRegisterSettings then
+        _G.SixZeroHubRegisterSettings("[Spec]evil_plate_crate", {
+            _title = "Auto Crate",
+            {
+                name = "click_range",
+                label = "Click Distance",
+                type = "slider",
+                default = 32,
+                min = 5,
+                max = 100,
+                step = 1,
+                onChange = function(val)
+                    clickRange = val
+                end,
+            },
+        })
+    end
+end)
