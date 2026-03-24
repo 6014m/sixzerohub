@@ -100,6 +100,7 @@ local guiVisible = true
 
 local SERVERS_FILE = "SixZeroHub_servers.json"
 local UPDATES_LOG_FILE = "SixZeroHub_updates.json"
+local FAV_GAMES_FILE = "SixZeroHub_favgames.json"
 local MAX_SERVERS = 25
 local SERVER_MAX_AGE = 43200 -- 12 hours in seconds
 
@@ -1453,8 +1454,8 @@ end
 
 local memoryMenu = Instance.new("Frame")
 memoryMenu.Name = "MemoryMenu"
-memoryMenu.Size = UDim2.new(0, 420, 0, 340)
-memoryMenu.Position = UDim2.new(0.5, -210, 0.5, -170)
+memoryMenu.Size = UDim2.new(0, 440, 0, 360)
+memoryMenu.Position = UDim2.new(0.5, -220, 0.5, -180)
 memoryMenu.BackgroundColor3 = COLORS.sidebar
 memoryMenu.BorderSizePixel = 0
 memoryMenu.Visible = false
@@ -1530,7 +1531,7 @@ tabBar.Parent = memoryMenu
 
 local serversTabBtn = Instance.new("TextButton")
 serversTabBtn.Name = "ServersTab"
-serversTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+serversTabBtn.Size = UDim2.new(0, 107, 0, 30)
 serversTabBtn.Position = UDim2.new(0, 0, 0, 0)
 serversTabBtn.BackgroundColor3 = COLORS.sidebar
 serversTabBtn.BorderSizePixel = 0
@@ -1543,8 +1544,8 @@ serversTabBtn.Parent = tabBar
 
 local updatesTabBtn = Instance.new("TextButton")
 updatesTabBtn.Name = "UpdatesTab"
-updatesTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
-updatesTabBtn.Position = UDim2.new(0.5, 0, 0, 0)
+updatesTabBtn.Size = UDim2.new(0, 107, 0, 30)
+updatesTabBtn.Position = UDim2.new(0, 107, 0, 0)
 updatesTabBtn.BackgroundColor3 = COLORS.background
 updatesTabBtn.BorderSizePixel = 0
 updatesTabBtn.Text = "Update History"
@@ -1553,6 +1554,19 @@ updatesTabBtn.TextSize = 13
 updatesTabBtn.Font = Enum.Font.GothamBold
 updatesTabBtn.AutoButtonColor = false
 updatesTabBtn.Parent = tabBar
+
+local favGamesTabBtn = Instance.new("TextButton")
+favGamesTabBtn.Name = "FavGamesTab"
+favGamesTabBtn.Size = UDim2.new(0, 106, 0, 30)
+favGamesTabBtn.Position = UDim2.new(0, 214, 0, 0)
+favGamesTabBtn.BackgroundColor3 = COLORS.background
+favGamesTabBtn.BorderSizePixel = 0
+favGamesTabBtn.Text = "Fav Games"
+favGamesTabBtn.TextColor3 = COLORS.textMuted
+favGamesTabBtn.TextSize = 13
+favGamesTabBtn.Font = Enum.Font.GothamBold
+favGamesTabBtn.AutoButtonColor = false
+favGamesTabBtn.Parent = tabBar
 
 -- tab content frames
 local serversContent = Instance.new("ScrollingFrame")
@@ -1591,30 +1605,69 @@ updatesLayout.SortOrder = Enum.SortOrder.LayoutOrder
 updatesLayout.Padding = UDim.new(0, 4)
 updatesLayout.Parent = updatesContent
 
+local favGamesContent = Instance.new("ScrollingFrame")
+favGamesContent.Name = "FavGamesContent"
+favGamesContent.Size = UDim2.new(1, -12, 1, -78)
+favGamesContent.Position = UDim2.new(0, 6, 0, 74)
+favGamesContent.BackgroundTransparency = 1
+favGamesContent.BorderSizePixel = 0
+favGamesContent.ScrollBarThickness = 3
+favGamesContent.ScrollBarImageColor3 = COLORS.textMuted
+favGamesContent.CanvasSize = UDim2.new(0, 0, 0, 0)
+favGamesContent.AutomaticCanvasSize = Enum.AutomaticSize.Y
+favGamesContent.Visible = false
+favGamesContent.Parent = memoryMenu
+
+local favGamesLayout = Instance.new("UIListLayout")
+favGamesLayout.SortOrder = Enum.SortOrder.LayoutOrder
+favGamesLayout.Padding = UDim.new(0, 4)
+favGamesLayout.Parent = favGamesContent
+
+-- + button (floating, bottom-right of content area)
+local addFavBtn = Instance.new("TextButton")
+addFavBtn.Name = "AddFav"
+addFavBtn.Size = UDim2.new(0, 36, 0, 36)
+addFavBtn.Position = UDim2.new(1, -48, 1, -48)
+addFavBtn.BackgroundColor3 = COLORS.accent
+addFavBtn.BorderSizePixel = 0
+addFavBtn.Text = "+"
+addFavBtn.TextColor3 = COLORS.text
+addFavBtn.TextSize = 22
+addFavBtn.Font = Enum.Font.GothamBold
+addFavBtn.AutoButtonColor = false
+addFavBtn.Visible = false
+addFavBtn.ZIndex = 5
+addFavBtn.Parent = memoryMenu
+Instance.new("UICorner", addFavBtn).CornerRadius = UDim.new(0, 18)
+
+addFavBtn.MouseEnter:Connect(function()
+    TweenService:Create(addFavBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(71, 82, 196)}):Play()
+end)
+addFavBtn.MouseLeave:Connect(function()
+    TweenService:Create(addFavBtn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.accent}):Play()
+end)
+
 -- tab switching
 local activeTab = "servers"
 
 local function switchTab(tab)
     activeTab = tab
-    if tab == "servers" then
-        serversContent.Visible = true
-        updatesContent.Visible = false
-        serversTabBtn.BackgroundColor3 = COLORS.sidebar
-        serversTabBtn.TextColor3 = COLORS.text
-        updatesTabBtn.BackgroundColor3 = COLORS.background
-        updatesTabBtn.TextColor3 = COLORS.textMuted
-    else
-        serversContent.Visible = false
-        updatesContent.Visible = true
-        updatesTabBtn.BackgroundColor3 = COLORS.sidebar
-        updatesTabBtn.TextColor3 = COLORS.text
-        serversTabBtn.BackgroundColor3 = COLORS.background
-        serversTabBtn.TextColor3 = COLORS.textMuted
-    end
+    serversContent.Visible = (tab == "servers")
+    updatesContent.Visible = (tab == "updates")
+    favGamesContent.Visible = (tab == "favgames")
+    addFavBtn.Visible = (tab == "favgames")
+
+    serversTabBtn.BackgroundColor3 = tab == "servers" and COLORS.sidebar or COLORS.background
+    serversTabBtn.TextColor3 = tab == "servers" and COLORS.text or COLORS.textMuted
+    updatesTabBtn.BackgroundColor3 = tab == "updates" and COLORS.sidebar or COLORS.background
+    updatesTabBtn.TextColor3 = tab == "updates" and COLORS.text or COLORS.textMuted
+    favGamesTabBtn.BackgroundColor3 = tab == "favgames" and COLORS.sidebar or COLORS.background
+    favGamesTabBtn.TextColor3 = tab == "favgames" and COLORS.text or COLORS.textMuted
 end
 
 serversTabBtn.MouseButton1Click:Connect(function() switchTab("servers") end)
 updatesTabBtn.MouseButton1Click:Connect(function() switchTab("updates") end)
+favGamesTabBtn.MouseButton1Click:Connect(function() switchTab("favgames") end)
 
 -- populate servers list
 local function refreshServersList()
@@ -1819,6 +1872,482 @@ local function refreshUpdatesList()
     end
 end
 
+-- favorite games system
+local favGamesList = {}
+pcall(function()
+    if isfile and isfile(FAV_GAMES_FILE) then
+        local raw = readfile(FAV_GAMES_FILE)
+        local decoded = HttpService:JSONDecode(raw)
+        if type(decoded) == "table" then
+            favGamesList = decoded
+        end
+    end
+end)
+
+local function saveFavGames()
+    pcall(function()
+        if writefile then
+            writefile(FAV_GAMES_FILE, HttpService:JSONEncode(favGamesList))
+        end
+    end)
+end
+
+local refreshFavGamesList -- forward declare
+
+-- add game dialog
+local addDialog = Instance.new("Frame")
+addDialog.Name = "AddGameDialog"
+addDialog.Size = UDim2.new(0, 300, 0, 200)
+addDialog.Position = UDim2.new(0.5, -150, 0.5, -100)
+addDialog.BackgroundColor3 = COLORS.darker
+addDialog.BorderSizePixel = 0
+addDialog.Visible = false
+addDialog.ZIndex = 10
+addDialog.Parent = screenGui
+Instance.new("UICorner", addDialog).CornerRadius = UDim.new(0, 8)
+
+local addDialogStroke = Instance.new("UIStroke", addDialog)
+addDialogStroke.Color = COLORS.accent
+addDialogStroke.Thickness = 1
+
+local addDialogTitle = Instance.new("TextLabel")
+addDialogTitle.Size = UDim2.new(1, 0, 0, 30)
+addDialogTitle.Position = UDim2.new(0, 0, 0, 8)
+addDialogTitle.BackgroundTransparency = 1
+addDialogTitle.Text = "Add Favorite Game"
+addDialogTitle.TextColor3 = COLORS.text
+addDialogTitle.TextSize = 15
+addDialogTitle.Font = Enum.Font.GothamBold
+addDialogTitle.ZIndex = 10
+addDialogTitle.Parent = addDialog
+
+local gameIdLabel = Instance.new("TextLabel")
+gameIdLabel.Size = UDim2.new(1, -20, 0, 20)
+gameIdLabel.Position = UDim2.new(0, 10, 0, 42)
+gameIdLabel.BackgroundTransparency = 1
+gameIdLabel.Text = "Game/Place ID"
+gameIdLabel.TextColor3 = COLORS.textMuted
+gameIdLabel.TextSize = 12
+gameIdLabel.Font = Enum.Font.Gotham
+gameIdLabel.TextXAlignment = Enum.TextXAlignment.Left
+gameIdLabel.ZIndex = 10
+gameIdLabel.Parent = addDialog
+
+local gameIdBox = Instance.new("TextBox")
+gameIdBox.Name = "GameIdBox"
+gameIdBox.Size = UDim2.new(1, -20, 0, 30)
+gameIdBox.Position = UDim2.new(0, 10, 0, 62)
+gameIdBox.BackgroundColor3 = COLORS.sidebar
+gameIdBox.BorderSizePixel = 0
+gameIdBox.Text = ""
+gameIdBox.PlaceholderText = "Enter place ID..."
+gameIdBox.TextColor3 = COLORS.text
+gameIdBox.PlaceholderColor3 = COLORS.textMuted
+gameIdBox.TextSize = 13
+gameIdBox.Font = Enum.Font.Gotham
+gameIdBox.ClearTextOnFocus = false
+gameIdBox.ZIndex = 10
+gameIdBox.Parent = addDialog
+Instance.new("UICorner", gameIdBox).CornerRadius = UDim.new(0, 4)
+Instance.new("UIPadding", gameIdBox).PaddingLeft = UDim.new(0, 8)
+
+local vipLabel = Instance.new("TextLabel")
+vipLabel.Size = UDim2.new(1, -20, 0, 20)
+vipLabel.Position = UDim2.new(0, 10, 0, 98)
+vipLabel.BackgroundTransparency = 1
+vipLabel.Text = "VIP Server Link (optional)"
+vipLabel.TextColor3 = COLORS.textMuted
+vipLabel.TextSize = 12
+vipLabel.Font = Enum.Font.Gotham
+vipLabel.TextXAlignment = Enum.TextXAlignment.Left
+vipLabel.ZIndex = 10
+vipLabel.Parent = addDialog
+
+local vipBox = Instance.new("TextBox")
+vipBox.Name = "VipBox"
+vipBox.Size = UDim2.new(1, -20, 0, 30)
+vipBox.Position = UDim2.new(0, 10, 0, 118)
+vipBox.BackgroundColor3 = COLORS.sidebar
+vipBox.BorderSizePixel = 0
+vipBox.Text = ""
+vipBox.PlaceholderText = "Paste VIP server link..."
+vipBox.TextColor3 = COLORS.text
+vipBox.PlaceholderColor3 = COLORS.textMuted
+vipBox.TextSize = 13
+vipBox.Font = Enum.Font.Gotham
+vipBox.ClearTextOnFocus = false
+vipBox.ZIndex = 10
+vipBox.Parent = addDialog
+Instance.new("UICorner", vipBox).CornerRadius = UDim.new(0, 4)
+Instance.new("UIPadding", vipBox).PaddingLeft = UDim.new(0, 8)
+
+local addConfirmBtn = Instance.new("TextButton")
+addConfirmBtn.Size = UDim2.new(0, 80, 0, 28)
+addConfirmBtn.Position = UDim2.new(0.5, -85, 0, 160)
+addConfirmBtn.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
+addConfirmBtn.BorderSizePixel = 0
+addConfirmBtn.Text = "Add"
+addConfirmBtn.TextColor3 = COLORS.darker
+addConfirmBtn.TextSize = 13
+addConfirmBtn.Font = Enum.Font.GothamBold
+addConfirmBtn.AutoButtonColor = false
+addConfirmBtn.ZIndex = 10
+addConfirmBtn.Parent = addDialog
+Instance.new("UICorner", addConfirmBtn).CornerRadius = UDim.new(0, 4)
+
+local addCancelBtn = Instance.new("TextButton")
+addCancelBtn.Size = UDim2.new(0, 80, 0, 28)
+addCancelBtn.Position = UDim2.new(0.5, 5, 0, 160)
+addCancelBtn.BackgroundColor3 = COLORS.hover
+addCancelBtn.BorderSizePixel = 0
+addCancelBtn.Text = "Cancel"
+addCancelBtn.TextColor3 = COLORS.text
+addCancelBtn.TextSize = 13
+addCancelBtn.Font = Enum.Font.GothamBold
+addCancelBtn.AutoButtonColor = false
+addCancelBtn.ZIndex = 10
+addCancelBtn.Parent = addDialog
+Instance.new("UICorner", addCancelBtn).CornerRadius = UDim.new(0, 4)
+
+local addDialogError = Instance.new("TextLabel")
+addDialogError.Size = UDim2.new(1, -20, 0, 16)
+addDialogError.Position = UDim2.new(0, 10, 0, 190)
+addDialogError.BackgroundTransparency = 1
+addDialogError.Text = ""
+addDialogError.TextColor3 = Color3.fromRGB(237, 66, 69)
+addDialogError.TextSize = 11
+addDialogError.Font = Enum.Font.Gotham
+addDialogError.ZIndex = 10
+addDialogError.Parent = addDialog
+
+addCancelBtn.MouseButton1Click:Connect(function()
+    addDialog.Visible = false
+    gameIdBox.Text = ""
+    vipBox.Text = ""
+    addDialogError.Text = ""
+end)
+
+addConfirmBtn.MouseButton1Click:Connect(function()
+    local idText = gameIdBox.Text:match("%d+")
+    if not idText then
+        addDialogError.Text = "Please enter a valid place ID"
+        return
+    end
+
+    local placeId = tonumber(idText)
+    if not placeId then
+        addDialogError.Text = "Invalid place ID"
+        return
+    end
+
+    -- check for duplicate
+    for _, entry in ipairs(favGamesList) do
+        if entry.placeId == placeId then
+            addDialogError.Text = "Game already in favorites"
+            return
+        end
+    end
+
+    local gameName = getGameName(placeId)
+    local vipLink = vipBox.Text ~= "" and vipBox.Text or nil
+
+    table.insert(favGamesList, {
+        placeId = placeId,
+        gameName = gameName,
+        vipLink = vipLink,
+    })
+    saveFavGames()
+
+    addDialog.Visible = false
+    gameIdBox.Text = ""
+    vipBox.Text = ""
+    addDialogError.Text = ""
+    refreshFavGamesList()
+end)
+
+addFavBtn.MouseButton1Click:Connect(function()
+    addDialog.Visible = not addDialog.Visible
+end)
+
+makeDraggable(addDialogTitle, addDialog)
+
+-- drag reorder state
+local dragState = {
+    dragging = false,
+    dragIndex = nil,
+    dragFrame = nil,
+    dragOffset = 0,
+    originalPositions = {},
+}
+
+local function refreshFavGamesListImpl()
+    for _, child in ipairs(favGamesContent:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    if #favGamesList == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Name = "Empty"
+        empty.Size = UDim2.new(1, 0, 0, 40)
+        empty.BackgroundTransparency = 1
+        empty.Text = "No favorite games - click + to add"
+        empty.TextColor3 = COLORS.textMuted
+        empty.TextSize = 14
+        empty.Font = Enum.Font.Gotham
+        empty.Parent = favGamesContent
+        return
+    end
+
+    for i, entry in ipairs(favGamesList) do
+        local hasVip = entry.vipLink ~= nil and entry.vipLink ~= ""
+        local row = Instance.new("Frame")
+        row.Name = "FavGame_" .. i
+        row.Size = UDim2.new(1, -4, 0, 46)
+        row.BackgroundColor3 = COLORS.hover
+        row.BorderSizePixel = 0
+        row.LayoutOrder = i
+        row.Parent = favGamesContent
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+        -- drag handle
+        local dragHandle = Instance.new("TextLabel")
+        dragHandle.Name = "DragHandle"
+        dragHandle.Size = UDim2.new(0, 20, 1, 0)
+        dragHandle.Position = UDim2.new(0, 2, 0, 0)
+        dragHandle.BackgroundTransparency = 1
+        dragHandle.Text = "\xE2\x8B\xAE"
+        dragHandle.TextColor3 = COLORS.textMuted
+        dragHandle.TextSize = 16
+        dragHandle.Font = Enum.Font.GothamBold
+        dragHandle.Parent = row
+
+        local gameLbl = Instance.new("TextLabel")
+        gameLbl.Size = UDim2.new(1, (hasVip and -165 or -130), 0, 22)
+        gameLbl.Position = UDim2.new(0, 24, 0, 2)
+        gameLbl.BackgroundTransparency = 1
+        gameLbl.Text = entry.gameName or ("Place " .. tostring(entry.placeId))
+        gameLbl.TextColor3 = COLORS.text
+        gameLbl.TextSize = 13
+        gameLbl.Font = Enum.Font.GothamBold
+        gameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        gameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        gameLbl.Parent = row
+
+        local idLbl = Instance.new("TextLabel")
+        idLbl.Size = UDim2.new(1, -130, 0, 18)
+        idLbl.Position = UDim2.new(0, 24, 0, 24)
+        idLbl.BackgroundTransparency = 1
+        idLbl.Text = "ID: " .. tostring(entry.placeId)
+        idLbl.TextColor3 = COLORS.textMuted
+        idLbl.TextSize = 11
+        idLbl.Font = Enum.Font.Gotham
+        idLbl.TextXAlignment = Enum.TextXAlignment.Left
+        idLbl.Parent = row
+
+        -- green join button
+        local btnOffset = hasVip and -168 or -133
+        local joinBtn = Instance.new("TextButton")
+        joinBtn.Size = UDim2.new(0, 60, 0, 28)
+        joinBtn.Position = UDim2.new(1, btnOffset, 0.5, -14)
+        joinBtn.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
+        joinBtn.BorderSizePixel = 0
+        joinBtn.Text = "Join"
+        joinBtn.TextColor3 = COLORS.darker
+        joinBtn.TextSize = 11
+        joinBtn.Font = Enum.Font.GothamBold
+        joinBtn.AutoButtonColor = false
+        joinBtn.Parent = row
+        Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 4)
+
+        local joinTooltip = Instance.new("TextLabel")
+        joinTooltip.Size = UDim2.new(0, 0, 0, 22)
+        joinTooltip.AutomaticSize = Enum.AutomaticSize.X
+        joinTooltip.Position = UDim2.new(0.5, 0, -1, -4)
+        joinTooltip.AnchorPoint = Vector2.new(0.5, 0)
+        joinTooltip.BackgroundColor3 = COLORS.darker
+        joinTooltip.BorderSizePixel = 0
+        joinTooltip.Text = "  Join " .. (entry.gameName or "game") .. "  "
+        joinTooltip.TextColor3 = COLORS.text
+        joinTooltip.TextSize = 11
+        joinTooltip.Font = Enum.Font.Gotham
+        joinTooltip.Visible = false
+        joinTooltip.ZIndex = 8
+        joinTooltip.Parent = joinBtn
+        Instance.new("UICorner", joinTooltip).CornerRadius = UDim.new(0, 4)
+
+        joinBtn.MouseEnter:Connect(function()
+            joinTooltip.Visible = true
+            TweenService:Create(joinBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(70, 200, 110)}):Play()
+        end)
+        joinBtn.MouseLeave:Connect(function()
+            joinTooltip.Visible = false
+            TweenService:Create(joinBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(87, 242, 135)}):Play()
+        end)
+
+        local capturedPlaceId = entry.placeId
+        joinBtn.MouseButton1Click:Connect(function()
+            joinBtn.Text = "..."
+            pcall(function()
+                TeleportService:Teleport(capturedPlaceId, player)
+            end)
+        end)
+
+        -- purple VIP join button (only if vipLink exists)
+        if hasVip then
+            local vipBtn = Instance.new("TextButton")
+            vipBtn.Size = UDim2.new(0, 28, 0, 28)
+            vipBtn.Position = UDim2.new(1, -103, 0.5, -14)
+            vipBtn.BackgroundColor3 = Color3.fromRGB(150, 80, 220)
+            vipBtn.BorderSizePixel = 0
+            vipBtn.Text = "VIP"
+            vipBtn.TextColor3 = COLORS.text
+            vipBtn.TextSize = 9
+            vipBtn.Font = Enum.Font.GothamBold
+            vipBtn.AutoButtonColor = false
+            vipBtn.Parent = row
+            Instance.new("UICorner", vipBtn).CornerRadius = UDim.new(0, 4)
+
+            local vipTooltip = Instance.new("TextLabel")
+            vipTooltip.Size = UDim2.new(0, 0, 0, 22)
+            vipTooltip.AutomaticSize = Enum.AutomaticSize.X
+            vipTooltip.Position = UDim2.new(0.5, 0, -1, -4)
+            vipTooltip.AnchorPoint = Vector2.new(0.5, 0)
+            vipTooltip.BackgroundColor3 = COLORS.darker
+            vipTooltip.BorderSizePixel = 0
+            vipTooltip.Text = "  Join " .. (entry.gameName or "game") .. " in private  "
+            vipTooltip.TextColor3 = COLORS.text
+            vipTooltip.TextSize = 11
+            vipTooltip.Font = Enum.Font.Gotham
+            vipTooltip.Visible = false
+            vipTooltip.ZIndex = 8
+            vipTooltip.Parent = vipBtn
+            Instance.new("UICorner", vipTooltip).CornerRadius = UDim.new(0, 4)
+
+            vipBtn.MouseEnter:Connect(function()
+                vipTooltip.Visible = true
+                TweenService:Create(vipBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(130, 60, 200)}):Play()
+            end)
+            vipBtn.MouseLeave:Connect(function()
+                vipTooltip.Visible = false
+                TweenService:Create(vipBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(150, 80, 220)}):Play()
+            end)
+
+            local capturedVipLink = entry.vipLink
+            vipBtn.MouseButton1Click:Connect(function()
+                vipBtn.Text = "..."
+                pcall(function()
+                    -- extract the code from the VIP link
+                    local code = capturedVipLink:match("code=([%w%-]+)") or capturedVipLink:match("privateServerLinkCode=([%w%-]+)")
+                    if code then
+                        TeleportService:Teleport(capturedPlaceId, player, nil, code)
+                    else
+                        -- try using the full link as a code
+                        TeleportService:Teleport(capturedPlaceId, player, nil, capturedVipLink)
+                    end
+                end)
+            end)
+        end
+
+        -- remove button
+        local removeBtn = Instance.new("TextButton")
+        removeBtn.Size = UDim2.new(0, 28, 0, 28)
+        removeBtn.Position = UDim2.new(1, -40, 0.5, -14)
+        removeBtn.BackgroundColor3 = COLORS.darker
+        removeBtn.BorderSizePixel = 0
+        removeBtn.Text = "X"
+        removeBtn.TextColor3 = COLORS.textMuted
+        removeBtn.TextSize = 12
+        removeBtn.Font = Enum.Font.GothamBold
+        removeBtn.AutoButtonColor = false
+        removeBtn.Parent = row
+        Instance.new("UICorner", removeBtn).CornerRadius = UDim.new(0, 4)
+
+        removeBtn.MouseEnter:Connect(function()
+            removeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+        end)
+        removeBtn.MouseLeave:Connect(function()
+            removeBtn.TextColor3 = COLORS.textMuted
+        end)
+
+        local capturedIdx = i
+        removeBtn.MouseButton1Click:Connect(function()
+            table.remove(favGamesList, capturedIdx)
+            saveFavGames()
+            refreshFavGamesList()
+        end)
+
+        -- drag to reorder
+        local rowDragging = false
+        local dragStartY = 0
+        local origOrder = 0
+
+        dragHandle.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                rowDragging = true
+                dragStartY = input.Position.Y
+                origOrder = row.LayoutOrder
+                row.BackgroundColor3 = COLORS.sidebar
+                row.ZIndex = 5
+                for _, ch in ipairs(row:GetChildren()) do
+                    if ch:IsA("GuiObject") then ch.ZIndex = 5 end
+                end
+            end
+        end)
+
+        local dragInputConn
+        dragInputConn = UserInputService.InputChanged:Connect(function(input)
+            if not rowDragging then return end
+            if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+
+            local deltaY = input.Position.Y - dragStartY
+            local rowHeight = 50 -- row height + padding
+            local shift = math.floor(deltaY / rowHeight + 0.5)
+            local newOrder = math.clamp(origOrder + shift, 1, #favGamesList)
+
+            if newOrder ~= row.LayoutOrder then
+                -- swap in the list
+                local oldIdx = row.LayoutOrder
+                if oldIdx >= 1 and oldIdx <= #favGamesList and newOrder >= 1 and newOrder <= #favGamesList then
+                    local item = table.remove(favGamesList, oldIdx)
+                    table.insert(favGamesList, newOrder, item)
+                    saveFavGames()
+                    -- update all layout orders
+                    local idx = 0
+                    for _, child in ipairs(favGamesContent:GetChildren()) do
+                        if child:IsA("Frame") then
+                            idx = idx + 1
+                        end
+                    end
+                    refreshFavGamesList()
+                    rowDragging = false
+                end
+            end
+        end)
+
+        local dragEndConn
+        dragEndConn = UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                if rowDragging then
+                    rowDragging = false
+                    row.BackgroundColor3 = COLORS.hover
+                    row.ZIndex = 1
+                    for _, ch in ipairs(row:GetChildren()) do
+                        if ch:IsA("GuiObject") then ch.ZIndex = 1 end
+                    end
+                end
+            end
+        end)
+
+        -- clean up connections when row is destroyed
+        row.Destroying:Connect(function()
+            if dragInputConn then dragInputConn:Disconnect() end
+            if dragEndConn then dragEndConn:Disconnect() end
+        end)
+    end
+end
+
+refreshFavGamesList = refreshFavGamesListImpl
+
 -- memory popup toggle
 local memoryMenuOpen = false
 
@@ -1827,14 +2356,15 @@ local function toggleMemoryMenu()
     if memoryMenuOpen then
         refreshServersList()
         refreshUpdatesList()
+        if activeTab == "favgames" then refreshFavGamesList() end
         memoryMenu.Visible = true
-        memoryMenu.Size = UDim2.new(0, 420, 0, 0)
+        memoryMenu.Size = UDim2.new(0, 440, 0, 0)
         TweenService:Create(memoryMenu, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Size = UDim2.new(0, 420, 0, 340)
+            Size = UDim2.new(0, 440, 0, 360)
         }):Play()
     else
         local tween = TweenService:Create(memoryMenu, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-            Size = UDim2.new(0, 420, 0, 0)
+            Size = UDim2.new(0, 440, 0, 0)
         })
         tween:Play()
         tween.Completed:Connect(function()
