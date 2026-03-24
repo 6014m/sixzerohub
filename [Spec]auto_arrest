@@ -86,6 +86,15 @@ local function lockOff()
         if hum then hum.AutoRotate = true end
         player.CameraMinZoomDistance = 0.5
         player.CameraMaxZoomDistance = 128
+        -- restore camera to follow player
+        local cam = workspace.CurrentCamera
+        cam.CameraType = Enum.CameraType.Custom
+        cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
+        -- re-enable game's built-in shiftlock
+        player.DevEnableMouseLock = true
+        pcall(function()
+            UserSettings():GetService("UserGameSettings").ControlMode = Enum.ControlMode.MouseLockSwitch
+        end)
     end)
 end
 
