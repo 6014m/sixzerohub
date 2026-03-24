@@ -20,14 +20,42 @@ local killBind = Enum.KeyCode.P
 local skipList = {}
 local SKIP_DURATION = 20
 
----------- NOCLIP ----------
+---------- NOCLIP (OpenGui method: anchored proxy part) ----------
 
-local noclipConn = RunService.Stepped:Connect(function()
+local noclipProxy = nil
+local noclipTargetCF = nil
+
+local noclipConn = RunService.Heartbeat:Connect(function()
     if not active or not noclipEnabled then return end
     local char = player.Character
     if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then return end
+
+    if not noclipProxy or not noclipProxy.Parent then
+        noclipProxy = Instance.new("Part")
+        noclipProxy.Anchored = true
+        noclipProxy.CanCollide = false
+        noclipProxy.Transparency = 1
+        noclipProxy.Size = Vector3.new(1, 1, 1)
+        noclipProxy.Name = "NoclipProxy"
+        noclipProxy.Parent = workspace
+    end
+
+    -- update proxy to where we want to be
+    if noclipTargetCF then
+        noclipProxy.CFrame = noclipTargetCF
+    else
+        noclipProxy.CFrame = root.CFrame
+    end
+
+    -- force character to proxy position + zero velocity
+    root.CFrame = noclipProxy.CFrame
+    hum.PlatformStand = true
     for _, part in ipairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
+            part.Velocity = Vector3.new(0, 0, 0)
             part.CanCollide = false
         end
     end
@@ -97,6 +125,15 @@ end
 local function unhideCharacter()
     hidden = false
     noclipEnabled = false
+    noclipTargetCF = nil
+    if noclipProxy and noclipProxy.Parent then
+        noclipProxy:Destroy()
+        noclipProxy = nil
+    end
+    pcall(function()
+        local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false end
+    end)
 end
 
 -- find the ACTUAL terrain/baseplate ground, not roofs or thin floors above us
@@ -152,35 +189,22 @@ local function getGroundY(position)
     return position.Y - 3, Vector3.new(0, 1, 0)
 end
 
--- keep character flipped and head buried in ground + prevent sitting
-local flipConn = RunService.Heartbeat:Connect(function()
-    if not active or not hidden then return end
-    local char = player.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
+-- keep updating noclip target to be flipped underground
+local flipConn = RunService.RenderStepped:Connect(function()
+    if not active or not hidden or not noclipEnabled then return end
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    -- prevent sitting
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum and hum.Sit then
-        hum.Sit = false
-    end
-
-    -- raycast for real ground (terrain/baseplate, not roofs)
     local groundY, normal = getGroundY(root.Position)
 
-    -- align to ground slope using the surface normal
-    -- flipped: head hangs ~2.5 studs below HRP. Place HRP at ground+1 so head is 1.5 studs INTO ground
-    local upVec = -normal -- we're flipped, so "up" for us is the negative of the ground normal
-    local lookVec = Vector3.new(1, 0, 0) -- arbitrary forward
+    local upVec = -normal
+    local lookVec = Vector3.new(1, 0, 0)
     if math.abs(upVec.Y) > 0.99 then
-        -- flat ground, just flip on Z
-        root.CFrame = CFrame.new(root.Position.X, groundY - 2, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
+        noclipTargetCF = CFrame.new(root.Position.X, groundY - 2, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
     else
-        -- slanted ground, align to slope
         local rightVec = lookVec:Cross(upVec).Unit
         local fwd = upVec:Cross(rightVec).Unit
-        root.CFrame = CFrame.fromMatrix(Vector3.new(root.Position.X, groundY - 2, root.Position.Z), rightVec, upVec, -fwd)
+        noclipTargetCF = CFrame.fromMatrix(Vector3.new(root.Position.X, groundY - 2, root.Position.Z), rightVec, upVec, -fwd)
     end
 end)
 table.insert(connections, flipConn)
@@ -525,8 +549,7 @@ end)
 
 local function cleanup()
     active = false
-    hidden = false
-    noclipEnabled = false
+    unhideCharacter()
     resetCamera()
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
