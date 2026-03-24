@@ -443,8 +443,8 @@ task.spawn(function()
             if crim then
                 local pri = hasKeycard(plr) and 1 or 2
                 table.insert(targets, { player = plr, root = root, priority = pri, isCriminal = true })
-            elseif inm and isInmateArrestable() then
-                -- only target inmates when the 🔗 chain icon is showing
+            elseif inm then
+                -- inmates added as candidates, chain check happens after tweening close
                 table.insert(targets, { player = plr, root = root, priority = 10, isCriminal = false })
             end
         end
@@ -466,7 +466,20 @@ task.spawn(function()
             if not target.player.Parent then continue end
             if isArrested(target.player) or hasForceField(target.player) then continue end
 
-            -- full pursuit (criminals always, inmates only when 🔗 confirmed)
+            -- for inmates: tween close first, then check if 🔗 chain appears
+            if not target.isCriminal then
+                local freshRoot = getRoot(target.player.Character)
+                if not freshRoot then continue end
+                tweenToTarget(freshRoot)
+                task.wait(0.3) -- give the game a moment to show the chain
+                if not isInmateArrestable() then
+                    -- no chain = not arrestable here, skip
+                    skipList[target.player.Name] = os.clock()
+                    continue
+                end
+            end
+
+            -- pursue and arrest
             local arrested = false
             local maxAttempts = target.isCriminal and 15 or 8
             for attempt = 1, maxAttempts do
@@ -476,6 +489,8 @@ task.spawn(function()
                     break
                 end
                 if hasForceField(target.player) then break end
+                -- if inmate, recheck chain each attempt in case we drifted
+                if not target.isCriminal and not isInmateArrestable() then break end
 
                 local freshRoot = getRoot(target.player.Character)
                 if not freshRoot or not freshRoot.Parent then break end
