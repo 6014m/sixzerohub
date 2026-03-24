@@ -25,10 +25,51 @@ local COLORS = {
     red = Color3.fromRGB(237, 66, 69),
 }
 
+---------- DEFAULT ANIMATION BLACKLIST ----------
+
+-- collect all animation IDs from the Animate script so we can ignore them
+local defaultAnimIds = {}
+
+local function collectDefaultAnims()
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local animate = char:FindFirstChild("Animate")
+        if not animate then return end
+        for _, child in ipairs(animate:GetDescendants()) do
+            if child:IsA("Animation") then
+                local id = tostring(child.AnimationId):match("%d+")
+                if id then defaultAnimIds[id] = true end
+            end
+        end
+    end)
+    -- also add well-known Roblox default animation IDs
+    local knownDefaults = {
+        -- R15 defaults
+        "507766666", "507766951", "507766388", -- walk, run, idle
+        "507765644", "507765000", -- jump, fall
+        "507765764", "507767714", -- climb, swim
+        "619528412", "619524662", -- swimidle, fall
+        "2510196951", "2510197257", -- new idle
+        "742637942", "742638445", -- tool none, slash
+        "507768375", -- sitting
+        -- R6 defaults
+        "180435571", "180435792", -- walk, run
+        "180435792", "125750702", -- idle
+    }
+    for _, id in ipairs(knownDefaults) do
+        defaultAnimIds[id] = true
+    end
+end
+
+local function isDefaultAnim(animId)
+    return defaultAnimIds[animId] == true
+end
+
 ---------- REMOTE TRACKING ----------
 
-local recentRemotes = {} -- { {time, remote, args}, ... }
-local REMOTE_WINDOW = 0.5 -- seconds to correlate remote with animation
+local recentRemotes = {}
+local REMOTE_WINDOW = 0.5
 
 local oldNamecall
 local namecallHooked = false
@@ -49,7 +90,6 @@ local function hookRemotes()
                     method = method,
                     args = args,
                 })
-                -- keep only recent
                 if #recentRemotes > 50 then
                     table.remove(recentRemotes, 1)
                 end
@@ -98,8 +138,8 @@ end
 
 ---------- EMOTE DETECTION ----------
 
-local detectedEmotes = {} -- { {animId, name, directCode, remoteCode, time}, ... }
-local seenAnimIds = {} -- avoid duplicates
+local detectedEmotes = {}
+local seenAnimIds = {}
 
 local function onAnimationPlayed(track)
     if not active then return end
@@ -110,19 +150,19 @@ local function onAnimationPlayed(track)
     local idNum = animId:match("%d+")
     if not idNum then return end
 
-    -- skip common movement animations (walk, run, idle, jump, fall, climb, swim)
-    if track.Priority == Enum.AnimationPriority.Core or track.Priority == Enum.AnimationPriority.Movement then
-        return
-    end
+    -- skip default roblox animations
+    if isDefaultAnim(idNum) then return end
 
-    -- skip if we already logged this one
+    -- skip if already logged
     if seenAnimIds[idNum] then return end
     seenAnimIds[idNum] = true
 
-    local animName = anim.Name ~= "Animation" and anim.Name or ("Emote_" .. idNum)
+    local animName = anim.Name
+    if animName == "Animation" or animName == "" then
+        animName = "Emote_" .. idNum
+    end
     local captureTime = os.clock()
 
-    -- direct play method (no FireServer needed)
     local directCode = string.format(
         [[local anim = Instance.new("Animation")
 anim.AnimationId = "rbxassetid://%s"
@@ -131,29 +171,12 @@ track:Play()]],
         idNum
     )
 
-    -- check for correlated remotes
     local remoteCode = nil
     local remotes = getRecentRemotes(captureTime - REMOTE_WINDOW)
     if #remotes > 0 then
-        local r = remotes[#remotes] -- most recent
+        local r = remotes[#remotes]
         local argStr = argsToString(r.args)
-        if r.method == "FireServer" then
-            remoteCode = string.format(
-                'game:GetService("ReplicatedStorage"):FindFirstChild("%s", true):%s(%s)',
-                r.remote:match("[^%.]+$") or r.remote,
-                r.method,
-                argStr
-            )
-        else
-            remoteCode = string.format(
-                'game:GetService("ReplicatedStorage"):FindFirstChild("%s", true):%s(%s)',
-                r.remote:match("[^%.]+$") or r.remote,
-                r.method,
-                argStr
-            )
-        end
-        -- also show the full path version
-        remoteCode = remoteCode .. "\n-- Full path: " .. r.remote .. ":" .. r.method .. "(" .. argStr .. ")"
+        remoteCode = r.remote .. ":" .. r.method .. "(" .. argStr .. ")"
     end
 
     table.insert(detectedEmotes, 1, {
@@ -161,18 +184,58 @@ track:Play()]],
         name = animName,
         directCode = directCode,
         remoteCode = remoteCode,
-        remotePath = remotes[#remotes] and remotes[#remotes].remote or nil,
         time = captureTime,
     })
+
+    warn("[EmoteDecomposer] Detected: " .. animName .. " (ID: " .. idNum .. ")")
+end
+
+local hookedHumanoids = {}
+
+local function hookHumanoid(hum)
+    if hookedHumanoids[hum] then return end
+    hookedHumanoids[hum] = true
+
+    local conn = hum.AnimationPlayed:Connect(onAnimationPlayed)
+    table.insert(connections, conn)
+end
+
+local function hookAnimator(animator)
+    if hookedHumanoids[animator] then return end
+    hookedHumanoids[animator] = true
+
+    local conn = animator.AnimationPlayed:Connect(onAnimationPlayed)
+    table.insert(connections, conn)
 end
 
 local function hookCharacter(char)
     if not active then return end
     local hum = char:WaitForChild("Humanoid", 10)
     if not hum or not active then return end
+    hookHumanoid(hum)
 
-    local conn = hum.AnimationPlayed:Connect(onAnimationPlayed)
-    table.insert(connections, conn)
+    -- also hook Animator directly as backup
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if animator then hookAnimator(animator) end
+    local animConn = hum.ChildAdded:Connect(function(child)
+        if child:IsA("Animator") then hookAnimator(child) end
+    end)
+    table.insert(connections, animConn)
+end
+
+-- also watch OTHER characters in case game plays emotes server-side on local player
+-- via a different mechanism
+local function hookAllCharacters()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character then
+            task.spawn(function()
+                local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                if hum and plr == player then
+                    hookHumanoid(hum)
+                end
+            end)
+        end
+    end
 end
 
 ---------- EMOTE INVENTORY SCANNER ----------
@@ -180,7 +243,6 @@ end
 local function scanEmoteInventory()
     local results = {}
 
-    -- 1) HumanoidDescription emotes
     pcall(function()
         local char = player.Character
         if char then
@@ -207,28 +269,25 @@ local function scanEmoteInventory()
         end
     end)
 
-    -- 2) Animate script emotes
     pcall(function()
         local char = player.Character
         if char then
             local animate = char:FindFirstChild("Animate")
             if animate then
                 for _, child in ipairs(animate:GetChildren()) do
-                    if child.Name:lower():find("emote") or child:IsA("StringValue") then
-                        for _, anim in ipairs(child:GetChildren()) do
-                            if anim:IsA("Animation") then
-                                local id = tostring(anim.AnimationId):match("%d+")
-                                if id then
-                                    table.insert(results, {
-                                        source = "Animate Script",
-                                        name = child.Name .. "/" .. anim.Name,
-                                        animId = id,
-                                        code = string.format(
-                                            'local anim = Instance.new("Animation")\nanim.AnimationId = "rbxassetid://%s"\ngame.Players.LocalPlayer.Character.Humanoid.Animator:LoadAnimation(anim):Play()',
-                                            id
-                                        ),
-                                    })
-                                end
+                    for _, anim in ipairs(child:GetChildren()) do
+                        if anim:IsA("Animation") then
+                            local id = tostring(anim.AnimationId):match("%d+")
+                            if id and not isDefaultAnim(id) then
+                                table.insert(results, {
+                                    source = "Animate Script",
+                                    name = child.Name .. "/" .. anim.Name,
+                                    animId = id,
+                                    code = string.format(
+                                        'local anim = Instance.new("Animation")\nanim.AnimationId = "rbxassetid://%s"\ngame.Players.LocalPlayer.Character.Humanoid.Animator:LoadAnimation(anim):Play()',
+                                        id
+                                    ),
+                                })
                             end
                         end
                     end
@@ -272,7 +331,6 @@ shadow.SliceCenter = Rect.new(23, 23, 277, 277)
 shadow.ZIndex = -1
 shadow.Parent = main
 
--- header
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 36)
 header.BackgroundColor3 = COLORS.darker
@@ -311,7 +369,6 @@ closeBtn.Parent = header
 closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100) end)
 closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = COLORS.textMuted end)
 
--- draggable
 do
     local isDragging, dragStart, frameStart
     header.InputBegan:Connect(function(input)
@@ -334,7 +391,6 @@ do
     end)
 end
 
--- tabs
 local tabBar = Instance.new("Frame")
 tabBar.Size = UDim2.new(1, 0, 0, 28)
 tabBar.Position = UDim2.new(0, 0, 0, 36)
@@ -365,7 +421,6 @@ inventoryTabBtn.Font = Enum.Font.GothamBold
 inventoryTabBtn.AutoButtonColor = false
 inventoryTabBtn.Parent = tabBar
 
--- status bar
 local statusBar = Instance.new("TextLabel")
 statusBar.Size = UDim2.new(1, 0, 0, 20)
 statusBar.Position = UDim2.new(0, 0, 1, -20)
@@ -378,7 +433,6 @@ statusBar.Font = Enum.Font.Gotham
 statusBar.TextXAlignment = Enum.TextXAlignment.Left
 statusBar.Parent = main
 
--- content
 local detectedList = Instance.new("ScrollingFrame")
 detectedList.Name = "DetectedList"
 detectedList.Size = UDim2.new(1, -10, 1, -90)
@@ -423,7 +477,7 @@ end
 detectedTabBtn.MouseButton1Click:Connect(function() switchTab("detected") end)
 inventoryTabBtn.MouseButton1Click:Connect(function() switchTab("inventory") end)
 
----------- COPY TO CLIPBOARD ----------
+---------- COPY ----------
 
 local function copyToClipboard(text)
     pcall(function()
@@ -435,7 +489,7 @@ local function copyToClipboard(text)
     end)
 end
 
----------- LIST RENDERING ----------
+---------- RENDERING ----------
 
 local function createCodeRow(parent, label, code, color, layoutOrder)
     local row = Instance.new("Frame")
@@ -540,7 +594,6 @@ local function refreshDetectedList()
     statusBar.Text = "  " .. #detectedEmotes .. " emote(s) detected"
 
     for i, emote in ipairs(detectedEmotes) do
-        -- direct method (preferred)
         createCodeRow(
             detectedList,
             emote.name .. "  (ID: " .. emote.animId .. ")  [Direct Play]",
@@ -549,7 +602,6 @@ local function refreshDetectedList()
             i * 2 - 1
         )
 
-        -- remote method if detected
         if emote.remoteCode then
             createCodeRow(
                 detectedList,
@@ -581,7 +633,6 @@ local function refreshInventoryList()
         empty.TextWrapped = true
         empty.Parent = inventoryList
 
-        -- show tip for finding custom emotes
         createCodeRow(
             inventoryList,
             "Tip: Find custom emote remotes",
@@ -601,7 +652,6 @@ local function refreshInventoryList()
         return
     end
 
-    -- group by source
     local bySource = {}
     for _, item in ipairs(inventory) do
         if not bySource[item.source] then bySource[item.source] = {} end
@@ -610,7 +660,6 @@ local function refreshInventoryList()
 
     local order = 0
     for source, items in pairs(bySource) do
-        -- divider
         order = order + 1
         local divider = Instance.new("Frame")
         divider.Size = UDim2.new(1, -4, 0, 22)
@@ -651,14 +700,10 @@ local function refreshInventoryList()
     end
 end
 
----------- TAB SWITCH HOOKS ----------
-
 inventoryTabBtn.MouseButton1Click:Connect(function()
     switchTab("inventory")
     refreshInventoryList()
 end)
-
----------- CLOSE ----------
 
 closeBtn.MouseButton1Click:Connect(function()
     screenGui.Visible = false
@@ -667,21 +712,32 @@ end)
 ---------- INIT ----------
 
 hookRemotes()
+collectDefaultAnims()
 
 if player.Character then
     task.spawn(hookCharacter, player.Character)
 end
 
 local charConn = player.CharacterAdded:Connect(function(char)
-    task.spawn(hookCharacter, char)
+    task.spawn(function()
+        hookCharacter(char)
+        -- re-collect defaults for new character
+        task.wait(2)
+        collectDefaultAnims()
+    end)
 end)
 table.insert(connections, charConn)
 
--- periodic GUI refresh
+-- periodic refresh + re-hook on respawn
 task.spawn(function()
     while active and screenGui and screenGui.Parent do
         if screenGui.Visible and currentTab == "detected" then
             refreshDetectedList()
+        end
+        -- keep hooking in case character respawns
+        if player.Character then
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            if hum then hookHumanoid(hum) end
         end
         task.wait(1)
     end
