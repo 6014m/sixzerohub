@@ -226,48 +226,17 @@ table.insert(connections, flipConn)
 
 ---------- CAMERA ----------
 
-local function detachCamera()
+local function spectatePlayer(plr)
     pcall(function()
-        workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
-    end)
-end
-
-local function pointCameraAbove(targetPos)
-    pcall(function()
+        if not plr.Character then return end
+        local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
         local cam = workspace.CurrentCamera
-
-        local params = RaycastParams.new()
-        params.FilterType = Enum.RaycastFilterType.Exclude
-        local filterList = {}
-        if player.Character then table.insert(filterList, player.Character) end
-        params.FilterDescendantsInstances = filterList
-
-        -- start very close (5 studs above), move up only if blocked
-        local bestPos = targetPos + Vector3.new(0, 5, 0)
-        for height = 5, 30, 3 do
-            local testPos = targetPos + Vector3.new(0, height, 0)
-            local result = workspace:Raycast(testPos, (targetPos - testPos), params)
-            if not result then
-                bestPos = testPos
-                break
-            end
-            bestPos = testPos + Vector3.new(0, 3, 0)
-        end
-
-        cam.CFrame = CFrame.new(bestPos, targetPos)
-
-        -- zoom in as close as possible
-        pcall(function()
-            player.CameraMinZoomDistance = 0.5
-            player.CameraMaxZoomDistance = 0.5
-        end)
-    end)
-end
-
-local function resetCameraZoom()
-    pcall(function()
-        player.CameraMinZoomDistance = 0.5
-        player.CameraMaxZoomDistance = 128
+        cam.CameraType = Enum.CameraType.Custom
+        cam.CameraSubject = hum
+        -- zoom in tight, 3 studs away
+        player.CameraMinZoomDistance = 3
+        player.CameraMaxZoomDistance = 3
     end)
 end
 
@@ -413,16 +382,26 @@ local function clickOnPlayer(plr)
     local torso = getTorso(plr)
     if not torso then return end
     local cam = workspace.CurrentCamera
+
+    -- since we're spectating the target, they're center screen
+    -- but still calculate exact screen pos for accuracy
     local screenPos, onScreen = cam:WorldToScreenPoint(torso.Position)
-    if not onScreen then return end
+    if not onScreen then
+        -- fallback: click dead center of screen
+        local viewSize = cam.ViewportSize
+        screenPos = Vector3.new(viewSize.X / 2, viewSize.Y / 2, 0)
+    end
+
+    local x, y = screenPos.X, screenPos.Y + 36
+
     pcall(function()
-        VIM:SendMouseButtonEvent(screenPos.X, screenPos.Y + 36, 0, true, game, 1)
+        VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
         task.wait()
-        VIM:SendMouseButtonEvent(screenPos.X, screenPos.Y + 36, 0, false, game, 1)
+        VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
     end)
     pcall(function()
         if mousemoveabs and mouse1click then
-            mousemoveabs(screenPos.X, screenPos.Y + 36)
+            mousemoveabs(x, y)
             task.wait()
             mouse1click()
         end
@@ -512,9 +491,8 @@ task.spawn(function()
             continue
         end
 
-        -- hide: flip upside down + noclip + detach hats + detach camera
+        -- hide: flip upside down + noclip + detach hats
         hideCharacter()
-        detachCamera()
         equipHandcuffs()
 
         for _, target in ipairs(targets) do
@@ -539,7 +517,7 @@ task.spawn(function()
                 if not freshRoot or not freshRoot.Parent then break end
 
                 tweenToTarget(freshRoot)
-                pointCameraAbove(freshRoot.Position)
+                spectatePlayer(target.player)
                 task.wait(0.05)
 
                 clickOnPlayer(target.player)
@@ -562,7 +540,6 @@ task.spawn(function()
                 resetCharacter()
                 -- re-hide for next target
                 hideCharacter()
-                detachCamera()
                 equipHandcuffs()
             end
         end
