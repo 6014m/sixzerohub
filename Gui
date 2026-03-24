@@ -1109,12 +1109,14 @@ local UNI_SCRIPTS = {
     { name = "Lock-On Shiftlock", url = "https://raw.githubusercontent.com/6014m/roblox-lockon-shiftlock/main/The%20Actual%20Script", compat = "https://raw.githubusercontent.com/6014m/roblox-lockon-shiftlock/main/SixZeroHubCompat.lua" },
     { name = "Anti Trip", file = "[Uni]anti_trip" },
     { name = "Cheater Chat", file = "[Uni]cheater_chat" },
+    { name = "Audio Blocker", file = "[Uni]audio_blocker" },
 }
 
 local DEV_SCRIPTS = {
     { name = "Part Monitor", file = "[Dev]part_monitor" },
     { name = "Game ID Copier", file = "[Dev]gameid_copier" },
     { name = "Dex", file = "[Dev]dex" },
+    { name = "Emote Decomposer", file = "[Dev]emote_decomposer" },
 }
 
 local SPEC_SCRIPTS = {
