@@ -123,6 +123,39 @@ local function arrestTarget(targetPlr)
     end)
 end
 
+local function isArrested(plr)
+    -- player is arrested if they switched off criminal/inmate team
+    if not plr.Parent then return true end
+    local team = getTeamName(plr)
+    if team:find("criminal") or team:find("inmate") or team:find("prisoner") then
+        return false
+    end
+    return true
+end
+
+local function waitForArrest(plr, timeout)
+    local start = os.clock()
+    while os.clock() - start < timeout do
+        if isArrested(plr) then return true end
+        task.wait(0.1)
+    end
+    return isArrested(plr)
+end
+
+local function resetCharacter()
+    pcall(function()
+        local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.Health = 0 end
+    end)
+    local ok, newChar = pcall(function()
+        return player.CharacterAdded:Wait()
+    end)
+    if ok and newChar then
+        newChar:WaitForChild("HumanoidRootPart", 5)
+        task.wait(0.5)
+    end
+end
+
 -- main loop: cycle through all targets repeatedly
 -- cycling means by the time we get back to the first target, cooldown has passed
 task.spawn(function()
@@ -153,11 +186,28 @@ task.spawn(function()
             if not target.root or not target.root.Parent then continue end
             if not getPriority(target.player) then continue end
 
+            -- tween to target
             tweenTo(target.root)
             task.wait(0.1)
 
-            arrestTarget(target.player)
-            task.wait(0.5)
+            -- try arresting, retry a few times
+            for attempt = 1, 5 do
+                if not active then break end
+                if isArrested(target.player) then break end
+
+                arrestTarget(target.player)
+
+                -- wait up to 1s to confirm arrest
+                if waitForArrest(target.player, 1) then
+                    break
+                end
+            end
+
+            -- only reset if we confirmed the arrest
+            if isArrested(target.player) then
+                resetCharacter()
+                equipHandcuffs()
+            end
         end
 
         task.wait(0.5)
