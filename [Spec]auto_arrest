@@ -1,12 +1,12 @@
 -- [Spec] Auto Arrest
--- Tweens to targets, clicks on them with handcuffs, resets after each
+-- Tweens to targets, arrests with handcuffs, resets after each
 -- Priority: keycard holders > criminals > inmates
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local Camera = workspace.CurrentCamera
 
 local player = Players.LocalPlayer
+local mouse = player:GetMouse()
 local connections = {}
 local active = true
 
@@ -26,6 +26,17 @@ local function equipHandcuffs()
             end
         end
     end)
+end
+
+local function getHandcuffs()
+    local char = player.Character
+    if not char then return nil end
+    for _, child in ipairs(char:GetChildren()) do
+        if child:IsA("Tool") and child.Name:lower():find("cuff") then
+            return child
+        end
+    end
+    return nil
 end
 
 local function getTeamName(plr)
@@ -76,36 +87,66 @@ local function tweenTo(targetPart)
 
     local targetCF = targetPart.CFrame * CFrame.new(0, 0, 3)
 
-    if currentTween then currentTween:Cancel() end
+    if currentTween then
+        pcall(function() currentTween:Cancel() end)
+    end
 
-    -- IY style tween: TweenInfo time = -1
-    local tweenInfo = TweenInfo.new(-1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-    currentTween = TweenService:Create(root, tweenInfo, {CFrame = targetCF})
-    currentTween:Play()
-    currentTween.Completed:Wait()
+    local ok, err = pcall(function()
+        local tweenInfo = TweenInfo.new(0, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+        currentTween = TweenService:Create(root, tweenInfo, {CFrame = targetCF})
+        currentTween:Play()
+        currentTween.Completed:Wait()
+    end)
     currentTween = nil
+
+    if not ok then
+        -- fallback: direct CFrame set
+        pcall(function()
+            root.CFrame = targetCF
+        end)
+    end
     return true
 end
 
 local function clickOnTarget(targetPart)
+    -- method 1: mousemoveabs + mouse1click (most executors)
+    local done = false
     pcall(function()
-        local screenPos, onScreen = Camera:WorldToScreenPoint(targetPart.Position)
-        if onScreen then
-            mousemoveabs(screenPos.X, screenPos.Y + 36) -- +36 for gui inset
-            task.wait()
-            mouse1click()
+        if mousemoveabs and mouse1click then
+            local cam = workspace.CurrentCamera
+            local screenPos, onScreen = cam:WorldToScreenPoint(targetPart.Position)
+            if onScreen then
+                mousemoveabs(screenPos.X, screenPos.Y + 36)
+                task.wait()
+                mouse1click()
+                done = true
+            end
         end
     end)
+
+    -- method 2: activate the tool directly
+    if not done then
+        pcall(function()
+            local tool = getHandcuffs()
+            if tool then
+                tool:Activate()
+            end
+        end)
+    end
 end
 
 local function resetCharacter()
-    local char = player.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then hum.Health = 0 end
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.Health = 0 end
+    end)
 
-    local newChar = player.CharacterAdded:Wait()
-    if newChar then
+    local ok, newChar = pcall(function()
+        return player.CharacterAdded:Wait()
+    end)
+    if ok and newChar then
         newChar:WaitForChild("HumanoidRootPart", 5)
         task.wait(0.5)
     end
@@ -138,22 +179,17 @@ task.spawn(function()
             if not target.torso or not target.torso.Parent then continue end
             if not getPriority(target.player) then continue end
 
-            -- equip cuffs
             equipHandcuffs()
             task.wait(0.1)
 
-            -- tween to target
             tweenTo(target.torso)
             task.wait(0.1)
 
-            -- click on the player to arrest
             clickOnTarget(target.torso)
             task.wait(0.2)
 
-            -- reset to clear arrest cooldown
             resetCharacter()
 
-            -- re-equip cuffs after respawn
             equipHandcuffs()
         end
 
