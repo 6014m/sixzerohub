@@ -70,6 +70,39 @@ local main = Instance.new("Frame")
 main.Name = "Main"
 main.Size = UDim2.new(0, 320, 0, 350)
 main.Position = UDim2.new(0, 20, 0.5, -175)
+
+local CHAT_POS_FILE = "SixZeroHub_chatpos.json"
+
+local function loadChatPosition()
+    local ok, pos = pcall(function()
+        if isfile and isfile(CHAT_POS_FILE) then
+            local raw = readfile(CHAT_POS_FILE)
+            local decoded = game:GetService("HttpService"):JSONDecode(raw)
+            if decoded and decoded.x and decoded.y then
+                return UDim2.new(0, decoded.x, 0, decoded.y)
+            end
+        end
+        return nil
+    end)
+    return ok and pos or nil
+end
+
+local function saveChatPosition()
+    pcall(function()
+        if writefile then
+            local pos = main.Position
+            writefile(CHAT_POS_FILE, game:GetService("HttpService"):JSONEncode({
+                x = pos.X.Offset,
+                y = pos.Y.Offset,
+            }))
+        end
+    end)
+end
+
+do
+    local savedPos = loadChatPosition()
+    if savedPos then main.Position = savedPos end
+end
 main.BackgroundColor3 = COLORS.bg
 main.BorderSizePixel = 0
 main.Parent = gui
@@ -147,7 +180,10 @@ do
     end)
     header.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
+            if dragging then
+                dragging = false
+                saveChatPosition()
+            end
         end
     end)
     UserInputService.InputChanged:Connect(function(input)
