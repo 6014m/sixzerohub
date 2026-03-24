@@ -2555,6 +2555,137 @@ task.spawn(function()
     recordCurrentServer()
 end)
 
+---------- GAME OF THE DAY ----------
+
+local gotdCard = Instance.new("Frame")
+gotdCard.Name = "GameOfTheDay"
+gotdCard.Size = UDim2.new(0, 200, 0, 70)
+gotdCard.Position = UDim2.new(1, -210, 1, -126)
+gotdCard.BackgroundColor3 = COLORS.darker
+gotdCard.BorderSizePixel = 0
+gotdCard.Parent = screenGui
+Instance.new("UICorner", gotdCard).CornerRadius = UDim.new(0, 8)
+
+local gotdStroke = Instance.new("UIStroke", gotdCard)
+gotdStroke.Color = COLORS.accent
+gotdStroke.Thickness = 1
+gotdStroke.Transparency = 0.5
+
+local gotdHeader = Instance.new("TextLabel")
+gotdHeader.Size = UDim2.new(1, 0, 0, 16)
+gotdHeader.Position = UDim2.new(0, 8, 0, 4)
+gotdHeader.BackgroundTransparency = 1
+gotdHeader.Text = "GAME OF THE DAY"
+gotdHeader.TextColor3 = COLORS.accent
+gotdHeader.TextSize = 9
+gotdHeader.Font = Enum.Font.GothamBold
+gotdHeader.TextXAlignment = Enum.TextXAlignment.Left
+gotdHeader.Parent = gotdCard
+
+local gotdName = Instance.new("TextLabel")
+gotdName.Name = "GameName"
+gotdName.Size = UDim2.new(1, -50, 0, 18)
+gotdName.Position = UDim2.new(0, 8, 0, 20)
+gotdName.BackgroundTransparency = 1
+gotdName.Text = "Loading..."
+gotdName.TextColor3 = COLORS.text
+gotdName.TextSize = 13
+gotdName.Font = Enum.Font.GothamBold
+gotdName.TextXAlignment = Enum.TextXAlignment.Left
+gotdName.TextTruncate = Enum.TextTruncate.AtEnd
+gotdName.Parent = gotdCard
+
+local gotdDesc = Instance.new("TextLabel")
+gotdDesc.Name = "GameDesc"
+gotdDesc.Size = UDim2.new(1, -50, 0, 16)
+gotdDesc.Position = UDim2.new(0, 8, 0, 38)
+gotdDesc.BackgroundTransparency = 1
+gotdDesc.Text = ""
+gotdDesc.TextColor3 = COLORS.textMuted
+gotdDesc.TextSize = 10
+gotdDesc.Font = Enum.Font.Gotham
+gotdDesc.TextXAlignment = Enum.TextXAlignment.Left
+gotdDesc.TextTruncate = Enum.TextTruncate.AtEnd
+gotdDesc.Parent = gotdCard
+
+local gotdJoinBtn = Instance.new("TextButton")
+gotdJoinBtn.Size = UDim2.new(0, 32, 0, 32)
+gotdJoinBtn.Position = UDim2.new(1, -40, 0.5, -16)
+gotdJoinBtn.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
+gotdJoinBtn.BorderSizePixel = 0
+gotdJoinBtn.Text = "\xE2\x96\xB6"
+gotdJoinBtn.TextColor3 = COLORS.darker
+gotdJoinBtn.TextSize = 14
+gotdJoinBtn.Font = Enum.Font.GothamBold
+gotdJoinBtn.AutoButtonColor = false
+gotdJoinBtn.Parent = gotdCard
+Instance.new("UICorner", gotdJoinBtn).CornerRadius = UDim.new(0, 6)
+
+local gotdTooltip = Instance.new("TextLabel")
+gotdTooltip.Size = UDim2.new(0, 0, 0, 20)
+gotdTooltip.AutomaticSize = Enum.AutomaticSize.X
+gotdTooltip.Position = UDim2.new(0.5, 0, -1, -4)
+gotdTooltip.AnchorPoint = Vector2.new(0.5, 0)
+gotdTooltip.BackgroundColor3 = COLORS.darker
+gotdTooltip.BorderSizePixel = 0
+gotdTooltip.Text = "  Join  "
+gotdTooltip.TextColor3 = COLORS.text
+gotdTooltip.TextSize = 10
+gotdTooltip.Font = Enum.Font.Gotham
+gotdTooltip.Visible = false
+gotdTooltip.ZIndex = 8
+gotdTooltip.Parent = gotdJoinBtn
+Instance.new("UICorner", gotdTooltip).CornerRadius = UDim.new(0, 4)
+
+gotdJoinBtn.MouseEnter:Connect(function()
+    gotdTooltip.Visible = true
+    TweenService:Create(gotdJoinBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(70, 200, 110)}):Play()
+end)
+gotdJoinBtn.MouseLeave:Connect(function()
+    gotdTooltip.Visible = false
+    TweenService:Create(gotdJoinBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(87, 242, 135)}):Play()
+end)
+
+local gotdPlaceId = nil
+
+gotdJoinBtn.MouseButton1Click:Connect(function()
+    if gotdPlaceId then
+        gotdJoinBtn.Text = "\xE2\x80\xA6"
+        pcall(function()
+            game:GetService("TeleportService"):Teleport(gotdPlaceId, player)
+        end)
+    end
+end)
+
+-- fetch and display
+task.spawn(function()
+    local ok, response = pcall(function()
+        return game:HttpGet("https://raw.githubusercontent.com/6014m/sixzerohub/main/game_of_the_day.json", true)
+    end)
+    if not ok or not response then
+        gotdName.Text = "Failed to load"
+        return
+    end
+
+    local ok2, games = pcall(function()
+        return HttpService:JSONDecode(response)
+    end)
+    if not ok2 or not games or #games == 0 then
+        gotdName.Text = "No games"
+        return
+    end
+
+    -- pick based on day
+    local dayNum = math.floor(os.time() / 86400)
+    local idx = (dayNum % #games) + 1
+    local todayGame = games[idx]
+
+    gotdPlaceId = todayGame.placeId
+    gotdName.Text = todayGame.name or "Unknown"
+    gotdDesc.Text = todayGame.desc or ""
+    gotdTooltip.Text = "  Join " .. (todayGame.name or "game") .. "  "
+end)
+
 ---------- GUI OFFSET MANAGEMENT ----------
 
 local movedScreenGuis = {}
@@ -2745,6 +2876,7 @@ local function toggleGuiVisibility()
         specBtn.Visible = true
         uniBtn.Visible = true
         brainBtn.Visible = true
+        gotdCard.Visible = true
         moveChat(true)
         shiftGameGuis(true)
         findAndWatchLockOnGuis()
@@ -2757,6 +2889,7 @@ local function toggleGuiVisibility()
         specBtn.Visible = false
         uniBtn.Visible = false
         brainBtn.Visible = false
+        gotdCard.Visible = false
         moveChat(false)
         shiftGameGuis(false)
         unshiftAllLockOnChildren()
