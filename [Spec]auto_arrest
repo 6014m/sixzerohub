@@ -195,9 +195,30 @@ end
 
 local function pointCameraAbove(targetPos)
     pcall(function()
-        -- directly above the criminal looking straight down
-        local camPos = targetPos + Vector3.new(0, 20, 0)
-        workspace.CurrentCamera.CFrame = CFrame.new(camPos, targetPos)
+        local cam = workspace.CurrentCamera
+
+        -- find a clear camera position: start close above, move up until no obstruction
+        local bestPos = targetPos + Vector3.new(0, 8, 0)
+
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        local filterList = {}
+        if player.Character then table.insert(filterList, player.Character) end
+        params.FilterDescendantsInstances = filterList
+
+        -- check if there's a ceiling between camera and target
+        for height = 8, 40, 4 do
+            local testPos = targetPos + Vector3.new(0, height, 0)
+            local result = workspace:Raycast(testPos, (targetPos - testPos), params)
+            if not result then
+                -- clear line of sight
+                bestPos = testPos
+                break
+            end
+            bestPos = testPos + Vector3.new(0, 4, 0)
+        end
+
+        cam.CFrame = CFrame.new(bestPos, targetPos)
     end)
 end
 
@@ -244,6 +265,17 @@ end
 local function isInmate(plr)
     local team = getTeamName(plr)
     return (team:find("inmate") or team:find("prisoner")) ~= nil
+end
+
+-- check if a prisoner has the chain icon meaning they're actually arrestable
+local function isInmateArrestable()
+    local ok, text = pcall(function()
+        return player.PlayerGui.Home.hud.Topbar.StatusLabel.Text
+    end)
+    if ok and text then
+        return text:find("\xF0\x9F\x94\x97") ~= nil -- 🔗
+    end
+    return false
 end
 
 local function hasKeycard(plr)
@@ -411,7 +443,8 @@ task.spawn(function()
             if crim then
                 local pri = hasKeycard(plr) and 1 or 2
                 table.insert(targets, { player = plr, root = root, priority = pri, isCriminal = true })
-            elseif inm then
+            elseif inm and isInmateArrestable() then
+                -- only target inmates when the 🔗 chain icon is showing
                 table.insert(targets, { player = plr, root = root, priority = 10, isCriminal = false })
             end
         end
@@ -433,32 +466,10 @@ task.spawn(function()
             if not target.player.Parent then continue end
             if isArrested(target.player) or hasForceField(target.player) then continue end
 
-            -- inmates: probe once
-            if not target.isCriminal then
-                local freshRoot = getRoot(target.player.Character)
-                if not freshRoot then continue end
-                tweenToTarget(freshRoot)
-                pointCameraAbove(freshRoot.Position)
-                task.wait(0.1)
-
-                if not tryArrestProbe(target.player) then
-                    skipList[target.player.Name] = os.clock()
-                    continue
-                else
-                    tweenToHiddenSpot()
-                    unhideCharacter()
-                    resetCamera()
-                    resetCharacter()
-                    hideCharacter()
-                    detachCamera()
-                    equipHandcuffs()
-                    continue
-                end
-            end
-
-            -- criminals: full pursuit
+            -- full pursuit (criminals always, inmates only when 🔗 confirmed)
             local arrested = false
-            for attempt = 1, 15 do
+            local maxAttempts = target.isCriminal and 15 or 8
+            for attempt = 1, maxAttempts do
                 if not active then break end
                 if isArrested(target.player) then
                     arrested = true
