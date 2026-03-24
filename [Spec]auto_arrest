@@ -92,14 +92,38 @@ local function unhideCharacter()
     noclipEnabled = false
 end
 
--- keep character flipped upside down and sunk into the ground
+-- find the actual ground Y level at a position by raycasting down
+local function getGroundY(position)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {player.Character}
+    local result = workspace:Raycast(position + Vector3.new(0, 5, 0), Vector3.new(0, -100, 0), params)
+    if result then
+        return result.Position.Y
+    end
+    return position.Y -- fallback
+end
+
+-- keep character flipped and head buried in ground + prevent sitting
 local flipConn = RunService.Heartbeat:Connect(function()
     if not active or not hidden then return end
-    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    local char = player.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
     if not root then return end
-    -- flip 180 on Z axis and sink 5 studs down so entire head is underground
-    local pos = root.Position
-    root.CFrame = CFrame.new(pos.X, pos.Y, pos.Z) * CFrame.Angles(0, 0, math.rad(180)) * CFrame.new(0, -5, 0)
+
+    -- prevent sitting
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Sit then
+        hum.Sit = false
+    end
+
+    -- raycast to find ground, position so head is buried in it
+    local groundY = getGroundY(root.Position)
+    -- flipped upside down: head is ~2.5 studs above HRP normally, so when flipped head is below
+    -- we want head to be UNDER groundY, so HRP should be at groundY + ~3 (head hangs 2.5 below when flipped)
+    -- then push extra 2 studs to make sure head is fully buried
+    root.CFrame = CFrame.new(root.Position.X, groundY + 1, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
 end)
 table.insert(connections, flipConn)
 
@@ -111,9 +135,10 @@ local function detachCamera()
     end)
 end
 
-local function pointCameraAt(targetPos)
+local function pointCameraAbove(targetPos)
     pcall(function()
-        local camPos = targetPos + Vector3.new(0, 12, 15)
+        -- directly above the criminal looking straight down
+        local camPos = targetPos + Vector3.new(0, 20, 0)
         workspace.CurrentCamera.CFrame = CFrame.new(camPos, targetPos)
     end)
 end
@@ -224,17 +249,18 @@ local function tweenToTarget(targetRoot)
     local root = getRoot(player.Character)
     if not root or not targetRoot or not targetRoot.Parent then return end
 
+    -- unseat
     pcall(function()
         local hum = player.Character:FindFirstChildOfClass("Humanoid")
-        if hum and hum.SeatPart then
-            hum.Sit = false
-            task.wait(0.1)
-        end
+        if hum then hum.Sit = false end
     end)
 
-    -- tween next to target, sunk into ground so flipped head is fully hidden
+    -- raycast to find actual ground at target's position
     local targetPos = targetRoot.Position
-    tweenCFrame(root, CFrame.new(targetPos.X + 3, targetPos.Y - 5, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
+    local groundY = getGroundY(targetPos)
+
+    -- flipped upside down: place HRP at ground+1 so head hangs below ground
+    tweenCFrame(root, CFrame.new(targetPos.X + 3, groundY + 1, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
 end
 
 ---------- ARREST ----------
@@ -337,7 +363,7 @@ task.spawn(function()
                 local freshRoot = getRoot(target.player.Character)
                 if not freshRoot then continue end
                 tweenToTarget(freshRoot)
-                pointCameraAt(freshRoot.Position)
+                pointCameraAbove(freshRoot.Position)
                 task.wait(0.1)
 
                 if not tryArrestProbe(target.player) then
@@ -368,7 +394,7 @@ task.spawn(function()
                 if not freshRoot or not freshRoot.Parent then break end
 
                 tweenToTarget(freshRoot)
-                pointCameraAt(freshRoot.Position)
+                pointCameraAbove(freshRoot.Position)
                 task.wait(0.05)
 
                 clickOnPlayer(target.player)
