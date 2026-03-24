@@ -40,6 +40,13 @@ local keybindConn = UserInputService.InputBegan:Connect(function(input, processe
     if processed then return end
     if input.KeyCode == killBind then
         active = false
+        hidden = false
+        noclipEnabled = false
+        pcall(function()
+            local cam = workspace.CurrentCamera
+            cam.CameraType = Enum.CameraType.Custom
+            cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
+        end)
     end
 end)
 table.insert(connections, keybindConn)
@@ -92,16 +99,57 @@ local function unhideCharacter()
     noclipEnabled = false
 end
 
--- find the actual ground Y level at a position by raycasting down
+-- find the ACTUAL terrain/baseplate ground, not roofs or thin floors above us
+-- casts from very high up to find the lowest thick surface
 local function getGroundY(position)
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {player.Character}
-    local result = workspace:Raycast(position + Vector3.new(0, 5, 0), Vector3.new(0, -100, 0), params)
-    if result then
-        return result.Position.Y
+    local filterList = {}
+    if player.Character then table.insert(filterList, player.Character) end
+    params.FilterDescendantsInstances = filterList
+
+    -- cast from way up to find the ground
+    local origin = Vector3.new(position.X, 500, position.Z)
+    local hits = {}
+
+    -- do multiple raycasts to find ALL surfaces, pick the lowest solid one
+    local currentY = 500
+    for _ = 1, 10 do
+        local result = workspace:Raycast(Vector3.new(position.X, currentY, position.Z), Vector3.new(0, -600, 0), params)
+        if not result then break end
+
+        local hitPart = result.Instance
+        local hitY = result.Position.Y
+        local normal = result.Normal
+
+        -- check if this is actual ground (thick part, terrain, or baseplate)
+        local isGround = false
+        if hitPart:IsA("Terrain") then
+            isGround = true
+        elseif hitPart.Size.Y >= 1 then
+            -- thick enough to be a real floor, not a thin ceiling
+            isGround = true
+        end
+
+        if isGround then
+            table.insert(hits, { y = hitY, normal = normal })
+        end
+
+        -- continue casting below this hit
+        currentY = hitY - 0.1
+        if currentY < -100 then break end
     end
-    return position.Y -- fallback
+
+    if #hits > 0 then
+        -- use the lowest ground hit (most likely actual terrain, not a roof)
+        local lowest = hits[1]
+        for _, h in ipairs(hits) do
+            if h.y < lowest.y then lowest = h end
+        end
+        return lowest.y, lowest.normal
+    end
+
+    return position.Y - 3, Vector3.new(0, 1, 0)
 end
 
 -- keep character flipped and head buried in ground + prevent sitting
@@ -118,12 +166,22 @@ local flipConn = RunService.Heartbeat:Connect(function()
         hum.Sit = false
     end
 
-    -- raycast to find ground, position so head is buried in it
-    local groundY = getGroundY(root.Position)
-    -- flipped upside down: head is ~2.5 studs above HRP normally, so when flipped head is below
-    -- we want head to be UNDER groundY, so HRP should be at groundY + ~3 (head hangs 2.5 below when flipped)
-    -- then push extra 2 studs to make sure head is fully buried
-    root.CFrame = CFrame.new(root.Position.X, groundY + 1, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
+    -- raycast for real ground (terrain/baseplate, not roofs)
+    local groundY, normal = getGroundY(root.Position)
+
+    -- align to ground slope using the surface normal
+    -- flipped: head hangs ~2.5 studs below HRP. Place HRP at ground+1 so head is 1.5 studs INTO ground
+    local upVec = -normal -- we're flipped, so "up" for us is the negative of the ground normal
+    local lookVec = Vector3.new(1, 0, 0) -- arbitrary forward
+    if math.abs(upVec.Y) > 0.99 then
+        -- flat ground, just flip on Z
+        root.CFrame = CFrame.new(root.Position.X, groundY + 1, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
+    else
+        -- slanted ground, align to slope
+        local rightVec = lookVec:Cross(upVec).Unit
+        local fwd = upVec:Cross(rightVec).Unit
+        root.CFrame = CFrame.fromMatrix(Vector3.new(root.Position.X, groundY + 1, root.Position.Z), rightVec, upVec, -fwd)
+    end
 end)
 table.insert(connections, flipConn)
 
@@ -300,6 +358,23 @@ local function tryArrestProbe(plr)
     return isArrested(plr)
 end
 
+---------- HIDE BEFORE RESET ----------
+
+-- tween far away and underground so nobody sees the reset
+local function tweenToHiddenSpot()
+    local root = getRoot(player.Character)
+    if not root then return end
+
+    -- find a spot far from all players
+    local bestPos = root.Position + Vector3.new(200, 0, 200)
+
+    -- raycast to find ground there
+    local groundY = getGroundY(bestPos)
+
+    -- tween underground at that spot
+    tweenCFrame(root, CFrame.new(bestPos.X, groundY - 10, bestPos.Z))
+end
+
 ---------- RESET ----------
 
 local function resetCharacter()
@@ -370,6 +445,7 @@ task.spawn(function()
                     skipList[target.player.Name] = os.clock()
                     continue
                 else
+                    tweenToHiddenSpot()
                     unhideCharacter()
                     resetCamera()
                     resetCharacter()
@@ -409,6 +485,7 @@ task.spawn(function()
             end
 
             if arrested then
+                tweenToHiddenSpot()
                 unhideCharacter()
                 resetCamera()
                 resetCharacter()
