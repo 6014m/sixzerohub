@@ -14,10 +14,25 @@ local connections = {}
 local active = true
 local tweenSpeed = -1
 local hidden = false
+local noclipEnabled = false
 local killBind = Enum.KeyCode.P
 
 local skipList = {}
 local SKIP_DURATION = 20
+
+---------- NOCLIP ----------
+
+local noclipConn = RunService.Stepped:Connect(function()
+    if not active or not noclipEnabled then return end
+    local char = player.Character
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+end)
+table.insert(connections, noclipConn)
 
 ---------- KEYBIND ----------
 
@@ -68,19 +83,48 @@ end
 local function hideCharacter()
     if hidden then return end
     detachAccessories()
+    noclipEnabled = true
     hidden = true
 end
 
--- keep character flipped upside down so head stays underground
+local function unhideCharacter()
+    hidden = false
+    noclipEnabled = false
+end
+
+-- keep character flipped upside down and sunk into the ground
 local flipConn = RunService.Heartbeat:Connect(function()
     if not active or not hidden then return end
     local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
-    -- flip 180 on Z axis: head points down into the ground
+    -- flip 180 on Z axis and sink 5 studs down so entire head is underground
     local pos = root.Position
-    root.CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(180))
+    root.CFrame = CFrame.new(pos.X, pos.Y, pos.Z) * CFrame.Angles(0, 0, math.rad(180)) * CFrame.new(0, -5, 0)
 end)
 table.insert(connections, flipConn)
+
+---------- CAMERA ----------
+
+local function detachCamera()
+    pcall(function()
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+    end)
+end
+
+local function pointCameraAt(targetPos)
+    pcall(function()
+        local camPos = targetPos + Vector3.new(0, 12, 15)
+        workspace.CurrentCamera.CFrame = CFrame.new(camPos, targetPos)
+    end)
+end
+
+local function resetCamera()
+    pcall(function()
+        local cam = workspace.CurrentCamera
+        cam.CameraType = Enum.CameraType.Custom
+        cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
+    end)
+end
 
 ---------- TOOLS ----------
 
@@ -130,6 +174,11 @@ local function hasKeycard(plr)
         end
     end
     return false
+end
+
+local function hasForceField(plr)
+    if not plr.Character then return false end
+    return plr.Character:FindFirstChildOfClass("ForceField") ~= nil
 end
 
 local function isSkipped(plr)
@@ -183,9 +232,9 @@ local function tweenToTarget(targetRoot)
         end
     end)
 
-    -- tween next to target, slightly below ground so flipped head is hidden
+    -- tween next to target, sunk into ground so flipped head is fully hidden
     local targetPos = targetRoot.Position
-    tweenCFrame(root, CFrame.new(targetPos.X + 3, targetPos.Y - 2, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
+    tweenCFrame(root, CFrame.new(targetPos.X + 3, targetPos.Y - 5, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
 end
 
 ---------- ARREST ----------
@@ -249,7 +298,7 @@ task.spawn(function()
         local targets = {}
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr == player or not plr.Character then continue end
-            if isSkipped(plr) or isArrested(plr) then continue end
+            if isSkipped(plr) or isArrested(plr) or hasForceField(plr) then continue end
 
             local crim = isCriminal(plr)
             local inm = isInmate(plr)
@@ -273,28 +322,33 @@ task.spawn(function()
             continue
         end
 
-        -- hide: flip upside down + detach hats
+        -- hide: flip upside down + noclip + detach hats + detach camera
         hideCharacter()
+        detachCamera()
         equipHandcuffs()
 
         for _, target in ipairs(targets) do
             if not active then break end
             if not target.player.Parent then continue end
-            if isArrested(target.player) then continue end
+            if isArrested(target.player) or hasForceField(target.player) then continue end
 
             -- inmates: probe once
             if not target.isCriminal then
                 local freshRoot = getRoot(target.player.Character)
                 if not freshRoot then continue end
                 tweenToTarget(freshRoot)
+                pointCameraAt(freshRoot.Position)
                 task.wait(0.1)
 
                 if not tryArrestProbe(target.player) then
                     skipList[target.player.Name] = os.clock()
                     continue
                 else
+                    unhideCharacter()
+                    resetCamera()
                     resetCharacter()
                     hideCharacter()
+                    detachCamera()
                     equipHandcuffs()
                     continue
                 end
@@ -308,11 +362,13 @@ task.spawn(function()
                     arrested = true
                     break
                 end
+                if hasForceField(target.player) then break end
 
                 local freshRoot = getRoot(target.player.Character)
                 if not freshRoot or not freshRoot.Parent then break end
 
                 tweenToTarget(freshRoot)
+                pointCameraAt(freshRoot.Position)
                 task.wait(0.05)
 
                 clickOnPlayer(target.player)
@@ -327,8 +383,11 @@ task.spawn(function()
             end
 
             if arrested then
+                unhideCharacter()
+                resetCamera()
                 resetCharacter()
                 hideCharacter()
+                detachCamera()
                 equipHandcuffs()
             end
         end
@@ -342,6 +401,8 @@ end)
 local function cleanup()
     active = false
     hidden = false
+    noclipEnabled = false
+    resetCamera()
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
 end
