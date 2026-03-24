@@ -215,11 +215,11 @@ local flipConn = RunService.RenderStepped:Connect(function()
     local upVec = -normal
     local lookVec = Vector3.new(1, 0, 0)
     if math.abs(upVec.Y) > 0.99 then
-        noclipTargetCF = CFrame.new(root.Position.X, groundY + 2, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
+        noclipTargetCF = CFrame.new(root.Position.X, groundY + 1, root.Position.Z) * CFrame.Angles(0, 0, math.rad(180))
     else
         local rightVec = lookVec:Cross(upVec).Unit
         local fwd = upVec:Cross(rightVec).Unit
-        noclipTargetCF = CFrame.fromMatrix(Vector3.new(root.Position.X, groundY + 2, root.Position.Z), rightVec, upVec, -fwd)
+        noclipTargetCF = CFrame.fromMatrix(Vector3.new(root.Position.X, groundY + 1, root.Position.Z), rightVec, upVec, -fwd)
     end
 end)
 table.insert(connections, flipConn)
@@ -404,7 +404,7 @@ local function tweenToTarget(targetRoot)
     local groundY = getGroundY(targetPos)
 
     -- flipped upside down: place HRP at ground+1 so head hangs below ground
-    tweenCFrame(root, CFrame.new(targetPos.X + 3, groundY + 2, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
+    tweenCFrame(root, CFrame.new(targetPos.X + 3, groundY + 1, targetPos.Z) * CFrame.Angles(0, 0, math.rad(180)))
 end
 
 ---------- ARREST ----------
