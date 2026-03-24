@@ -1,20 +1,69 @@
 -- [Spec] Auto Arrest
--- Spam-arrests all criminals/inmates nearby, no teleporting
+-- Tweens to targets and arrests them with handcuffs
+-- Priority: keycard holders > criminals > inmates
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local connections = {}
 local active = true
-local ARREST_DELAY = 0.15
+local TWEEN_SPEED = 1 -- studs per second (negative means instant-ish, we use very fast)
+local ARREST_DELAY = 0.3
 
-local function isTarget(plr)
-    if plr == player or not plr.Character then return false end
-    local teamName = ""
-    pcall(function() teamName = tostring(plr.Team and plr.Team.Name or ""):lower() end)
-    return teamName:find("criminal") or teamName:find("inmate") or teamName:find("prisoner")
+local function equipHandcuffs()
+    pcall(function()
+        local backpack = player:FindFirstChild("Backpack")
+        local char = player.Character
+        if not char then return end
+        -- check if already holding handcuffs
+        local held = char:FindFirstChildOfClass("Tool")
+        if held and held.Name:lower():find("cuff") then return end
+        -- find handcuffs in backpack
+        if backpack then
+            for _, tool in ipairs(backpack:GetChildren()) do
+                if tool:IsA("Tool") and tool.Name:lower():find("cuff") then
+                    tool.Parent = char
+                    return
+                end
+            end
+        end
+    end)
+end
+
+local function getTeamName(plr)
+    local name = ""
+    pcall(function() name = tostring(plr.Team and plr.Team.Name or ""):lower() end)
+    return name
+end
+
+local function hasKeycard(plr)
+    if not plr.Character then return false end
+    for _, child in ipairs(plr.Character:GetChildren()) do
+        if child:IsA("Tool") and child.Name:lower():find("key") then
+            return true
+        end
+    end
+    if plr:FindFirstChild("Backpack") then
+        for _, child in ipairs(plr.Backpack:GetChildren()) do
+            if child:IsA("Tool") and child.Name:lower():find("key") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function getPriority(plr)
+    -- 1 = keycard holder (highest), 2 = criminal, 3 = inmate
+    local team = getTeamName(plr)
+    local isCriminal = team:find("criminal")
+    local isInmate = team:find("inmate") or team:find("prisoner")
+    if not isCriminal and not isInmate then return nil end
+    if hasKeycard(plr) then return 1 end
+    if isCriminal then return 2 end
+    return 3
 end
 
 local function getTorso(plr)
@@ -22,26 +71,99 @@ local function getTorso(plr)
     return plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso")
 end
 
-local conn = RunService.Heartbeat:Connect(function()
-    if not active then return end
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if not active then break end
-        if isTarget(plr) then
-            local torso = getTorso(plr)
-            if torso then
-                pcall(function()
-                    ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
-                end)
+local function getRoot()
+    local char = player.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+local currentTween = nil
+
+local function tweenTo(targetPart)
+    local root = getRoot()
+    if not root or not targetPart or not targetPart.Parent then return false end
+
+    local distance = (root.Position - targetPart.Position).Magnitude
+    if distance < 5 then return true end
+
+    -- speed -1 means basically instant, use very fast tween
+    local tweenTime = distance / 200 -- ~200 studs/sec, very fast but not instant teleport
+    if tweenTime < 0.05 then tweenTime = 0.05 end
+
+    local targetCF = targetPart.CFrame * CFrame.new(0, 0, 3)
+
+    if currentTween then
+        currentTween:Cancel()
+    end
+
+    currentTween = TweenService:Create(root, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+        CFrame = targetCF
+    })
+    currentTween:Play()
+    currentTween.Completed:Wait()
+    currentTween = nil
+    return true
+end
+
+local function arrest(torso)
+    pcall(function()
+        ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
+    end)
+end
+
+-- main loop
+task.spawn(function()
+    while active do
+        -- build sorted target list
+        local targets = {}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            local pri = getPriority(plr)
+            if pri then
+                local torso = getTorso(plr)
+                if torso then
+                    table.insert(targets, { player = plr, torso = torso, priority = pri })
+                end
             end
         end
+
+        -- sort by priority (1 first, then 2, then 3)
+        table.sort(targets, function(a, b) return a.priority < b.priority end)
+
+        if #targets == 0 then
+            task.wait(1)
+            continue
+        end
+
+        equipHandcuffs()
+
+        for _, target in ipairs(targets) do
+            if not active then break end
+            if not target.player.Parent then continue end
+            if not target.torso or not target.torso.Parent then continue end
+
+            -- recheck they're still a valid target
+            if not getPriority(target.player) then continue end
+
+            -- tween to them
+            tweenTo(target.torso)
+            task.wait(0.1)
+
+            -- fire arrest
+            arrest(target.torso)
+            task.wait(ARREST_DELAY)
+        end
+
+        task.wait(0.5)
     end
 end)
-table.insert(connections, conn)
 
 ---------- SIXZEROHUB REGISTRATION ----------
 
 local function cleanup()
     active = false
+    if currentTween then
+        pcall(function() currentTween:Cancel() end)
+    end
     for _, c in ipairs(connections) do
         pcall(function() c:Disconnect() end)
     end
