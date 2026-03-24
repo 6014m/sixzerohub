@@ -1,10 +1,11 @@
 -- [Spec] Auto Arrest
--- Tween to target, arrest, tween away, reset. Simple.
+-- Tween to target, lock-on shiftlock to face them, arrest, tween away, reset
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local VIM = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
@@ -12,8 +13,7 @@ local connections = {}
 local active = true
 local tweenSpeed = -1
 local killBind = Enum.KeyCode.P
-
-local skipList = {}
+local lockedTarget = nil -- the player we're locking onto
 
 ---------- KEYBIND ----------
 
@@ -21,16 +21,73 @@ local keybindConn = UserInputService.InputBegan:Connect(function(input, processe
     if processed then return end
     if input.KeyCode == killBind then
         active = false
+        lockedTarget = nil
         pcall(function()
-            local cam = workspace.CurrentCamera
-            cam.CameraType = Enum.CameraType.Custom
-            cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
+            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+            UserInputService.MouseIconEnabled = true
+            local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+            if hum then hum.AutoRotate = true end
             player.CameraMinZoomDistance = 0.5
             player.CameraMaxZoomDistance = 128
         end)
     end
 end)
 table.insert(connections, keybindConn)
+
+---------- LOCK-ON SHIFTLOCK (from lockon ShiftLockModule) ----------
+
+local lockConn = RunService.RenderStepped:Connect(function()
+    if not active or not lockedTarget then return end
+    local char = player.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then return end
+    if hum.Health <= 0 then return end
+
+    -- lock mouse to center
+    UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+    UserInputService.MouseIconEnabled = false
+    hum.AutoRotate = false
+
+    -- face the target
+    local targetRoot = lockedTarget.Character and lockedTarget.Character:FindFirstChild("HumanoidRootPart")
+    if not targetRoot then return end
+
+    local look = (targetRoot.Position - root.Position)
+    local flatLook = Vector3.new(look.X, 0, look.Z)
+    if flatLook.Magnitude > 0 then
+        root.CFrame = CFrame.lookAt(root.Position, root.Position + flatLook)
+    end
+
+    -- also point camera at the target
+    local cam = workspace.CurrentCamera
+    if cam then
+        local camPos = root.Position + Vector3.new(0, 2, 0) + (root.CFrame.LookVector * -5)
+        cam.CFrame = CFrame.new(camPos, targetRoot.Position)
+    end
+end)
+table.insert(connections, lockConn)
+
+local function lockOn(plr)
+    lockedTarget = plr
+    pcall(function()
+        player.CameraMinZoomDistance = 5
+        player.CameraMaxZoomDistance = 5
+    end)
+end
+
+local function lockOff()
+    lockedTarget = nil
+    pcall(function()
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        UserInputService.MouseIconEnabled = true
+        local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.AutoRotate = true end
+        player.CameraMinZoomDistance = 0.5
+        player.CameraMaxZoomDistance = 128
+    end)
+end
 
 ---------- ACCESSORIES ----------
 
@@ -144,38 +201,12 @@ local function tweenTo(targetCF)
     end)
 end
 
----------- CAMERA ----------
-
-local function spectate(plr)
-    pcall(function()
-        local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-        workspace.CurrentCamera.CameraSubject = hum
-        player.CameraMinZoomDistance = 3
-        player.CameraMaxZoomDistance = 3
-    end)
-end
-
-local function resetCamera()
-    pcall(function()
-        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-        workspace.CurrentCamera.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-        player.CameraMinZoomDistance = 0.5
-        player.CameraMaxZoomDistance = 128
-    end)
-end
-
 ---------- ARREST ----------
 
-local function clickOn(plr)
-    local torso = getTorso(plr)
-    if not torso then return end
-    local screenPos, onScreen = workspace.CurrentCamera:WorldToScreenPoint(torso.Position)
-    if not onScreen then
-        local vs = workspace.CurrentCamera.ViewportSize
-        screenPos = Vector3.new(vs.X / 2, vs.Y / 2, 0)
-    end
-    local x, y = screenPos.X, screenPos.Y + 36
+local function clickCenter()
+    local cam = workspace.CurrentCamera
+    local vs = cam.ViewportSize
+    local x, y = vs.X / 2, vs.Y / 2
     pcall(function() VIM:SendMouseButtonEvent(x, y, 0, true, game, 1); task.wait(); VIM:SendMouseButtonEvent(x, y, 0, false, game, 1) end)
     pcall(function() if mousemoveabs and mouse1click then mousemoveabs(x, y); task.wait(); mouse1click() end end)
 end
@@ -239,25 +270,31 @@ task.spawn(function()
             if isArrested(target.player) or hasForceField(target.player) then continue end
             if not target.isCriminal and not isInmateArrestable(target.player) then continue end
 
-            local targetRoot = getRoot(target.player.Character)
-            if not targetRoot then continue end
+            -- lock on to target
+            lockOn(target.player)
 
-            -- spectate them
-            spectate(target.player)
+            local arrested = false
+            for attempt = 1, 15 do
+                if not active then break end
+                if isArrested(target.player) then arrested = true; break end
 
-            -- tween to them
-            tweenTo(targetRoot.CFrame + Vector3.new(3, 1, 0))
-            task.wait(0.05)
+                local targetRoot = getRoot(target.player.Character)
+                if not targetRoot then break end
 
-            -- arrest
-            clickOn(target.player)
-            fireRemote(target.player)
-            task.wait(0.2)
+                -- tween next to them
+                tweenTo(targetRoot.CFrame + Vector3.new(3, 1, 0))
 
-            -- check
-            if isArrested(target.player) then
+                -- click center screen (lockon keeps them centered)
+                clickCenter()
+                fireRemote(target.player)
+
+                task.wait(0.15)
+            end
+
+            lockOff()
+
+            if arrested then
                 -- tween far away then reset
-                resetCamera()
                 local myRoot = getRoot(player.Character)
                 if myRoot then
                     tweenTo(CFrame.new(myRoot.Position.X + 200, myRoot.Position.Y, myRoot.Position.Z + 200))
@@ -265,33 +302,6 @@ task.spawn(function()
                 resetCharacter()
                 detachAccessories()
                 equipHandcuffs()
-            else
-                -- retry a few times
-                for retry = 1, 10 do
-                    if not active then break end
-                    if isArrested(target.player) then break end
-
-                    targetRoot = getRoot(target.player.Character)
-                    if not targetRoot then break end
-
-                    tweenTo(targetRoot.CFrame + Vector3.new(3, 1, 0))
-                    clickOn(target.player)
-                    fireRemote(target.player)
-                    task.wait(0.15)
-                end
-
-                if isArrested(target.player) then
-                    resetCamera()
-                    local myRoot = getRoot(player.Character)
-                    if myRoot then
-                        tweenTo(CFrame.new(myRoot.Position.X + 200, myRoot.Position.Y, myRoot.Position.Z + 200))
-                    end
-                    resetCharacter()
-                    detachAccessories()
-                    equipHandcuffs()
-                else
-                    resetCamera()
-                end
             end
         end
 
@@ -303,7 +313,7 @@ end)
 
 local function cleanup()
     active = false
-    resetCamera()
+    lockOff()
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
 end
