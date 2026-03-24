@@ -1110,6 +1110,7 @@ local UNI_SCRIPTS = {
     { name = "Anti Trip", file = "[Uni]anti_trip" },
     { name = "Cheater Chat", file = "[Uni]cheater_chat" },
     { name = "Audio Blocker", file = "[Uni]audio_blocker" },
+    { name = "Open GUI", file = "[Uni]open_gui" },
 }
 
 local DEV_SCRIPTS = {
