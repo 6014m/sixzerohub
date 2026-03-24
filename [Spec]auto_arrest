@@ -97,29 +97,38 @@ local function tweenTo(targetRoot)
     end)
 end
 
+local VIM = game:GetService("VirtualInputManager")
+
 local function arrestTarget(targetPlr)
-    -- mouse click
+    local torso = getTorso(targetPlr)
+    if not torso then return end
+
+    local cam = workspace.CurrentCamera
+    local screenPos, onScreen = cam:WorldToScreenPoint(torso.Position)
+    if not onScreen then return end
+
+    local x = screenPos.X
+    local y = screenPos.Y + 36 -- gui inset offset
+
+    -- method 1: VirtualInputManager (most reliable click emulation)
+    pcall(function()
+        VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
+        task.wait()
+        VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+    end)
+
+    -- method 2: mousemoveabs + mouse1click
     pcall(function()
         if mousemoveabs and mouse1click then
-            local cam = workspace.CurrentCamera
-            local torso = getTorso(targetPlr)
-            if torso then
-                local screenPos, onScreen = cam:WorldToScreenPoint(torso.Position)
-                if onScreen then
-                    mousemoveabs(screenPos.X, screenPos.Y + 36)
-                    task.wait()
-                    mouse1click()
-                end
-            end
+            mousemoveabs(x, y)
+            task.wait()
+            mouse1click()
         end
     end)
 
-    -- remote backup
+    -- method 3: remote as last resort
     pcall(function()
-        local torso = getTorso(targetPlr)
-        if torso then
-            ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
-        end
+        ReplicatedStorage.Remotes.InteractWithItem:InvokeServer(torso)
     end)
 end
 
