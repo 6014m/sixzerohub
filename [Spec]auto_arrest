@@ -50,7 +50,7 @@ local lockConn = RunService.RenderStepped:Connect(function()
     UserInputService.MouseIconEnabled = false
     hum.AutoRotate = false
 
-    -- face the target
+    -- face the target (character only, don't touch camera — let Roblox handle it)
     local targetRoot = lockedTarget.Character and lockedTarget.Character:FindFirstChild("HumanoidRootPart")
     if not targetRoot then return end
 
@@ -58,13 +58,6 @@ local lockConn = RunService.RenderStepped:Connect(function()
     local flatLook = Vector3.new(look.X, 0, look.Z)
     if flatLook.Magnitude > 0 then
         root.CFrame = CFrame.lookAt(root.Position, root.Position + flatLook)
-    end
-
-    -- also point camera at the target
-    local cam = workspace.CurrentCamera
-    if cam then
-        local camPos = root.Position + Vector3.new(0, 2, 0) + (root.CFrame.LookVector * -5)
-        cam.CFrame = CFrame.new(camPos, targetRoot.Position)
     end
 end)
 table.insert(connections, lockConn)
