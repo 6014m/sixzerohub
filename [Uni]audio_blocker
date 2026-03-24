@@ -1,0 +1,747 @@
+-- [Uni] Audio Blocker
+-- Monitors all playing audios, lets you block/preview them
+-- Blocked audio IDs persist to file, GUI can be closed without disabling
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local connections = {}
+local active = true
+local guiOpen = true
+
+local BLOCKED_FILE = "SixZeroHub_blockedaudio.json"
+local SCAN_INTERVAL = 0.5
+local RAPID_WINDOW = 2 -- seconds
+local RAPID_THRESHOLD = 3 -- plays within window to count as rapid
+
+local COLORS = {
+    background = Color3.fromRGB(47, 49, 54),
+    sidebar = Color3.fromRGB(54, 57, 63),
+    darker = Color3.fromRGB(32, 34, 37),
+    accent = Color3.fromRGB(88, 101, 242),
+    text = Color3.fromRGB(220, 221, 222),
+    textMuted = Color3.fromRGB(142, 146, 151),
+    hover = Color3.fromRGB(64, 68, 75),
+    border = Color3.fromRGB(40, 43, 48),
+    red = Color3.fromRGB(237, 66, 69),
+    green = Color3.fromRGB(87, 242, 135),
+    orange = Color3.fromRGB(255, 165, 0),
+}
+
+---------- PERSISTENCE ----------
+
+-- blockedAudios: { [tostring(soundId)] = { id=number, name=string, rapidOnly=bool } }
+local blockedAudios = {}
+pcall(function()
+    if isfile and isfile(BLOCKED_FILE) then
+        local raw = readfile(BLOCKED_FILE)
+        local decoded = HttpService:JSONDecode(raw)
+        if type(decoded) == "table" then
+            blockedAudios = decoded
+        end
+    end
+end)
+
+local function saveBlocked()
+    pcall(function()
+        if writefile then
+            writefile(BLOCKED_FILE, HttpService:JSONEncode(blockedAudios))
+        end
+    end)
+end
+
+---------- RAPID PLAY TRACKING ----------
+
+-- tracks recent play timestamps per sound id
+local playHistory = {} -- [soundId] = { timestamp, timestamp, ... }
+
+local function recordPlay(soundId)
+    local key = tostring(soundId)
+    if not playHistory[key] then playHistory[key] = {} end
+    table.insert(playHistory[key], os.clock())
+end
+
+local function isRapidPlaying(soundId)
+    local key = tostring(soundId)
+    local history = playHistory[key]
+    if not history then return false end
+
+    local now = os.clock()
+    -- clean old entries
+    local recent = {}
+    for _, t in ipairs(history) do
+        if now - t < RAPID_WINDOW then
+            table.insert(recent, t)
+        end
+    end
+    playHistory[key] = recent
+    return #recent >= RAPID_THRESHOLD
+end
+
+---------- AUDIO MONITORING ----------
+
+local knownSounds = {} -- [Sound instance] = true
+local activeSounds = {} -- [tostring(soundId)] = { sound=Sound, name=string, path=string }
+local previewSound = nil
+
+local function getSoundDisplayName(sound)
+    local name = sound.Name
+    if name == "Sound" or name == "" then
+        name = "Audio " .. tostring(sound.SoundId):match("%d+") or "?"
+    end
+    local parent = sound.Parent
+    local path = parent and parent:GetFullName() or "?"
+    return name, path
+end
+
+local function getSoundIdNum(sound)
+    local id = tostring(sound.SoundId)
+    return tonumber(id:match("%d+")) or 0
+end
+
+local function shouldBlock(sound)
+    local idNum = getSoundIdNum(sound)
+    if idNum == 0 then return false end
+    local key = tostring(idNum)
+    local entry = blockedAudios[key]
+    if not entry then return false end
+    if entry.rapidOnly then
+        return isRapidPlaying(idNum)
+    end
+    return true
+end
+
+local function enforceBlock(sound)
+    if shouldBlock(sound) then
+        sound.Volume = 0
+        pcall(function() sound:Stop() end)
+    end
+end
+
+local function hookSound(sound)
+    if knownSounds[sound] then return end
+    knownSounds[sound] = true
+
+    local conn = sound.Played:Connect(function()
+        if not active then return end
+        local idNum = getSoundIdNum(sound)
+        if idNum == 0 then return end
+        recordPlay(idNum)
+
+        local key = tostring(idNum)
+        if not activeSounds[key] then
+            local name, path = getSoundDisplayName(sound)
+            activeSounds[key] = { sound = sound, name = name, path = path, id = idNum }
+        end
+
+        enforceBlock(sound)
+    end)
+    table.insert(connections, conn)
+
+    -- also check if already playing
+    if sound.IsPlaying then
+        local idNum = getSoundIdNum(sound)
+        if idNum ~= 0 then
+            recordPlay(idNum)
+            local key = tostring(idNum)
+            if not activeSounds[key] then
+                local name, path = getSoundDisplayName(sound)
+                activeSounds[key] = { sound = sound, name = name, path = path, id = idNum }
+            end
+            enforceBlock(sound)
+        end
+    end
+end
+
+local function scanForSounds()
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("Sound") then hookSound(desc) end
+    end
+    pcall(function()
+        for _, desc in ipairs(game:GetService("SoundService"):GetDescendants()) do
+            if desc:IsA("Sound") then hookSound(desc) end
+        end
+    end)
+    pcall(function()
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Character then
+                for _, desc in ipairs(plr.Character:GetDescendants()) do
+                    if desc:IsA("Sound") then hookSound(desc) end
+                end
+            end
+        end
+    end)
+end
+
+-- watch for new sounds
+local wsConn = workspace.DescendantAdded:Connect(function(desc)
+    if active and desc:IsA("Sound") then hookSound(desc) end
+end)
+table.insert(connections, wsConn)
+
+pcall(function()
+    local ssConn = game:GetService("SoundService").DescendantAdded:Connect(function(desc)
+        if active and desc:IsA("Sound") then hookSound(desc) end
+    end)
+    table.insert(connections, ssConn)
+end)
+
+---------- GUI ----------
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AudioBlocker"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.DisplayOrder = 998
+screenGui.IgnoreGuiInset = true
+pcall(function() screenGui.Parent = game:GetService("CoreGui") end)
+if not screenGui.Parent then screenGui.Parent = playerGui end
+
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, 380, 0, 340)
+main.Position = UDim2.new(0.5, -190, 0.5, -170)
+main.BackgroundColor3 = COLORS.sidebar
+main.BorderSizePixel = 0
+main.Parent = screenGui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+
+local shadow = Instance.new("ImageLabel")
+shadow.Size = UDim2.new(1, 20, 1, 20)
+shadow.Position = UDim2.new(0, -10, 0, -10)
+shadow.BackgroundTransparency = 1
+shadow.Image = "rbxassetid://5554236805"
+shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+shadow.ImageTransparency = 0.6
+shadow.ScaleType = Enum.ScaleType.Slice
+shadow.SliceCenter = Rect.new(23, 23, 277, 277)
+shadow.ZIndex = -1
+shadow.Parent = main
+
+-- header
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0, 36)
+header.BackgroundColor3 = COLORS.darker
+header.BorderSizePixel = 0
+header.Parent = main
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
+
+local headerFill = Instance.new("Frame")
+headerFill.Size = UDim2.new(1, 0, 0, 10)
+headerFill.Position = UDim2.new(0, 0, 1, -10)
+headerFill.BackgroundColor3 = COLORS.darker
+headerFill.BorderSizePixel = 0
+headerFill.Parent = header
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(1, -70, 1, 0)
+titleLbl.Position = UDim2.new(0, 10, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "Audio Blocker"
+titleLbl.TextColor3 = COLORS.text
+titleLbl.TextSize = 14
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Parent = header
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 26, 0, 26)
+closeBtn.Position = UDim2.new(1, -31, 0, 5)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "X"
+closeBtn.TextColor3 = COLORS.textMuted
+closeBtn.TextSize = 16
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = header
+
+closeBtn.MouseEnter:Connect(function()
+    closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+end)
+closeBtn.MouseLeave:Connect(function()
+    closeBtn.TextColor3 = COLORS.textMuted
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    main.Visible = false
+    guiOpen = false
+end)
+
+-- make draggable
+do
+    local isDragging, dragStart, frameStart
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+            dragStart = input.Position
+            frameStart = main.Position
+        end
+    end)
+    header.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- tab bar
+local tabBar = Instance.new("Frame")
+tabBar.Size = UDim2.new(1, 0, 0, 28)
+tabBar.Position = UDim2.new(0, 0, 0, 36)
+tabBar.BackgroundColor3 = COLORS.background
+tabBar.BorderSizePixel = 0
+tabBar.Parent = main
+
+local activeTabBtn = Instance.new("TextButton")
+activeTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+activeTabBtn.Position = UDim2.new(0, 0, 0, 0)
+activeTabBtn.BackgroundColor3 = COLORS.sidebar
+activeTabBtn.BorderSizePixel = 0
+activeTabBtn.Text = "Playing"
+activeTabBtn.TextColor3 = COLORS.text
+activeTabBtn.TextSize = 12
+activeTabBtn.Font = Enum.Font.GothamBold
+activeTabBtn.AutoButtonColor = false
+activeTabBtn.Parent = tabBar
+
+local blockedTabBtn = Instance.new("TextButton")
+blockedTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+blockedTabBtn.Position = UDim2.new(0.5, 0, 0, 0)
+blockedTabBtn.BackgroundColor3 = COLORS.background
+blockedTabBtn.BorderSizePixel = 0
+blockedTabBtn.Text = "Blocked"
+blockedTabBtn.TextColor3 = COLORS.textMuted
+blockedTabBtn.TextSize = 12
+blockedTabBtn.Font = Enum.Font.GothamBold
+blockedTabBtn.AutoButtonColor = false
+blockedTabBtn.Parent = tabBar
+
+-- content frames
+local activeList = Instance.new("ScrollingFrame")
+activeList.Name = "ActiveList"
+activeList.Size = UDim2.new(1, -10, 1, -70)
+activeList.Position = UDim2.new(0, 5, 0, 68)
+activeList.BackgroundTransparency = 1
+activeList.BorderSizePixel = 0
+activeList.ScrollBarThickness = 3
+activeList.ScrollBarImageColor3 = COLORS.textMuted
+activeList.CanvasSize = UDim2.new(0, 0, 0, 0)
+activeList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+activeList.Visible = true
+activeList.Parent = main
+
+Instance.new("UIListLayout", activeList).Padding = UDim.new(0, 3)
+
+local blockedList = Instance.new("ScrollingFrame")
+blockedList.Name = "BlockedList"
+blockedList.Size = UDim2.new(1, -10, 1, -70)
+blockedList.Position = UDim2.new(0, 5, 0, 68)
+blockedList.BackgroundTransparency = 1
+blockedList.BorderSizePixel = 0
+blockedList.ScrollBarThickness = 3
+blockedList.ScrollBarImageColor3 = COLORS.textMuted
+blockedList.CanvasSize = UDim2.new(0, 0, 0, 0)
+blockedList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+blockedList.Visible = false
+blockedList.Parent = main
+
+Instance.new("UIListLayout", blockedList).Padding = UDim.new(0, 3)
+
+local currentTab = "active"
+
+local function switchTab(tab)
+    currentTab = tab
+    activeList.Visible = (tab == "active")
+    blockedList.Visible = (tab == "blocked")
+    activeTabBtn.BackgroundColor3 = tab == "active" and COLORS.sidebar or COLORS.background
+    activeTabBtn.TextColor3 = tab == "active" and COLORS.text or COLORS.textMuted
+    blockedTabBtn.BackgroundColor3 = tab == "blocked" and COLORS.sidebar or COLORS.background
+    blockedTabBtn.TextColor3 = tab == "blocked" and COLORS.text or COLORS.textMuted
+end
+
+activeTabBtn.MouseButton1Click:Connect(function() switchTab("active") end)
+blockedTabBtn.MouseButton1Click:Connect(function() switchTab("blocked") end)
+
+---------- LIST RENDERING ----------
+
+local function refreshBlockedList()
+    for _, child in ipairs(blockedList:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    local count = 0
+    for key, entry in pairs(blockedAudios) do
+        count = count + 1
+        local row = Instance.new("Frame")
+        row.Name = "Blocked_" .. key
+        row.Size = UDim2.new(1, -4, 0, 42)
+        row.BackgroundColor3 = COLORS.hover
+        row.BorderSizePixel = 0
+        row.Parent = blockedList
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size = UDim2.new(1, -160, 0, 20)
+        nameLbl.Position = UDim2.new(0, 8, 0, 2)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Text = entry.name or ("Audio " .. key)
+        nameLbl.TextColor3 = COLORS.text
+        nameLbl.TextSize = 12
+        nameLbl.Font = Enum.Font.GothamBold
+        nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLbl.Parent = row
+
+        local idLbl = Instance.new("TextLabel")
+        idLbl.Size = UDim2.new(1, -160, 0, 16)
+        idLbl.Position = UDim2.new(0, 8, 0, 22)
+        idLbl.BackgroundTransparency = 1
+        idLbl.Text = "ID: " .. key .. (entry.rapidOnly and "  [rapid only]" or "")
+        idLbl.TextColor3 = entry.rapidOnly and COLORS.orange or COLORS.textMuted
+        idLbl.TextSize = 10
+        idLbl.Font = Enum.Font.Gotham
+        idLbl.TextXAlignment = Enum.TextXAlignment.Left
+        idLbl.Parent = row
+
+        -- rapid only toggle
+        local rapidBtn = Instance.new("TextButton")
+        rapidBtn.Size = UDim2.new(0, 42, 0, 22)
+        rapidBtn.Position = UDim2.new(1, -110, 0.5, -11)
+        rapidBtn.BackgroundColor3 = entry.rapidOnly and COLORS.orange or COLORS.darker
+        rapidBtn.BorderSizePixel = 0
+        rapidBtn.Text = entry.rapidOnly and "RAPID" or "ALL"
+        rapidBtn.TextColor3 = entry.rapidOnly and COLORS.darker or COLORS.textMuted
+        rapidBtn.TextSize = 9
+        rapidBtn.Font = Enum.Font.GothamBold
+        rapidBtn.AutoButtonColor = false
+        rapidBtn.Parent = row
+        Instance.new("UICorner", rapidBtn).CornerRadius = UDim.new(0, 4)
+
+        local capturedKey = key
+        rapidBtn.MouseButton1Click:Connect(function()
+            local e = blockedAudios[capturedKey]
+            if e then
+                e.rapidOnly = not e.rapidOnly
+                saveBlocked()
+                refreshBlockedList()
+            end
+        end)
+
+        -- unblock
+        local unblockBtn = Instance.new("TextButton")
+        unblockBtn.Size = UDim2.new(0, 55, 0, 22)
+        unblockBtn.Position = UDim2.new(1, -63, 0.5, -11)
+        unblockBtn.BackgroundColor3 = COLORS.green
+        unblockBtn.BorderSizePixel = 0
+        unblockBtn.Text = "Unblock"
+        unblockBtn.TextColor3 = COLORS.darker
+        unblockBtn.TextSize = 10
+        unblockBtn.Font = Enum.Font.GothamBold
+        unblockBtn.AutoButtonColor = false
+        unblockBtn.Parent = row
+        Instance.new("UICorner", unblockBtn).CornerRadius = UDim.new(0, 4)
+
+        unblockBtn.MouseEnter:Connect(function()
+            TweenService:Create(unblockBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(70, 200, 110)}):Play()
+        end)
+        unblockBtn.MouseLeave:Connect(function()
+            TweenService:Create(unblockBtn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.green}):Play()
+        end)
+
+        unblockBtn.MouseButton1Click:Connect(function()
+            blockedAudios[capturedKey] = nil
+            saveBlocked()
+            refreshBlockedList()
+        end)
+    end
+
+    if count == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Name = "Empty"
+        empty.Size = UDim2.new(1, 0, 0, 40)
+        empty.BackgroundTransparency = 1
+        empty.Text = "No blocked audios"
+        empty.TextColor3 = COLORS.textMuted
+        empty.TextSize = 13
+        empty.Font = Enum.Font.Gotham
+        empty.Parent = blockedList
+    end
+end
+
+local function refreshActiveList()
+    for _, child in ipairs(activeList:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    local sorted = {}
+    for key, data in pairs(activeSounds) do
+        if not blockedAudios[key] then
+            table.insert(sorted, { key = key, data = data })
+        end
+    end
+    table.sort(sorted, function(a, b) return a.data.name < b.data.name end)
+
+    if #sorted == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Name = "Empty"
+        empty.Size = UDim2.new(1, 0, 0, 40)
+        empty.BackgroundTransparency = 1
+        empty.Text = "No audios detected yet"
+        empty.TextColor3 = COLORS.textMuted
+        empty.TextSize = 13
+        empty.Font = Enum.Font.Gotham
+        empty.Parent = activeList
+        return
+    end
+
+    for _, item in ipairs(sorted) do
+        local key = item.key
+        local data = item.data
+
+        local row = Instance.new("Frame")
+        row.Name = "Sound_" .. key
+        row.Size = UDim2.new(1, -4, 0, 42)
+        row.BackgroundColor3 = COLORS.hover
+        row.BorderSizePixel = 0
+        row.Parent = activeList
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size = UDim2.new(1, -150, 0, 20)
+        nameLbl.Position = UDim2.new(0, 8, 0, 2)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Text = data.name
+        nameLbl.TextColor3 = COLORS.text
+        nameLbl.TextSize = 12
+        nameLbl.Font = Enum.Font.GothamBold
+        nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLbl.Parent = row
+
+        local pathLbl = Instance.new("TextLabel")
+        pathLbl.Size = UDim2.new(1, -150, 0, 16)
+        pathLbl.Position = UDim2.new(0, 8, 0, 22)
+        pathLbl.BackgroundTransparency = 1
+        pathLbl.Text = "ID: " .. key
+        pathLbl.TextColor3 = COLORS.textMuted
+        pathLbl.TextSize = 10
+        pathLbl.Font = Enum.Font.Gotham
+        pathLbl.TextXAlignment = Enum.TextXAlignment.Left
+        pathLbl.Parent = row
+
+        -- play/preview button
+        local playBtn = Instance.new("TextButton")
+        playBtn.Size = UDim2.new(0, 28, 0, 28)
+        playBtn.Position = UDim2.new(1, -140, 0.5, -14)
+        playBtn.BackgroundColor3 = COLORS.accent
+        playBtn.BorderSizePixel = 0
+        playBtn.Text = "\xE2\x96\xB6"
+        playBtn.TextColor3 = COLORS.text
+        playBtn.TextSize = 12
+        playBtn.Font = Enum.Font.GothamBold
+        playBtn.AutoButtonColor = false
+        playBtn.Parent = row
+        Instance.new("UICorner", playBtn).CornerRadius = UDim.new(0, 4)
+
+        local playTooltip = Instance.new("TextLabel")
+        playTooltip.Size = UDim2.new(0, 52, 0, 20)
+        playTooltip.Position = UDim2.new(0.5, -26, -1, -4)
+        playTooltip.BackgroundColor3 = COLORS.darker
+        playTooltip.BorderSizePixel = 0
+        playTooltip.Text = "Preview"
+        playTooltip.TextColor3 = COLORS.text
+        playTooltip.TextSize = 10
+        playTooltip.Font = Enum.Font.Gotham
+        playTooltip.Visible = false
+        playTooltip.ZIndex = 8
+        playTooltip.Parent = playBtn
+        Instance.new("UICorner", playTooltip).CornerRadius = UDim.new(0, 4)
+
+        playBtn.MouseEnter:Connect(function()
+            playTooltip.Visible = true
+            TweenService:Create(playBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(71, 82, 196)}):Play()
+        end)
+        playBtn.MouseLeave:Connect(function()
+            playTooltip.Visible = false
+            TweenService:Create(playBtn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.accent}):Play()
+        end)
+
+        local capturedId = data.id
+        playBtn.MouseButton1Click:Connect(function()
+            pcall(function()
+                if previewSound and previewSound.Parent then
+                    previewSound:Stop()
+                    previewSound:Destroy()
+                end
+                previewSound = Instance.new("Sound")
+                previewSound.Name = "AudioBlockerPreview"
+                previewSound.SoundId = "rbxassetid://" .. tostring(capturedId)
+                previewSound.Volume = 0.5
+                previewSound.Parent = game:GetService("SoundService")
+                previewSound:Play()
+                -- auto cleanup after 10s
+                task.delay(10, function()
+                    if previewSound and previewSound.Parent then
+                        previewSound:Stop()
+                        previewSound:Destroy()
+                        previewSound = nil
+                    end
+                end)
+            end)
+        end)
+
+        -- block button
+        local blockBtn = Instance.new("TextButton")
+        blockBtn.Size = UDim2.new(0, 48, 0, 28)
+        blockBtn.Position = UDim2.new(1, -108, 0.5, -14)
+        blockBtn.BackgroundColor3 = COLORS.red
+        blockBtn.BorderSizePixel = 0
+        blockBtn.Text = "Block"
+        blockBtn.TextColor3 = COLORS.text
+        blockBtn.TextSize = 10
+        blockBtn.Font = Enum.Font.GothamBold
+        blockBtn.AutoButtonColor = false
+        blockBtn.Parent = row
+        Instance.new("UICorner", blockBtn).CornerRadius = UDim.new(0, 4)
+
+        blockBtn.MouseEnter:Connect(function()
+            TweenService:Create(blockBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(200, 50, 50)}):Play()
+        end)
+        blockBtn.MouseLeave:Connect(function()
+            TweenService:Create(blockBtn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.red}):Play()
+        end)
+
+        -- block (rapid only)
+        local rapidBlockBtn = Instance.new("TextButton")
+        rapidBlockBtn.Size = UDim2.new(0, 48, 0, 28)
+        rapidBlockBtn.Position = UDim2.new(1, -56, 0.5, -14)
+        rapidBlockBtn.BackgroundColor3 = COLORS.orange
+        rapidBlockBtn.BorderSizePixel = 0
+        rapidBlockBtn.Text = "Rapid"
+        rapidBlockBtn.TextColor3 = COLORS.darker
+        rapidBlockBtn.TextSize = 10
+        rapidBlockBtn.Font = Enum.Font.GothamBold
+        rapidBlockBtn.AutoButtonColor = false
+        rapidBlockBtn.Parent = row
+        Instance.new("UICorner", rapidBlockBtn).CornerRadius = UDim.new(0, 4)
+
+        local rapidTooltip = Instance.new("TextLabel")
+        rapidTooltip.Size = UDim2.new(0, 100, 0, 20)
+        rapidTooltip.Position = UDim2.new(0.5, -50, -1, -4)
+        rapidTooltip.BackgroundColor3 = COLORS.darker
+        rapidTooltip.BorderSizePixel = 0
+        rapidTooltip.Text = "Block if spammed"
+        rapidTooltip.TextColor3 = COLORS.text
+        rapidTooltip.TextSize = 10
+        rapidTooltip.Font = Enum.Font.Gotham
+        rapidTooltip.Visible = false
+        rapidTooltip.ZIndex = 8
+        rapidTooltip.Parent = rapidBlockBtn
+        Instance.new("UICorner", rapidTooltip).CornerRadius = UDim.new(0, 4)
+
+        rapidBlockBtn.MouseEnter:Connect(function()
+            rapidTooltip.Visible = true
+            TweenService:Create(rapidBlockBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(220, 140, 0)}):Play()
+        end)
+        rapidBlockBtn.MouseLeave:Connect(function()
+            rapidTooltip.Visible = false
+            TweenService:Create(rapidBlockBtn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.orange}):Play()
+        end)
+
+        local capturedKey = key
+        local capturedName = data.name
+        blockBtn.MouseButton1Click:Connect(function()
+            blockedAudios[capturedKey] = { id = capturedId, name = capturedName, rapidOnly = false }
+            saveBlocked()
+            refreshActiveList()
+            refreshBlockedList()
+            -- immediately mute all instances
+            for _, desc in ipairs(workspace:GetDescendants()) do
+                if desc:IsA("Sound") and tostring(getSoundIdNum(desc)) == capturedKey then
+                    desc.Volume = 0
+                    pcall(function() desc:Stop() end)
+                end
+            end
+        end)
+
+        rapidBlockBtn.MouseButton1Click:Connect(function()
+            blockedAudios[capturedKey] = { id = capturedId, name = capturedName, rapidOnly = true }
+            saveBlocked()
+            refreshActiveList()
+            refreshBlockedList()
+        end)
+    end
+end
+
+---------- PERIODIC REFRESH ----------
+
+task.spawn(function()
+    task.wait(1)
+    scanForSounds()
+    while active and screenGui and screenGui.Parent do
+        scanForSounds()
+        -- enforce blocks on all currently playing sounds
+        for _, desc in ipairs(workspace:GetDescendants()) do
+            if desc:IsA("Sound") and desc.IsPlaying then
+                enforceBlock(desc)
+            end
+        end
+        -- refresh GUI if open
+        if guiOpen and main.Visible then
+            refreshActiveList()
+            refreshBlockedList()
+        end
+        task.wait(SCAN_INTERVAL)
+    end
+end)
+
+---------- RE-EXECUTE: REOPEN GUI ----------
+
+do
+    local genv = getgenv and getgenv() or _G
+    if genv.AUDIO_BLOCKER_GUI then
+        pcall(function() genv.AUDIO_BLOCKER_GUI:Destroy() end)
+    end
+    genv.AUDIO_BLOCKER_GUI = screenGui
+
+    -- if re-executed, just show the GUI and return
+    if genv.AUDIO_BLOCKER_ACTIVE then
+        main.Visible = true
+        guiOpen = true
+        return
+    end
+    genv.AUDIO_BLOCKER_ACTIVE = true
+end
+
+---------- SIXZEROHUB REGISTRATION ----------
+
+local function cleanup()
+    active = false
+    for _, c in ipairs(connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    connections = {}
+    if previewSound and previewSound.Parent then
+        previewSound:Stop()
+        previewSound:Destroy()
+    end
+    pcall(function() screenGui:Destroy() end)
+    local genv = getgenv and getgenv() or _G
+    genv.AUDIO_BLOCKER_ACTIVE = nil
+    genv.AUDIO_BLOCKER_GUI = nil
+end
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Audio Blocker", "[Uni]audio_blocker", cleanup, "uni")
+end
