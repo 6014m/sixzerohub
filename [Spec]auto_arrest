@@ -296,13 +296,13 @@ task.spawn(function()
             lockOff()
 
             if arrested then
-                -- tween underground to hide, then immediately reset
+                -- tween underground to hide, wait, then reset
                 local myRoot = getRoot(player.Character)
                 if myRoot then
                     local pos = myRoot.Position
                     tweenTo(CFrame.new(pos.X, pos.Y - 200, pos.Z))
                 end
-                -- reset immediately so we don't fall in void
+                task.wait(0.5)
                 resetCharacter()
                 detachAccessories()
                 equipHandcuffs()
