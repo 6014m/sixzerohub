@@ -426,13 +426,10 @@ showAllBtn.MouseButton1Click:Connect(function()
                     if not isDef and not seenAnimIds[idNum] then
                         seenAnimIds[idNum] = true
 
-                        local directCode = string.format(
-                            "local anim = Instance.new("Animation")
-anim.AnimationId = "rbxassetid://%s"
-local track = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator"):LoadAnimation(anim)
-track:Play()",
-                            idNum
-                        )
+                        local directCode = 'local anim = Instance.new("Animation")\n'
+                            .. 'anim.AnimationId = "rbxassetid://' .. idNum .. '"\n'
+                            .. 'local track = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator"):LoadAnimation(anim)\n'
+                            .. 'track:Play()'
 
                         table.insert(detectedEmotes, 1, {
                             animId = idNum,
