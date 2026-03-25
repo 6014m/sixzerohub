@@ -3282,7 +3282,7 @@ _G.SixZeroHubNotify = showNotification
 ---------- UPDATE CHECKER ----------
 
 local scriptSHAs = {} -- [fileKey] = last known git SHA
-local UPDATE_CHECK_INTERVAL = 10
+local UPDATE_CHECK_INTERVAL = 5
 
 -- map fileKey to its GitHub API path for SHA checking
 local function getGitApiUrl(info)
@@ -3318,7 +3318,7 @@ local function getAllScriptLists()
 end
 
 task.spawn(function()
-    task.wait(5) -- initial delay before first check
+    task.wait(3) -- initial delay before first check
     while screenGui and screenGui.Parent do
         local allScripts = getAllScriptLists()
         for _, entry in ipairs(allScripts) do
@@ -3393,7 +3393,7 @@ task.spawn(function()
                 scriptSHAs[fileKey] = newSHA
             end
 
-            task.wait(1) -- stagger checks between scripts
+            task.wait(0.3) -- stagger checks between scripts
         end
         task.wait(UPDATE_CHECK_INTERVAL)
     end
