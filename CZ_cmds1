@@ -46,6 +46,11 @@ local THEME = {
     success = Color3.fromRGB(87, 242, 135), error = Color3.fromRGB(237, 66, 69),
 }
 
+local function isKeyDown(key)
+    local ok, r = pcall(function() return isKeyDown(key) end)
+    return ok and r
+end
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -551,16 +556,16 @@ addcmd("freecam", {"fc"}, "Enter freecam with mouse look (WASD move, mouse rotat
         local c = workspace.CurrentCamera
         if c.CameraType ~= Enum.CameraType.Scriptable then return end
         local speed = fcSpeed
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then speed = speed * 3 end
+        if isKeyDown(Enum.KeyCode.LeftShift) then speed = speed * 3 end
 
         local rot = CFrame.fromEulerAnglesYXZ(freecamRotX, freecamRotY, 0)
         local move = Vector3.zero
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + rot.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - rot.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - rot.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + rot.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.E) then move = move + Vector3.yAxis end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then move = move - Vector3.yAxis end
+        if isKeyDown(Enum.KeyCode.W) then move = move + rot.LookVector end
+        if isKeyDown(Enum.KeyCode.S) then move = move - rot.LookVector end
+        if isKeyDown(Enum.KeyCode.A) then move = move - rot.RightVector end
+        if isKeyDown(Enum.KeyCode.D) then move = move + rot.RightVector end
+        if isKeyDown(Enum.KeyCode.E) then move = move + Vector3.yAxis end
+        if isKeyDown(Enum.KeyCode.Q) then move = move - Vector3.yAxis end
 
         local pos = c.CFrame.Position
         if move.Magnitude > 0 then
