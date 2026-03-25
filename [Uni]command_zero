@@ -1230,7 +1230,7 @@ addcmd("unteleportwalk", {"untpwalk"}, "Disable teleport walk", function(args), 
     notify("TeleportWalk", "Disabled")
 end)
 
-addcmd("clickteleport", {"clicktp", "ctp"}, "Click to teleport", function(args), "teleport")
+addcmd("clickteleport", {"clicktp", "ctp"}, "Click to teleport (handles seated, proper height, IY method)", function(args), "teleport")
     local on = toggleLoop("clicktp", 0.05, function() end)
     if on then
         notify("ClickTP", "Enabled — click anywhere to teleport")
@@ -1239,9 +1239,30 @@ addcmd("clickteleport", {"clicktp", "ctp"}, "Click to teleport", function(args),
             if not loopStates["clicktp"] then conn:Disconnect(); return end
             if input.UserInputType == Enum.UserInputType.MouseButton1 and not UserInputService:GetFocusedTextBox() then
                 local mouse = player:GetMouse()
+                local char = getChar()
                 local root = myRoot()
-                if root and mouse.Hit then
-                    root.CFrame = mouse.Hit + Vector3.new(0, 5, 0)
+                local hum = myHumanoid()
+                if not root or not hum or not mouse.Hit then return end
+                -- handle seated
+                if hum.SeatPart then
+                    local seat = hum.SeatPart
+                    local weld = seat:FindFirstChildOfClass("Weld")
+                    if weld then weld:Destroy() end
+                    hum.Sit = false
+                    task.wait(0.1)
+                end
+                -- proper height: hip height + rootpart half height
+                local hipHeight = hum.HipHeight
+                local rootHeight = root.Size.Y / 2
+                local targetPos = mouse.Hit.Position + Vector3.new(0, hipHeight + rootHeight + 0.1, 0)
+                -- preserve look direction, rotate to face away from camera
+                local cam = workspace.CurrentCamera
+                local lookDir = cam.CFrame.LookVector
+                local flatLook = Vector3.new(lookDir.X, 0, lookDir.Z)
+                if flatLook.Magnitude > 0 then
+                    root.CFrame = CFrame.lookAt(targetPos, targetPos + flatLook)
+                else
+                    root.CFrame = CFrame.new(targetPos)
                 end
             end
         end)
@@ -1620,7 +1641,20 @@ addcmd("unantifling", {}, "Disable anti-fling", function(args, "anti")
     notify("Anti-Fling", "Disabled")
 end)
 
-addcmd("antilag", {"boostfps", "lowgraphics"}, "Remove unnecessary visual effects to reduce lag", function(args), "anti")
+addcmd("antilag", {"boostfps", "lowgraphics"}, "Full lag reduction: effects, shadows, fog, quality, materials (IY method)", function(args), "anti")
+    local Terrain = workspace:FindFirstChildWhichIsA("Terrain")
+    if Terrain then
+        Terrain.WaterWaveSize = 0
+        Terrain.WaterWaveSpeed = 0
+        Terrain.WaterReflectance = 0
+        Terrain.WaterTransparency = 0
+    end
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 9e9
+    Lighting.FogStart = 9e9
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
             v.Enabled = false
@@ -1628,14 +1662,20 @@ addcmd("antilag", {"boostfps", "lowgraphics"}, "Remove unnecessary visual effect
             v.BlastPressure = 0
             v.BlastRadius = 0
         elseif v:IsA("MeshPart") or v:IsA("UnionOperation") then
-            v.RenderFidelity = Enum.RenderFidelity.Performance
+            pcall(function() v.RenderFidelity = Enum.RenderFidelity.Performance end)
+        end
+        if v:IsA("BasePart") then
+            v.CastShadow = false
+            v.Material = Enum.Material.Plastic
+            v.Reflectance = 0
         end
     end
-    game:GetService("Terrain").WaterWaveSize = 0
-    game:GetService("Terrain").WaterWaveSpeed = 0
-    game:GetService("Terrain").WaterReflectance = 0
-    game:GetService("Terrain").WaterTransparency = 0
-    notify("Anti-Lag", "Visual effects reduced")
+    for _, v in ipairs(Lighting:GetDescendants()) do
+        if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
+            v.Enabled = false
+        end
+    end
+    notify("Anti-Lag", "Full lag reduction applied")
 end)
 
 addcmd("antivoid", {}, "Teleport back up if you fall into the void", function(args), "anti")
@@ -1748,26 +1788,28 @@ addcmd("trip", {}, "Trip a nearby player", function(args, "fun")
     end
 end)
 
-addcmd("strengthen", {"strong"}, "Increase local character density", function(args), "character")
+addcmd("strengthen", {"strong"}, "Increase character density [num] (default 100, IY method)", function(args), "character")
+    local density = parseNumber(args[1], 100)
     local char = getChar()
     if not char then return end
     for _, p in ipairs(char:GetDescendants()) do
         if p:IsA("BasePart") then
-            p.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5)
+            p.CustomPhysicalProperties = PhysicalProperties.new(density, 0.3, 0.5)
         end
     end
-    notify("Strengthen", "Character density increased")
+    notify("Strengthen", "Density set to " .. density)
 end)
 
-addcmd("weaken", {"weak"}, "Decrease local character density", function(args), "character")
+addcmd("weaken", {"weak"}, "Decrease character density [num] (default 0, IY method)", function(args), "character")
+    local density = parseNumber(args[1], 0)
     local char = getChar()
     if not char then return end
     for _, p in ipairs(char:GetDescendants()) do
         if p:IsA("BasePart") then
-            p.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.3, 0.5)
+            p.CustomPhysicalProperties = PhysicalProperties.new(density, 0.3, 0.5)
         end
     end
-    notify("Weaken", "Character density decreased")
+    notify("Weaken", "Density set to " .. density)
 end)
 
 addcmd("unweaken", {"unstrengthen"}, "Reset character density", function(args), "character")
@@ -4376,19 +4418,36 @@ addcmd("unloopxray", {}, "Disable loop xray", function(args), "visual")
     execCmd("unxray")
 end)
 
-addcmd("antiwindowafk", {"antitab"}, "Prevent AFK when window not focused", function(args), "anti")
-    startLoop("antiwindowafk", 30, function()
-        pcall(function()
-            local vu = game:GetService("VirtualUser")
-            vu:CaptureController()
-            vu:ClickButton2(Vector2.new())
+addcmd("antiwindowafk", {"antitab", "antiwafk", "wafk"}, "Prevent AFK when tabbed out (CmdX method — disables focus events)", function(args), "anti")
+    if not getconnections then
+        notify("AntiWindowAFK", "Requires getconnections — falling back to VirtualUser")
+        startLoop("antiwindowafk", 30, function()
+            pcall(function()
+                local vu = game:GetService("VirtualUser")
+                vu:CaptureController()
+                vu:ClickButton2(Vector2.new())
+            end)
         end)
+        return
+    end
+    pcall(function()
+        for _, v in ipairs(getconnections(UserInputService.WindowFocused)) do v:Disable() end
+        for _, v in ipairs(getconnections(UserInputService.WindowFocusReleased)) do v:Disable() end
     end)
-    notify("AntiWindowAFK", "Enabled")
+    loopStates["antiwindowafk"] = true
+    notify("AntiWindowAFK", "Enabled — window focus events disabled")
 end)
 
-addcmd("unantiwindowafk", {}, "Disable anti window AFK", function(args), "anti")
+addcmd("unantiwindowafk", {"unantiwafk", "unwafk"}, "Disable anti window AFK", function(args), "anti")
+    if getconnections then
+        pcall(function()
+            for _, v in ipairs(getconnections(UserInputService.WindowFocused)) do v:Enable() end
+            for _, v in ipairs(getconnections(UserInputService.WindowFocusReleased)) do v:Enable() end
+        end)
+    end
     stopLoop("antiwindowafk")
+    loopStates["antiwindowafk"] = nil
+    notify("AntiWindowAFK", "Disabled")
 end)
 
 addcmd("clicktphotkey", {"ctpkey"}, "Set click TP to a keybind (hold key + click)", function(args, "teleport")
