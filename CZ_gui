@@ -187,14 +187,14 @@ cmdBar:GetPropertyChangedSignal("Text"):Connect(function()
     for _, cmd in ipairs(cmds) do
         if cmd.NAME:sub(1, #text) == text then
             currentSuggestion = cmd.NAME
-            autocompleteLabel.Text = "  Tab: " .. cmd.NAME .. (cmd.DESC ~= "" and ("  —  " .. cmd.DESC) or "")
+            autocompleteLabel.Text = "  Tab/→:" .. cmd.NAME .. (cmd.DESC ~= "" and ("  —  " .. cmd.DESC) or "")
             autocompleteLabel.Visible = true
             return
         end
         for _, a in ipairs(cmd.ALIAS) do
             if a:sub(1, #text) == text then
                 currentSuggestion = a
-                autocompleteLabel.Text = "  Tab: " .. a .. " (" .. cmd.NAME .. ")"
+                autocompleteLabel.Text = "  Tab/→:" .. a .. " (" .. cmd.NAME .. ")"
                 autocompleteLabel.Visible = true
                 return
             end
@@ -204,13 +204,14 @@ cmdBar:GetPropertyChangedSignal("Text"):Connect(function()
     currentSuggestion = ""
 end)
 
--- Tab to autocomplete, Up/Down for history
+-- Tab/Right to autocomplete, Up/Down for history
 connect(UserInputService.InputBegan, function(input, gpe)
     if not cmdBar:IsFocused() then return end
-    if input.KeyCode == Enum.KeyCode.Tab then
-        if currentSuggestion ~= "" then
+    if input.KeyCode == Enum.KeyCode.Tab or input.KeyCode == Enum.KeyCode.Right then
+        if currentSuggestion ~= "" and cmdBar.CursorPosition >= #cmdBar.Text then
             cmdBar.Text = currentSuggestion .. " "
             cmdBar.CursorPosition = #cmdBar.Text + 1
+            autocompleteLabel.Visible = false
         end
     elseif input.KeyCode == Enum.KeyCode.Up then
         if #cmdHistory > 0 then
