@@ -1,0 +1,573 @@
+-- Command Zero GUI Module
+return function(env)
+local player = env.player
+local playerGui = player:WaitForChild("PlayerGui")
+local cmds = env.cmds
+local cmdDescriptions = env.cmdDescriptions
+local prefix = env.prefix
+local execCmd = env.execCmd
+local cmdHistory = env.cmdHistory
+local connect = env.connect
+local notify = env.notify
+local customAliases = env.customAliases
+local saveSettings = env.saveSettings
+local allConnections = env.allConnections
+local genv = env.genv
+
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+--================================================================
+-- GUI
+--================================================================
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "CommandZero"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 2147483647
+gui.IgnoreGuiInset = true
+pcall(function() gui.Parent = game:GetService("CoreGui") end)
+if not gui.Parent then gui.Parent = playerGui end
+genv[CZ_KEY].Gui = gui
+
+local THEME = {
+    bg = Color3.fromRGB(15, 15, 20),
+    panel = Color3.fromRGB(22, 22, 30),
+    header = Color3.fromRGB(12, 12, 16),
+    accent = Color3.fromRGB(0, 170, 255),
+    accentDark = Color3.fromRGB(0, 120, 200),
+    text = Color3.fromRGB(220, 220, 230),
+    muted = Color3.fromRGB(120, 120, 140),
+    hover = Color3.fromRGB(35, 35, 45),
+    input = Color3.fromRGB(28, 28, 38),
+    success = Color3.fromRGB(87, 242, 135),
+    error = Color3.fromRGB(237, 66, 69),
+}
+
+-- Main frame
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, 550, 0, 350)
+main.Position = UDim2.new(0.5, -275, 0.5, -175)
+main.BackgroundColor3 = THEME.bg
+main.BorderSizePixel = 0
+main.Visible = false
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
+
+local mainStroke = Instance.new("UIStroke", main)
+mainStroke.Color = THEME.accent
+mainStroke.Thickness = 1.5
+mainStroke.Transparency = 0.3
+
+-- Header bar
+local headerBar = Instance.new("Frame")
+headerBar.Size = UDim2.new(1, 0, 0, 36)
+headerBar.BackgroundColor3 = THEME.header
+headerBar.BorderSizePixel = 0
+headerBar.Parent = main
+Instance.new("UICorner", headerBar).CornerRadius = UDim.new(0, 10)
+local headerFill = Instance.new("Frame")
+headerFill.Size = UDim2.new(1, 0, 0, 12)
+headerFill.Position = UDim2.new(0, 0, 1, -12)
+headerFill.BackgroundColor3 = THEME.header
+headerFill.BorderSizePixel = 0
+headerFill.Parent = headerBar
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(0, 200, 1, 0)
+titleLbl.Position = UDim2.new(0, 12, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "COMMAND ZERO"
+titleLbl.TextColor3 = THEME.accent
+titleLbl.TextSize = 15
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Parent = headerBar
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -33, 0, 3)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "X"
+closeBtn.TextColor3 = THEME.muted
+closeBtn.TextSize = 16
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = headerBar
+closeBtn.MouseButton1Click:Connect(function()
+    main.Visible = false
+    guiOpen = false
+end)
+
+-- Draggable header
+do
+    local dragging, dragStart, frameStart
+    headerBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            frameStart = main.Position
+        end
+    end)
+    headerBar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- Command bar (always visible at bottom of main)
+local cmdBarFrame = Instance.new("Frame")
+cmdBarFrame.Size = UDim2.new(1, -16, 0, 32)
+cmdBarFrame.Position = UDim2.new(0, 8, 1, -40)
+cmdBarFrame.BackgroundColor3 = THEME.input
+cmdBarFrame.BorderSizePixel = 0
+cmdBarFrame.Parent = main
+Instance.new("UICorner", cmdBarFrame).CornerRadius = UDim.new(0, 6)
+
+local cmdBar = Instance.new("TextBox")
+cmdBar.Size = UDim2.new(1, -16, 1, 0)
+cmdBar.Position = UDim2.new(0, 8, 0, 0)
+cmdBar.BackgroundTransparency = 1
+cmdBar.Text = ""
+cmdBar.PlaceholderText = "Type a command..."
+cmdBar.PlaceholderColor3 = THEME.muted
+cmdBar.TextColor3 = THEME.text
+cmdBar.TextSize = 13
+cmdBar.Font = Enum.Font.Gotham
+cmdBar.TextXAlignment = Enum.TextXAlignment.Left
+cmdBar.ClearTextOnFocus = false
+cmdBar.Parent = cmdBarFrame
+
+local historyIdx = 0
+cmdBar.FocusLost:Connect(function(enterPressed)
+    if enterPressed and cmdBar.Text ~= "" then
+        execCmd(cmdBar.Text, player, true)
+        cmdBar.Text = ""
+        historyIdx = 0
+    end
+    autocompleteLabel.Visible = false
+end)
+
+-- Autocomplete suggestion label
+local autocompleteLabel = Instance.new("TextLabel")
+autocompleteLabel.Name = "Autocomplete"
+autocompleteLabel.Size = UDim2.new(1, -16, 0, 22)
+autocompleteLabel.Position = UDim2.new(0, 8, 1, -64)
+autocompleteLabel.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+autocompleteLabel.BorderSizePixel = 0
+autocompleteLabel.TextColor3 = THEME.muted
+autocompleteLabel.TextSize = 12
+autocompleteLabel.Font = Enum.Font.Gotham
+autocompleteLabel.TextXAlignment = Enum.TextXAlignment.Left
+autocompleteLabel.Visible = false
+autocompleteLabel.Parent = main
+Instance.new("UICorner", autocompleteLabel).CornerRadius = UDim.new(0, 4)
+local acPad = Instance.new("UIPadding", autocompleteLabel)
+acPad.PaddingLeft = UDim.new(0, 8)
+
+local currentSuggestion = ""
+
+cmdBar:GetPropertyChangedSignal("Text"):Connect(function()
+    local text = cmdBar.Text:lower():gsub("^%s+", "")
+    if text == "" then
+        autocompleteLabel.Visible = false
+        currentSuggestion = ""
+        return
+    end
+    -- find best matching command
+    for _, cmd in ipairs(cmds) do
+        if cmd.NAME:sub(1, #text) == text then
+            currentSuggestion = cmd.NAME
+            autocompleteLabel.Text = "  Tab: " .. cmd.NAME .. (cmd.DESC ~= "" and ("  —  " .. cmd.DESC) or "")
+            autocompleteLabel.Visible = true
+            return
+        end
+        for _, a in ipairs(cmd.ALIAS) do
+            if a:sub(1, #text) == text then
+                currentSuggestion = a
+                autocompleteLabel.Text = "  Tab: " .. a .. " (" .. cmd.NAME .. ")"
+                autocompleteLabel.Visible = true
+                return
+            end
+        end
+    end
+    autocompleteLabel.Visible = false
+    currentSuggestion = ""
+end)
+
+-- Tab to autocomplete, Up/Down for history
+connect(UserInputService.InputBegan, function(input, gpe)
+    if not cmdBar:IsFocused() then return end
+    if input.KeyCode == Enum.KeyCode.Tab then
+        if currentSuggestion ~= "" then
+            cmdBar.Text = currentSuggestion .. " "
+            cmdBar.CursorPosition = #cmdBar.Text + 1
+        end
+    elseif input.KeyCode == Enum.KeyCode.Up then
+        if #cmdHistory > 0 then
+            historyIdx = math.min(historyIdx + 1, #cmdHistory)
+            cmdBar.Text = cmdHistory[historyIdx]
+            cmdBar.CursorPosition = #cmdBar.Text + 1
+        end
+    elseif input.KeyCode == Enum.KeyCode.Down then
+        historyIdx = math.max(historyIdx - 1, 0)
+        cmdBar.Text = historyIdx > 0 and cmdHistory[historyIdx] or ""
+        cmdBar.CursorPosition = #cmdBar.Text + 1
+    end
+end)
+
+-- Tab system
+local tabNames = { "Commands", "Players", "Server", "Aliases", "Info", "Settings" }
+local tabBtns = {}
+local tabPages = {}
+local currentTab = "Commands"
+
+local tabBar = Instance.new("Frame")
+tabBar.Size = UDim2.new(1, -16, 0, 28)
+tabBar.Position = UDim2.new(0, 8, 0, 40)
+tabBar.BackgroundTransparency = 1
+tabBar.Parent = main
+
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+tabLayout.Padding = UDim.new(0, 4)
+tabLayout.Parent = tabBar
+
+for i, name in ipairs(tabNames) do
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.new(0, 75, 1, 0)
+    btn.BackgroundColor3 = THEME.panel
+    btn.BorderSizePixel = 0
+    btn.Text = name
+    btn.TextColor3 = THEME.muted
+    btn.TextSize = 12
+    btn.Font = Enum.Font.GothamBold
+    btn.AutoButtonColor = false
+    btn.LayoutOrder = i
+    btn.Parent = tabBar
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    tabBtns[name] = btn
+
+    local page = Instance.new("ScrollingFrame")
+    page.Name = name .. "Page"
+    page.Size = UDim2.new(1, -16, 1, -116)
+    page.Position = UDim2.new(0, 8, 0, 72)
+    page.BackgroundColor3 = THEME.panel
+    page.BorderSizePixel = 0
+    page.ScrollBarThickness = 3
+    page.ScrollBarImageColor3 = THEME.accent
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Visible = (name == "Commands")
+    page.Parent = main
+    Instance.new("UICorner", page).CornerRadius = UDim.new(0, 6)
+
+    local pageLayout = Instance.new("UIListLayout")
+    pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    pageLayout.Padding = UDim.new(0, 2)
+    pageLayout.Parent = page
+
+    local pagePad = Instance.new("UIPadding")
+    pagePad.PaddingLeft = UDim.new(0, 4)
+    pagePad.PaddingRight = UDim.new(0, 4)
+    pagePad.PaddingTop = UDim.new(0, 4)
+    pagePad.Parent = page
+
+    tabPages[name] = page
+end
+
+-- Search bar (inside Commands tab area)
+local searchBar = Instance.new("TextBox")
+searchBar.Size = UDim2.new(1, -16, 0, 26)
+searchBar.Position = UDim2.new(0, 8, 0, 72)
+searchBar.BackgroundColor3 = THEME.input
+searchBar.BorderSizePixel = 0
+searchBar.Text = ""
+searchBar.PlaceholderText = "Search commands..."
+searchBar.PlaceholderColor3 = THEME.muted
+searchBar.TextColor3 = THEME.text
+searchBar.TextSize = 12
+searchBar.Font = Enum.Font.Gotham
+searchBar.TextXAlignment = Enum.TextXAlignment.Left
+searchBar.ClearTextOnFocus = false
+searchBar.Parent = main
+Instance.new("UICorner", searchBar).CornerRadius = UDim.new(0, 6)
+local searchPad = Instance.new("UIPadding", searchBar)
+searchPad.PaddingLeft = UDim.new(0, 8)
+
+-- Adjust commands page to be below search
+tabPages["Commands"].Position = UDim2.new(0, 8, 0, 102)
+tabPages["Commands"].Size = UDim2.new(1, -16, 1, -146)
+
+-- Hover tooltip
+local hoverLabel = Instance.new("TextLabel")
+hoverLabel.Name = "Hover"
+hoverLabel.Size = UDim2.new(0, 280, 0, 0)
+hoverLabel.AutomaticSize = Enum.AutomaticSize.Y
+hoverLabel.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+hoverLabel.BorderSizePixel = 0
+hoverLabel.TextColor3 = THEME.text
+hoverLabel.TextSize = 11
+hoverLabel.Font = Enum.Font.Gotham
+hoverLabel.TextWrapped = true
+hoverLabel.TextXAlignment = Enum.TextXAlignment.Left
+hoverLabel.Visible = false
+hoverLabel.ZIndex = 100
+hoverLabel.Parent = gui
+Instance.new("UICorner", hoverLabel).CornerRadius = UDim.new(0, 6)
+local hoverPad = Instance.new("UIPadding", hoverLabel)
+hoverPad.PaddingLeft = UDim.new(0, 8)
+hoverPad.PaddingRight = UDim.new(0, 8)
+hoverPad.PaddingTop = UDim.new(0, 6)
+hoverPad.PaddingBottom = UDim.new(0, 6)
+local hoverStroke = Instance.new("UIStroke", hoverLabel)
+hoverStroke.Color = THEME.accent
+hoverStroke.Thickness = 1
+hoverStroke.Transparency = 0.4
+
+connect(RunService.RenderStepped, function()
+    if hoverLabel.Visible then
+        local m = UserInputService:GetMouseLocation()
+        hoverLabel.Position = UDim2.new(0, m.X + 15, 0, m.Y + 5)
+    end
+end)
+
+-- Tab switching
+local function switchTab(name)
+    currentTab = name
+    for tName, page in pairs(tabPages) do
+        page.Visible = (tName == name)
+    end
+    searchBar.Visible = (name == "Commands")
+    for tName, btn in pairs(tabBtns) do
+        if tName == name then
+            btn.BackgroundColor3 = THEME.accent
+            btn.TextColor3 = Color3.new(1, 1, 1)
+        else
+            btn.BackgroundColor3 = THEME.panel
+            btn.TextColor3 = THEME.muted
+        end
+    end
+end
+
+for name, btn in pairs(tabBtns) do
+    btn.MouseButton1Click:Connect(function() switchTab(name) end)
+end
+switchTab("Commands")
+
+-- Populate command list
+local TAG_COLORS = {
+    movement = Color3.fromRGB(50, 200, 100),
+    teleport = Color3.fromRGB(100, 200, 255),
+    character = Color3.fromRGB(200, 150, 255),
+    visual = Color3.fromRGB(255, 200, 50),
+    camera = Color3.fromRGB(150, 220, 255),
+    server = Color3.fromRGB(255, 150, 100),
+    anti = Color3.fromRGB(100, 255, 200),
+    fun = Color3.fromRGB(255, 100, 200),
+    chat = Color3.fromRGB(200, 200, 100),
+    settings = Color3.fromRGB(180, 180, 200),
+    tools = Color3.fromRGB(255, 180, 100),
+    exploit = Color3.fromRGB(255, 80, 80),
+    environment = Color3.fromRGB(100, 200, 150),
+    info = Color3.fromRGB(150, 180, 255),
+    audio = Color3.fromRGB(200, 100, 255),
+    combat = Color3.fromRGB(255, 60, 60),
+}
+
+local function populateCommands(filter)
+    local page = tabPages["Commands"]
+    for _, child in ipairs(page:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    filter = filter and filter:lower() or ""
+    local tagFilter = nil
+    if filter:sub(1, 1) == "#" then
+        tagFilter = filter:sub(2)
+        filter = ""
+    end
+
+    local order = 0
+
+    for _, cmd in ipairs(cmds) do
+        -- tag filter
+        if tagFilter and tagFilter ~= "" then
+            if not cmd.TAG:lower():find(tagFilter, 1, true) then continue end
+        end
+
+        -- text filter
+        if filter ~= "" then
+            local aliases = table.concat(cmd.ALIAS, ", ")
+            local searchStr = cmd.NAME .. " " .. aliases .. " " .. (cmd.DESC or "") .. " " .. cmd.TAG
+            if not searchStr:lower():find(filter, 1, true) then continue end
+        end
+
+        order = order + 1
+        local aliases = table.concat(cmd.ALIAS, ", ")
+
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 26)
+        btn.BackgroundColor3 = THEME.hover
+        btn.BackgroundTransparency = 0.5
+        btn.BorderSizePixel = 0
+        btn.TextColor3 = THEME.text
+        btn.TextSize = 12
+        btn.Font = Enum.Font.Gotham
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.AutoButtonColor = false
+        btn.LayoutOrder = order
+        btn.Parent = page
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+        local displayText = "  " .. cmd.NAME
+        if #cmd.ALIAS > 0 then
+            displayText = displayText .. "  [" .. aliases .. "]"
+        end
+        btn.Text = displayText
+
+        -- tag badge
+        if cmd.TAG ~= "" then
+            local tagLbl = Instance.new("TextLabel")
+            tagLbl.Size = UDim2.new(0, 0, 0, 16)
+            tagLbl.AutomaticSize = Enum.AutomaticSize.X
+            tagLbl.Position = UDim2.new(1, -8, 0, 5)
+            tagLbl.AnchorPoint = Vector2.new(1, 0)
+            tagLbl.BackgroundColor3 = TAG_COLORS[cmd.TAG] or THEME.muted
+            tagLbl.BackgroundTransparency = 0.7
+            tagLbl.BorderSizePixel = 0
+            tagLbl.Text = " " .. cmd.TAG .. " "
+            tagLbl.TextColor3 = TAG_COLORS[cmd.TAG] or THEME.muted
+            tagLbl.TextSize = 9
+            tagLbl.Font = Enum.Font.GothamBold
+            tagLbl.Parent = btn
+            Instance.new("UICorner", tagLbl).CornerRadius = UDim.new(0, 3)
+        end
+
+        btn.MouseButton1Click:Connect(function()
+            cmdBar.Text = cmd.NAME .. " "
+            cmdBar:CaptureFocus()
+        end)
+
+        btn.MouseEnter:Connect(function()
+            btn.BackgroundTransparency = 0
+            local hover = cmd.NAME
+            if cmd.TAG ~= "" then hover = hover .. "  #" .. cmd.TAG end
+            hover = hover .. "\n" .. (cmd.DESC ~= "" and cmd.DESC or "No description")
+            if #cmd.ALIAS > 0 then hover = hover .. "\nAliases: " .. aliases end
+            hoverLabel.Text = hover
+            hoverLabel.Visible = true
+        end)
+        btn.MouseLeave:Connect(function()
+            btn.BackgroundTransparency = 0.5
+            hoverLabel.Visible = false
+        end)
+    end
+end
+
+searchBar:GetPropertyChangedSignal("Text"):Connect(function()
+    populateCommands(searchBar.Text)
+end)
+
+-- Toggle button (always visible)
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 40, 0, 40)
+toggleBtn.Position = UDim2.new(0, 8, 0.5, -20)
+toggleBtn.BackgroundColor3 = THEME.header
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Text = "CZ"
+toggleBtn.TextColor3 = THEME.accent
+toggleBtn.TextSize = 13
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.AutoButtonColor = false
+toggleBtn.Parent = gui
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 10)
+local toggleStroke = Instance.new("UIStroke", toggleBtn)
+toggleStroke.Color = THEME.accent
+toggleStroke.Thickness = 1.5
+toggleStroke.Transparency = 0.3
+
+toggleBtn.MouseButton1Click:Connect(function()
+    guiOpen = not guiOpen
+    main.Visible = guiOpen
+end)
+
+-- Keybind to toggle GUI (Right Ctrl) or focus command bar (prefix key)
+local suppressNextChar = false
+local suppressText = ""
+
+connect(UserInputService.InputBegan, function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        guiOpen = not guiOpen
+        main.Visible = guiOpen
+    elseif input.KeyCode == Enum.KeyCode.Semicolon and prefix == ";" then
+        -- pressing ; opens GUI and focuses command bar
+        if not cmdBar:IsFocused() then
+            guiOpen = true
+            main.Visible = true
+            suppressText = cmdBar.Text
+            suppressNextChar = true
+            cmdBar:CaptureFocus()
+        end
+    end
+end)
+
+-- suppress the semicolon character that gets typed when focusing
+local suppressConn = cmdBar:GetPropertyChangedSignal("Text"):Connect(function()
+    if suppressNextChar then
+        suppressNextChar = false
+        cmdBar.Text = suppressText
+        cmdBar.CursorPosition = #suppressText + 1
+    end
+end)
+
+--================================================================
+-- CHAT HOOK
+--================================================================
+
+local function onChat(msg)
+    if not chatCmdEnabled then return end
+    msg = msg:gsub("^/e ", "")
+    if msg:sub(1, #prefix) == prefix then
+        execCmd(msg:sub(#prefix + 1), player, true)
+    end
+end
+
+connect(player.Chatted, onChat)
+
+-- TextChatService hook
+pcall(function()
+    if TextChatService and RBXGeneral then
+        connect(RBXGeneral.ShouldDeliverCallback and RBXGeneral.MessageReceived or RBXGeneral.MessageReceived, function(msg)
+            if msg.TextSource and msg.TextSource.UserId == player.UserId then
+                task.defer(function() onChat(msg.Text) end)
+            end
+        end)
+    end
+end)
+
+
+return {
+    gui = gui,
+    notifGui = notifGui,
+    main = main,
+    cmdBar = cmdBar,
+    populateCommands = populateCommands,
+    switchTab = switchTab,
+    tabPages = tabPages,
+    toggleBtn = toggleBtn,
+    guiOpen = guiOpen,
+}
+end

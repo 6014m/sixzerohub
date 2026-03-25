@@ -1,0 +1,566 @@
+-- Command Zero Core Commands: Movement, Character, Visual, Server
+return function(env)
+local addcmd,getPlayers,getstring,parseNumber,notify,sendChat=env.addcmd,env.getPlayers,env.getstring,env.parseNumber,env.notify,env.sendChat
+local startLoop,stopLoop,toggleLoop,loopStates=env.startLoop,env.stopLoop,env.toggleLoop,env.loopStates
+local execCmd,connect,myRoot,myHumanoid,getChar,getRoot,getHumanoid=env.execCmd,env.connect,env.myRoot,env.myHumanoid,env.getChar,env.getRoot,env.getHumanoid
+local tweenMove,clearESP,espObjects,player=env.tweenMove,env.clearESP,env.espObjects,env.player
+local allConnections,flyActive,flySpeed,flyBody,flyGyro=env.allConnections,env.flyActive,env.flySpeed,env.flyBody,env.flyGyro
+local Players=game:GetService("Players")
+local RunService=game:GetService("RunService")
+local TweenService=game:GetService("TweenService")
+local UserInputService=game:GetService("UserInputService")
+local Lighting=game:GetService("Lighting")
+local TeleportService=game:GetService("TeleportService")
+local MarketplaceService=game:GetService("MarketplaceService")
+local SoundService=game:GetService("SoundService")
+
+-- COMMANDS: MOVEMENT & TELEPORT
+--================================================================
+
+addcmd("speed", {"walkspeed", "ws"}, "Set walk speed (default 16)", function(args, "movement")
+    local val = parseNumber(args[1], 16)
+    local hum = myHumanoid()
+    if hum then hum.WalkSpeed = val end
+    notify("Speed", "WalkSpeed set to " .. val)
+end)
+
+addcmd("jumppower", {"jp"}, "Set jump power (default 50)", function(args, "movement")
+    local val = parseNumber(args[1], 50)
+    local hum = myHumanoid()
+    if hum then hum.JumpPower = val; hum.UseJumpPower = true end
+    notify("Jump", "JumpPower set to " .. val)
+end)
+
+addcmd("hipheight", {"hh"}, "Set hip height", function(args, "movement")
+    local val = parseNumber(args[1], 0)
+    local hum = myHumanoid()
+    if hum then hum.HipHeight = val end
+end)
+
+addcmd("gravity", {"grav"}, "Set workspace gravity (default 196.2)", function(args, "movement")
+    workspace.Gravity = parseNumber(args[1], 196.2)
+    notify("Gravity", "Set to " .. workspace.Gravity)
+end)
+
+addcmd("goto", {"tp"}, "Teleport to player", function(args, "teleport")
+    local targets = getPlayers(args[1])
+    for _, t in ipairs(targets) do
+        local tRoot = getRoot(t.Character)
+        local mRoot = myRoot()
+        if tRoot and mRoot then
+            mRoot.CFrame = tRoot.CFrame + Vector3.new(0, 3, 0)
+            notify("Teleport", "Teleported to " .. t.Name)
+        end
+    end
+end)
+
+addcmd("tweengoto", {"tweento", "tgoto"}, "Tween to player smoothly", function(args, "teleport")
+    local targets = getPlayers(args[1])
+    local duration = parseNumber(args[2], 2)
+    for _, t in ipairs(targets) do
+        local tRoot = getRoot(t.Character)
+        local mRoot = myRoot()
+        if tRoot and mRoot then
+            tweenMove(mRoot, tRoot.CFrame + Vector3.new(0, 3, 0), duration)
+        end
+    end
+end)
+
+addcmd("sit", {"s"}, "Make your character sit", function(args), "movement")
+    local hum = myHumanoid()
+    if hum then hum.Sit = true end
+end)
+
+addcmd("sitwalk", {"sitw"}, "Walk while sitting", function(args), "movement")
+    local hum = myHumanoid()
+    if hum then
+        hum.Sit = true
+        task.wait(0.1)
+        hum.Sit = false
+    end
+end)
+
+addcmd("jump", {"j"}, "Make character jump", function(args), "movement")
+    local hum = myHumanoid()
+    if hum then hum.Jump = true end
+end)
+
+addcmd("noclip", {"nc", "nocl"}, "Toggle noclip", function(args), "movement")
+    local on = toggleLoop("noclip", 0, function()
+        local char = getChar()
+        if char then
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+        end
+    end)
+    notify("Noclip", on and "Enabled" or "Disabled")
+end)
+
+addcmd("clip", {"unnoclip"}, "Disable noclip", function(args), "movement")
+    stopLoop("noclip")
+    notify("Noclip", "Disabled")
+end)
+
+-- Fly system (IY method: BodyVelocity + BodyGyro for proper rotation)
+local flyGyro = nil
+
+addcmd("fly", {"flygui"}, "Toggle fly with BodyGyro rotation (IY method, WASD + QE)", function(args), "movement")
+    flySpeed = parseNumber(args[1], 50)
+    if flyActive then
+        flyActive = false
+        if flyBody then pcall(function() flyBody:Destroy() end); flyBody = nil end
+        if flyGyro then pcall(function() flyGyro:Destroy() end); flyGyro = nil end
+        local hum = myHumanoid()
+        if hum then hum.PlatformStand = false end
+        notify("Fly", "Disabled")
+        return
+    end
+
+    flyActive = true
+    notify("Fly", "Enabled (speed " .. flySpeed .. ")")
+
+    task.spawn(function()
+        while flyActive do
+            local root = myRoot()
+            local hum = myHumanoid()
+            if not root or not hum then task.wait(0.1); continue end
+
+            if not flyBody or not flyBody.Parent then
+                flyBody = Instance.new("BodyVelocity")
+                flyBody.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                flyBody.Velocity = Vector3.zero
+                flyBody.P = 9000
+                flyBody.Parent = root
+            end
+
+            if not flyGyro or not flyGyro.Parent then
+                flyGyro = Instance.new("BodyGyro")
+                flyGyro.D = 200
+                flyGyro.P = 9000
+                flyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                flyGyro.Parent = root
+            end
+
+            local cam = workspace.CurrentCamera
+            local moveDir = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.E) then moveDir = moveDir + Vector3.yAxis end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveDir = moveDir - Vector3.yAxis end
+
+            if moveDir.Magnitude > 0 then
+                flyBody.Velocity = moveDir.Unit * flySpeed
+                flyGyro.CFrame = CFrame.new(root.Position, root.Position + moveDir.Unit)
+            else
+                flyBody.Velocity = Vector3.zero
+            end
+
+            hum.PlatformStand = true
+            RunService.Heartbeat:Wait()
+        end
+    end)
+end)
+
+addcmd("unfly", {"nofly"}, "Disable fly", function(args), "movement")
+    flyActive = false
+    if flyBody then pcall(function() flyBody:Destroy() end); flyBody = nil end
+    if flyGyro then pcall(function() flyGyro:Destroy() end); flyGyro = nil end
+    local hum = myHumanoid()
+    if hum then hum.PlatformStand = false end
+    notify("Fly", "Disabled")
+end)
+
+addcmd("teleportwalk", {"tpwalk"}, "Teleport in walk direction", function(args, "movement")
+    local dist = parseNumber(args[1], 5)
+    local on = toggleLoop("tpwalk", 0, function()
+        local root, hum = myRoot(), myHumanoid()
+        if root and hum and hum.MoveDirection.Magnitude > 0 then
+            root.CFrame = root.CFrame + hum.MoveDirection * dist
+        end
+    end)
+    notify("TeleportWalk", on and ("Enabled (" .. dist .. " studs)") or "Disabled")
+end)
+
+addcmd("unteleportwalk", {"untpwalk"}, "Disable teleport walk", function(args), "movement")
+    stopLoop("tpwalk")
+    notify("TeleportWalk", "Disabled")
+end)
+
+addcmd("clickteleport", {"clicktp", "ctp"}, "Click to teleport (handles seated, proper height, IY method)", function(args), "teleport")
+    local on = toggleLoop("clicktp", 0.05, function() end)
+    if on then
+        notify("ClickTP", "Enabled — click anywhere to teleport")
+        local conn
+        conn = connect(UserInputService.InputBegan, function(input)
+            if not loopStates["clicktp"] then conn:Disconnect(); return end
+            if input.UserInputType == Enum.UserInputType.MouseButton1 and not UserInputService:GetFocusedTextBox() then
+                local mouse = player:GetMouse()
+                local char = getChar()
+                local root = myRoot()
+                local hum = myHumanoid()
+                if not root or not hum or not mouse.Hit then return end
+                -- handle seated
+                if hum.SeatPart then
+                    local seat = hum.SeatPart
+                    local weld = seat:FindFirstChildOfClass("Weld")
+                    if weld then weld:Destroy() end
+                    hum.Sit = false
+                    task.wait(0.1)
+                end
+                -- proper height: hip height + rootpart half height
+                local hipHeight = hum.HipHeight
+                local rootHeight = root.Size.Y / 2
+                local targetPos = mouse.Hit.Position + Vector3.new(0, hipHeight + rootHeight + 0.1, 0)
+                -- preserve look direction, rotate to face away from camera
+                local cam = workspace.CurrentCamera
+                local lookDir = cam.CFrame.LookVector
+                local flatLook = Vector3.new(lookDir.X, 0, lookDir.Z)
+                if flatLook.Magnitude > 0 then
+                    root.CFrame = CFrame.lookAt(targetPos, targetPos + flatLook)
+                else
+                    root.CFrame = CFrame.new(targetPos)
+                end
+            end
+        end)
+    else
+        notify("ClickTP", "Disabled")
+    end
+end)
+
+addcmd("unclicktp", {"unctp"}, "Disable click teleport", function(args), "teleport")
+    stopLoop("clicktp")
+    notify("ClickTP", "Disabled")
+end)
+
+addcmd("orbit", {"orb"}, "Orbit a player", function(args, "movement")
+    local targets = getPlayers(args[1])
+    local radius = parseNumber(args[2], 10)
+    local speed = parseNumber(args[3], 2)
+    if #targets == 0 then return end
+    local target = targets[1]
+
+    startLoop("orbit", 0, function()
+        local tRoot = getRoot(target.Character)
+        local mRoot = myRoot()
+        if tRoot and mRoot then
+            local t = tick() * speed
+            mRoot.CFrame = CFrame.new(
+                tRoot.Position + Vector3.new(math.cos(t) * radius, 0, math.sin(t) * radius),
+                tRoot.Position
+            )
+        end
+    end)
+    notify("Orbit", "Orbiting " .. target.Name)
+end)
+
+addcmd("unorbit", {"unorb"}, "Stop orbiting", function(args), "movement")
+    stopLoop("orbit")
+    notify("Orbit", "Stopped")
+end)
+
+addcmd("thru", {"through"}, "Move forward through walls", function(args, "movement")
+    local dist = parseNumber(args[1], 20)
+    local root = myRoot()
+    if root then
+        root.CFrame = root.CFrame + root.CFrame.LookVector * dist
+    end
+end)
+
+addcmd("offset", {}, "Offset from player", function(args, "movement")
+    local targets = getPlayers(args[1])
+    local dist = parseNumber(args[2], 5)
+    if #targets == 0 then return end
+    local target = targets[1]
+
+    startLoop("offset", 0, function()
+        local tRoot = getRoot(target.Character)
+        local mRoot = myRoot()
+        if tRoot and mRoot then
+            mRoot.CFrame = tRoot.CFrame + tRoot.CFrame.LookVector * dist
+        end
+    end)
+end)
+
+addcmd("unoffset", {}, "Stop offset", function(args), "movement")
+    stopLoop("offset")
+end)
+
+--================================================================
+-- COMMANDS: CHARACTER
+--================================================================
+
+addcmd("refresh", {"re"}, "Refresh character (respawn at same position)", function(args), "character")
+    local root = myRoot()
+    if not root then return end
+    local cf = root.CFrame
+    local hum = myHumanoid()
+    if hum then hum.Health = 0 end
+    player.CharacterAdded:Wait()
+    task.wait(0.3)
+    local newRoot = myRoot()
+    if newRoot then newRoot.CFrame = cf end
+end)
+
+addcmd("reset", {"die"}, "Reset character", function(args), "character")
+    local hum = myHumanoid()
+    if hum then hum.Health = 0 end
+end)
+
+addcmd("respawn", {"rspawn"}, "Force respawn", function(args), "character")
+    player:LoadCharacter()
+end)
+
+
+
+
+addcmd("animation", {"anim"}, "Play animation by ID", function(args, "character")
+    local id = args[1]
+    local speed = parseNumber(args[2], 1)
+    if not id then return end
+    local hum = myHumanoid()
+    if not hum then return end
+    local anim = Instance.new("Animation")
+    anim.AnimationId = "rbxassetid://" .. id
+    local track = hum:FindFirstChildOfClass("Animator") and hum:FindFirstChildOfClass("Animator"):LoadAnimation(anim) or hum:LoadAnimation(anim)
+    track:Play()
+    track:AdjustSpeed(speed)
+end)
+
+
+
+
+addcmd("emote", {"e"}, "Play emote by name or /e command", function(args, "character")
+    local name = getstring(1, args)
+    if name == "" then return end
+    sendChat("/e " .. name)
+end)
+
+addcmd("dance", {"d"}, "Play dance emote", function(args, "character")
+    local n = args[1] or "1"
+    sendChat("/e dance" .. n)
+end)
+
+--================================================================
+-- COMMANDS: VISUAL / ESP
+--================================================================
+
+addcmd("esp", {"playeresp"}, "Toggle player ESP boxes", function(args), "visual")
+    if #espObjects > 0 then
+        clearESP()
+        notify("ESP", "Disabled")
+        stopLoop("esp")
+        return
+    end
+
+    local function createESP(p)
+        if p == player then return end
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "CZ_ESP"
+        highlight.FillTransparency = 0.7
+        highlight.OutlineTransparency = 0
+        highlight.FillColor = Color3.fromRGB(0, 170, 255)
+        highlight.OutlineColor = Color3.fromRGB(0, 170, 255)
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "CZ_ESP_Name"
+        bb.Size = UDim2.new(0, 200, 0, 30)
+        bb.StudsOffset = Vector3.new(0, 3, 0)
+        bb.AlwaysOnTop = true
+        bb.MaxDistance = 10000
+
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, 0, 1, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.TextColor3 = Color3.new(1, 1, 1)
+        nameLabel.TextStrokeTransparency = 0.5
+        nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.TextSize = 14
+        nameLabel.Parent = bb
+
+        table.insert(espObjects, highlight)
+        table.insert(espObjects, bb)
+
+        local function apply()
+            if p.Character then
+                highlight.Adornee = p.Character
+                highlight.Parent = p.Character
+                local head = p.Character:FindFirstChild("Head")
+                if head then bb.Adornee = head; bb.Parent = head end
+                nameLabel.Text = p.DisplayName .. " [" .. math.floor((getRoot(p.Character) and myRoot() and (getRoot(p.Character).Position - myRoot().Position).Magnitude) or 0) .. "]"
+            end
+        end
+
+        apply()
+        local conn = p.CharacterAdded:Connect(function() task.wait(0.5); apply() end)
+        table.insert(allConnections, conn)
+    end
+
+    for _, p in ipairs(Players:GetPlayers()) do createESP(p) end
+    connect(Players.PlayerAdded, createESP)
+
+    startLoop("esp", 0.5, function()
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p == player then continue end
+            if p.Character then
+                local bb = p.Character:FindFirstChild("Head") and p.Character.Head:FindFirstChild("CZ_ESP_Name")
+                if bb then
+                    local dist = (getRoot(p.Character) and myRoot()) and math.floor((getRoot(p.Character).Position - myRoot().Position).Magnitude) or 0
+                    local lbl = bb:FindFirstChildOfClass("TextLabel")
+                    if lbl then lbl.Text = p.DisplayName .. " [" .. dist .. "]" end
+                end
+            end
+        end
+    end)
+
+    notify("ESP", "Enabled")
+end)
+
+addcmd("unesp", {"noesp"}, "Disable ESP", function(args), "visual")
+    clearESP()
+    stopLoop("esp")
+    notify("ESP", "Disabled")
+end)
+
+addcmd("xray", {"x"}, "Make all parts transparent", function(args), "visual")
+    for _, p in ipairs(workspace:GetDescendants()) do
+        if p:IsA("BasePart") and p.Transparency < 1 then
+            p:SetAttribute("CZ_OrigTransparency", p.Transparency)
+            p.Transparency = 0.7
+        end
+    end
+    notify("X-Ray", "Enabled")
+end)
+
+addcmd("unxray", {"noxray", "unx"}, "Restore part transparency", function(args), "visual")
+    for _, p in ipairs(workspace:GetDescendants()) do
+        if p:IsA("BasePart") then
+            local orig = p:GetAttribute("CZ_OrigTransparency")
+            if orig then
+                p.Transparency = orig
+                p:SetAttribute("CZ_OrigTransparency", nil)
+            end
+        end
+    end
+    notify("X-Ray", "Disabled")
+end)
+
+addcmd("fullbright", {"fb", "bright"}, "Remove all darkness/fog", function(args), "visual")
+    Lighting.Brightness = 2
+    Lighting.ClockTime = 14
+    Lighting.FogEnd = 100000
+    Lighting.GlobalShadows = false
+    Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+    Lighting.Ambient = Color3.new(1, 1, 1)
+    for _, v in ipairs(Lighting:GetDescendants()) do
+        if v:IsA("Atmosphere") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("SunRaysEffect") then
+            v.Enabled = false
+        end
+    end
+    notify("Fullbright", "Enabled")
+end)
+
+addcmd("unfullbright", {"unfb"}, "Restore lighting", function(args), "visual")
+    -- Can't perfectly restore, just set defaults
+    Lighting.Brightness = 1
+    Lighting.GlobalShadows = true
+    Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+    Lighting.Ambient = Color3.fromRGB(0, 0, 0)
+    for _, v in ipairs(Lighting:GetDescendants()) do
+        if v:IsA("PostEffect") or v:IsA("Atmosphere") then
+            v.Enabled = true
+        end
+    end
+    notify("Fullbright", "Disabled")
+end)
+
+addcmd("fov", {"fieldofview"}, "Set camera field of view", function(args, "visual")
+    local val = parseNumber(args[1], 70)
+    workspace.CurrentCamera.FieldOfView = val
+    notify("FOV", "Set to " .. val)
+end)
+
+--================================================================
+-- COMMANDS: SERVER / GAME INFO
+--================================================================
+
+addcmd("rejoin", {"rj", "rjn"}, "Rejoin current server", function(args), "server")
+    TeleportService:Teleport(game.PlaceId, player)
+end)
+
+addcmd("serverhop", {"shp", "shop"}, "Join a different server", function(args), "server")
+    notify("ServerHop", "Finding server...")
+    task.spawn(function()
+        local ok, servers = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(
+                "https://games.roblox.com/v1/games/" .. game.GameId .. "/servers/0?sortOrder=2&excludeFullGames=true&limit=10"
+            ))
+        end)
+        if ok and servers and servers.data then
+            for _, s in ipairs(servers.data) do
+                if s.id ~= game.JobId and s.playing < s.maxPlayers then
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, player)
+                    return
+                end
+            end
+        end
+        notify("ServerHop", "No available server found")
+    end)
+end)
+
+addcmd("copyplaceid", {"cpid"}, "Copy PlaceId to clipboard", function(args), "server")
+    local id = tostring(game.PlaceId)
+    pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
+    notify("Copied", "PlaceId: " .. id)
+end)
+
+addcmd("copygameid", {"cgid"}, "Copy GameId to clipboard", function(args), "server")
+    local id = tostring(game.GameId)
+    pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
+    notify("Copied", "GameId: " .. id)
+end)
+
+addcmd("jobid", {"jid"}, "Copy JobId to clipboard", function(args), "server")
+    local id = game.JobId
+    pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
+    notify("Copied", "JobId copied")
+end)
+
+addcmd("serverinfo", {"sinfo", "info"}, "Show server information", function(args), "server")
+    notify("Server Info",
+        "Players: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers ..
+        "\nPlaceId: " .. game.PlaceId ..
+        "\nGameId: " .. game.GameId ..
+        "\nJobId: " .. game.JobId:sub(1, 8) .. "..."
+    , 8)
+end)
+
+addcmd("age", {}, "Get player's account age", function(args, "info")
+    local targets = getPlayers(args[1])
+    for _, t in ipairs(targets) do
+        notify("Age", t.Name .. " account age: " .. t.AccountAge .. " days")
+    end
+end)
+
+addcmd("team", {}, "Show player's team", function(args, "server")
+    local targets = getPlayers(args[1] or "me")
+    for _, t in ipairs(targets) do
+        local teamName = t.Team and t.Team.Name or "No Team"
+        notify("Team", t.Name .. " is on: " .. teamName)
+    end
+end)
+
+addcmd("volume", {"vol"}, "Set game volume (0-10)", function(args, "settings")
+    local vol = parseNumber(args[1], 1)
+    SoundService.AmbientReverb = Enum.ReverbType.NoReverb
+    UserSettings():GetService("UserGameSettings").MasterVolume = math.clamp(vol / 10, 0, 1)
+    notify("Volume", "Set to " .. vol)
+end)
+
+--================================================================
+
+end
