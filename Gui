@@ -2912,15 +2912,15 @@ local movedScreenGuis = {}
 local GUI_OFFSET = 10
 
 local function shiftGameGuis(show)
+    -- ScreenGui has no Position property; toggle Enabled instead
     for _, gui in ipairs(playerGui:GetChildren()) do
         if gui:IsA("ScreenGui") and gui ~= screenGui and gui ~= toggleGui then
             if show then
-                if not movedScreenGuis[gui] then
-                    movedScreenGuis[gui] = gui.Position
+                if movedScreenGuis[gui] == nil then
+                    movedScreenGuis[gui] = gui.Enabled
                 end
-                gui.Position = UDim2.new(0, GUI_OFFSET, 0, 0)
-            elseif movedScreenGuis[gui] then
-                gui.Position = movedScreenGuis[gui]
+            elseif movedScreenGuis[gui] ~= nil then
+                gui.Enabled = movedScreenGuis[gui]
                 movedScreenGuis[gui] = nil
             end
         end
