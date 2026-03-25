@@ -3883,28 +3883,35 @@ end)
 -- COMMANDS: TROLLING EXTENDED (CmdX)
 --================================================================
 
-addcmd("walkfling", {"wfling"}, "Fling by walking into people (BodyAngularVelocity, replicates)", function(args)
+addcmd("walkfling", {"wfling"}, "Walk into players to fling them (IY method)", function(args)
+    local char = getChar()
     local root = myRoot()
-    if not root then return end
-    pcall(function() local s = root:FindFirstChild("CZ_WalkFling") if s then s:Destroy() end end)
-    local bav = Instance.new("BodyAngularVelocity")
-    bav.Name = "CZ_WalkFling"
-    bav.AngularVelocity = Vector3.new(0, 80, 0)
-    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    bav.P = 1000000
-    bav.Parent = root
-    loopStates["walkfling"] = true
+    if not root or not char then return end
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") then
+            p.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+        end
+    end
+    startLoop("walkfling", 0, function()
+        local r = myRoot()
+        if r then r.AssemblyAngularVelocity = Vector3.new(0, 200, 0) end
+    end)
     notify("WalkFling", "Enabled — walk into people to fling them")
 end)
 
 addcmd("unwalkfling", {"unwfling", "nowalkfling"}, "Stop walk fling", function(args)
-    loopStates["walkfling"] = nil
+    stopLoop("walkfling")
+    local char = getChar()
     local root = myRoot()
-    if root then
-        local s = root:FindFirstChild("CZ_WalkFling")
-        if s then s:Destroy() end
-        root.AssemblyAngularVelocity = Vector3.zero
+    if root then root.AssemblyAngularVelocity = Vector3.zero end
+    if char then
+        for _, p in ipairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then
+                p.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5)
+            end
+        end
     end
+    notify("WalkFling", "Disabled")
 end)
 
 addcmd("flyfling", {}, "Fly into people to fling them", function(args)
