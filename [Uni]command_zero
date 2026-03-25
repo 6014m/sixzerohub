@@ -1803,45 +1803,298 @@ addcmd("unspam", {"unchatspam"}, "Stop chat spam", function(args), "chat")
     notify("Spam", "Stopped")
 end)
 
-addcmd("retardchat", {"uwuchat"}, "Auto-modify chat to uwu style", function(args), "chat")
-    startLoop("retardchat", 0, function() end)
+-- Unified Chat Modifier System (ported from CmdX — uses getconnections)
+do
+    _G.czChatModifierMode = nil
+    _G.czChatModifierBox = nil
+    _G.czChatModifierConnection = nil
+    _G.czChatModifierDisabledConns = {}
 
-    local function uwuify(text)
-        text = text:gsub("[rl]", "w"):gsub("[RL]", "W")
-        text = text:gsub("th", "d"):gsub("TH", "D"):gsub("Th", "D")
-        text = text:gsub("ove", "uv")
-        local endings = {" uwu", " owo", " >w<", " :3", " nyaa~", " ^w^"}
-        return text .. endings[math.random(#endings)]
+    local function findChatTextBox()
+        local chatBox = nil
+        pcall(function()
+            local cg = game:GetService("CoreGui")
+            local ec = cg:FindFirstChild("ExperienceChat")
+            if ec then
+                for _, desc in ipairs(ec:GetDescendants()) do
+                    if desc:IsA("TextBox") then chatBox = desc; break end
+                end
+            end
+        end)
+        if chatBox then return chatBox end
+        pcall(function()
+            if gethui then
+                for _, gui in ipairs(gethui():GetChildren()) do
+                    for _, desc in ipairs(gui:GetDescendants()) do
+                        if desc:IsA("TextBox") then chatBox = desc; return end
+                    end
+                end
+            end
+        end)
+        if chatBox then return chatBox end
+        pcall(function()
+            local focused = UserInputService:GetFocusedTextBox()
+            if focused and focused.Parent and focused.Parent.Parent then
+                local pn = focused.Parent.Parent.Name:lower()
+                if pn:find("chat") or pn:find("experience") then chatBox = focused end
+            end
+        end)
+        return chatBox
     end
 
-    pcall(function()
-        if RBXGeneral then
-            local oldSend = RBXGeneral.SendAsync
-            -- Hook into chat sending by intercepting TextBox
-            -- This is a simplified version — hooks the chat input
+    local function applyRetardChat(msg)
+        local endings = {"UwU", "uwu", "^w^", ">w<", "(´•ω•`)", ">=<", ">>", ":3", ">:3", ":D"}
+        local message = msg:gsub("l", "w"):gsub("L", "W"):gsub("r", "w"):gsub("n", "ny"):split(" ")
+        local result = ""
+        for i, v in ipairs(message) do
+            if i == 1 then
+                v = (v:sub(1, 1) .. "-"):rep(math.random(1, 2)) .. v:sub(2)
+            end
+            result = result .. v .. " "
         end
-    end)
+        return result .. endings[math.random(#endings)]
+    end
 
-    notify("RetardChat", "Enabled — uwuifying your messages")
-end)
+    local function applyBypass(msg)
+        local words = msg:split(" ")
+        local c = "\219\166\219\138"
+        local out = ""
+        for i = 1, #words do
+            words[i] = words[i]:sub(1, 1) .. c .. words[i]:sub(2)
+            out = out .. words[i] .. "  "
+        end
+        return out
+    end
 
-addcmd("unretardchat", {"unuwuchat"}, "Stop uwu chat", function(args), "chat")
-    stopLoop("retardchat")
-    notify("RetardChat", "Disabled")
-end)
+    local function applySmartChat(msg)
+        local abbreviations = {
+            ["u"] = "you", ["ur"] = "your", ["r"] = "are", ["y"] = "why",
+            ["bc"] = "because", ["cuz"] = "because", ["idk"] = "I don't know",
+            ["tbh"] = "to be honest", ["rn"] = "right now", ["ngl"] = "not gonna lie",
+            ["imo"] = "in my opinion", ["btw"] = "by the way", ["omg"] = "oh my god",
+            ["brb"] = "be right back", ["gtg"] = "got to go", ["pls"] = "please",
+            ["plz"] = "please", ["thx"] = "thanks", ["ty"] = "thank you",
+            ["yw"] = "you're welcome", ["np"] = "no problem",
+            ["gonna"] = "going to", ["wanna"] = "want to", ["gotta"] = "got to",
+            ["kinda"] = "kind of", ["dunno"] = "don't know", ["lemme"] = "let me",
+            ["gimme"] = "give me", ["tryna"] = "trying to", ["imma"] = "I'm going to",
+            ["lol"] = "", ["lmao"] = "", ["lmfao"] = "", ["smh"] = "shaking my head",
+            ["nvm"] = "never mind", ["ofc"] = "of course", ["ik"] = "I know",
+            ["rly"] = "really", ["sry"] = "sorry", ["tho"] = "though",
+            ["prolly"] = "probably", ["abt"] = "about",
+            ["dont"] = "don't", ["didnt"] = "didn't", ["cant"] = "can't",
+            ["wont"] = "won't", ["isnt"] = "isn't", ["im"] = "I'm",
+            ["ive"] = "I've", ["ill"] = "I'll", ["hes"] = "he's",
+            ["shes"] = "she's", ["thats"] = "that's", ["youre"] = "you're",
+            ["theyre"] = "they're", ["youve"] = "you've",
+        }
+        local words = msg:split(" ")
+        local result = {}
+        for _, word in ipairs(words) do
+            local lw = word:lower()
+            if abbreviations[lw] then
+                if abbreviations[lw] ~= "" then table.insert(result, abbreviations[lw]) end
+            elseif lw == "i" then
+                table.insert(result, "I")
+            else
+                table.insert(result, word)
+            end
+        end
+        local message = table.concat(result, " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+        if #message > 0 then
+            message = message:sub(1, 1):upper() .. message:sub(2)
+            message = message:gsub(" i ", " I "):gsub(" i'", " I'")
+            local lastChar = message:sub(-1)
+            if not lastChar:match("[%.%?%!]") then
+                local questionWords = {"who", "what", "when", "where", "why", "how", "is", "are", "do", "does", "did", "can", "could", "would", "should", "will"}
+                local isQ = false
+                for _, s in ipairs(questionWords) do
+                    if message:lower():match("^" .. s .. "%s") then isQ = true; break end
+                end
+                message = message .. (isQ and "?" or ".")
+            end
+        end
+        return message
+    end
 
-addcmd("compliment", {}, "Compliment a player", function(args, "chat")
+    local function enableChatModifier(mode)
+        if not getconnections then
+            notify("Error", "Your executor does not support getconnections")
+            return false
+        end
+        if _G.czChatModifierMode then
+            notify("Error", "A chat modifier is already active. Use un" .. _G.czChatModifierMode .. " first.")
+            return false
+        end
+        local chatBox = findChatTextBox()
+        if not chatBox then
+            notify("Error", "Could not find chat textbox. Open chat first, then retry.")
+            return false
+        end
+
+        _G.czChatModifierBox = chatBox
+        _G.czChatModifierMode = mode
+        _G.czChatModifierDisabledConns = {}
+
+        pcall(function()
+            for _, conn in ipairs(getconnections(chatBox.FocusLost)) do
+                conn:Disable()
+                table.insert(_G.czChatModifierDisabledConns, conn)
+            end
+        end)
+
+        _G.czChatModifierConnection = chatBox.FocusLost:Connect(function(enterPressed)
+            if not enterPressed or not _G.czChatModifierMode then return end
+            local originalMsg = chatBox.Text
+            if originalMsg == "" then return end
+
+            -- skip commands
+            if originalMsg:sub(1, 1) == "/" or originalMsg:sub(1, #prefix) == prefix then
+                for _, conn in ipairs(_G.czChatModifierDisabledConns) do pcall(function() conn:Enable() end) end
+                task.defer(function()
+                    task.wait(0.1)
+                    for _, conn in ipairs(_G.czChatModifierDisabledConns) do pcall(function() conn:Disable() end) end
+                end)
+                return
+            end
+
+            chatBox.Text = ""
+            local modifiedMsg = originalMsg
+            if _G.czChatModifierMode == "retardchat" then
+                modifiedMsg = applyRetardChat(originalMsg)
+            elseif _G.czChatModifierMode == "bypass" then
+                modifiedMsg = applyBypass(originalMsg)
+            elseif _G.czChatModifierMode == "smartchat" then
+                modifiedMsg = applySmartChat(originalMsg)
+            end
+            task.defer(function() sendChat(modifiedMsg) end)
+        end)
+        return true
+    end
+
+    local function disableChatModifier()
+        if _G.czChatModifierConnection then
+            _G.czChatModifierConnection:Disconnect()
+            _G.czChatModifierConnection = nil
+        end
+        for _, conn in ipairs(_G.czChatModifierDisabledConns) do
+            pcall(function() conn:Enable() end)
+        end
+        _G.czChatModifierDisabledConns = {}
+        _G.czChatModifierMode = nil
+        _G.czChatModifierBox = nil
+    end
+
+    -- retardchat
+    addcmd("retardchat", {"uwuchat", "rc_on"}, "Auto-uwuify your chat messages (uses getconnections)", function(args)
+        if enableChatModifier("retardchat") then
+            notify("RetardChat", "Enabled — your messages will be uwu-ified")
+        end
+    end, "chat")
+
+    addcmd("unretardchat", {"unuwuchat"}, "Disable retard chat", function(args)
+        if _G.czChatModifierMode ~= "retardchat" then
+            notify("RetardChat", "Not currently enabled"); return
+        end
+        disableChatModifier()
+        notify("RetardChat", "Disabled")
+    end, "chat")
+
+    addcmd("rc", {}, "Send a single uwu-ified message", function(args)
+        local msg = getstring(1, args)
+        if msg ~= "" then sendChat(applyRetardChat(msg)) end
+    end, "chat")
+
+    -- bypass chat
+    addcmd("bypasschat", {"bypass_on"}, "Auto-bypass chat filter", function(args)
+        if enableChatModifier("bypass") then
+            notify("Bypass", "Enabled — your messages will be auto-bypassed")
+        end
+    end, "chat")
+
+    addcmd("unbypasschat", {"unbypass"}, "Disable bypass chat", function(args)
+        if _G.czChatModifierMode ~= "bypass" then
+            notify("Bypass", "Not currently enabled"); return
+        end
+        disableChatModifier()
+        notify("Bypass", "Disabled")
+    end, "chat")
+
+    addcmd("bp2", {}, "Send a single bypassed message", function(args)
+        local msg = getstring(1, args)
+        if msg ~= "" then sendChat(applyBypass(msg)) end
+    end, "chat")
+
+    -- smart chat
+    addcmd("smartchat", {"sc_on"}, "Auto-capitalize and expand abbreviations in chat", function(args)
+        if enableChatModifier("smartchat") then
+            notify("SmartChat", "Enabled — messages auto-corrected")
+        end
+    end, "chat")
+
+    addcmd("unsmartchat", {}, "Disable smart chat", function(args)
+        if _G.czChatModifierMode ~= "smartchat" then
+            notify("SmartChat", "Not currently enabled"); return
+        end
+        disableChatModifier()
+        notify("SmartChat", "Disabled")
+    end, "chat")
+
+    addcmd("sc", {}, "Send a single smart-formatted message", function(args)
+        local msg = getstring(1, args)
+        if msg ~= "" then sendChat(applySmartChat(msg)) end
+    end, "chat")
+end
+
+-- compliment (ported from CmdX with real messages)
+addcmd("compliment", {}, "Compliment a player in chat", function(args)
     local targets = getPlayers(args[1])
-    local compliments = {
-        " is awesome!", " has great style!", " is really cool!",
-        " is a legend!", " is the best!", " is incredibly talented!",
-        " makes this server better!", " is a true gamer!",
-        " has amazing vibes!", " is genuinely kind!",
+    if #targets == 0 then notify("Compliment", "Specify a player"); return end
+    local compPick = {
+        "Them toes lookin cute",
+        "You have very nice shoes",
+        "If I'm what made your day then you're what made this world go round",
+        "You're a nice person, and i hope you have an amazing week",
+        "You somewhat made me kinda sorta smile I guess",
+        "Your avatar looks awesome",
+        "Your name makes me smile",
+        "You are the best person ever",
+        "If I could I would hug you",
+        "You make me happy",
+        "You have brightened up my day",
+        "You are the most amazing person I've ever met",
+        "Your avatar looks nice today",
+        "You are an amazing person",
+        "You are the king/queen",
+        "Don't drop your crown",
     }
     for _, t in ipairs(targets) do
-        sendChat(t.Name .. compliments[math.random(#compliments)])
+        sendChat(compPick[math.random(#compPick)] .. ", " .. t.Name)
     end
-end)
+end, "chat")
+
+-- roast (from CmdX)
+addcmd("roast", {}, "Roast a player in chat", function(args)
+    local targets = getPlayers(args[1])
+    if #targets == 0 then notify("Roast", "Specify a player"); return end
+    local roastPick = {
+        "Go to bed",
+        "You need a shower",
+        "You look like the 1% of germs that hand-soap doesn't kill",
+        "No wonder your parents hate you",
+        "Your brain has the capacity of a dried sea sponge",
+        "I literally want to quit this game because of you",
+        "Your outfit is horrendous",
+        "Your IQ is so low that even scientists cant zoom in on it",
+        "I can smell you through the screen",
+        "You couldn't pour water out of a boot with instructions on the heel",
+        "If you were a spice, you'd be flour",
+        "You bring everyone so much joy when you leave",
+    }
+    for _, t in ipairs(targets) do
+        sendChat(roastPick[math.random(#roastPick)] .. ", " .. t.Name)
+    end
+end, "chat")
 
 --================================================================
 -- COMMANDS: SETTINGS & UTILITY
