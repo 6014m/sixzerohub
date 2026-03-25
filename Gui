@@ -1252,6 +1252,7 @@ local UNI_SCRIPTS = {
     { name = "Lock-On Shiftlock", url = "https://raw.githubusercontent.com/6014m/roblox-lockon-shiftlock/main/The%20Actual%20Script", compat = "https://raw.githubusercontent.com/6014m/roblox-lockon-shiftlock/main/SixZeroHubCompat.lua" },
     { name = "Anti Trip", file = "[Uni]anti_trip" },
     { name = "Cheater Chat", file = "[Uni]cheater_chat" },
+    { name = "Command Zero", file = "[Uni]command_zero" },
     { name = "Audio Blocker", file = "[Uni]audio_blocker" },
     { name = "Open GUI", file = "[Uni]open_gui" },
 }
