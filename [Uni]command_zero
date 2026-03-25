@@ -1416,7 +1416,7 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt toward move direction", fun
     local max = parseNumber(args[1], 2)
     local min = max - 0.4
     local tiltAngle = 15
-    local moveSpeed = 0.55
+    local moveSpeed = 0.075
     local hum = myHumanoid()
     if not hum then return end
     levitateOldWS = hum.WalkSpeed
