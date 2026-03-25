@@ -688,10 +688,24 @@ acPad.PaddingLeft = UDim.new(0, 8)
 
 local currentSuggestion = ""
 
+-- Ghost text overlay: shows the full suggestion transparently inside the command bar
+local ghostLabel = Instance.new("TextLabel")
+ghostLabel.Size = UDim2.new(1, -16, 1, 0)
+ghostLabel.Position = UDim2.new(0, 8, 0, 0)
+ghostLabel.BackgroundTransparency = 1
+ghostLabel.Text = ""
+ghostLabel.TextColor3 = THEME.muted
+ghostLabel.TextTransparency = 0.5
+ghostLabel.TextSize = 13
+ghostLabel.Font = Enum.Font.Gotham
+ghostLabel.TextXAlignment = Enum.TextXAlignment.Left
+ghostLabel.Parent = cmdBarFrame
+
 cmdBar:GetPropertyChangedSignal("Text"):Connect(function()
     local text = cmdBar.Text:lower():gsub("^%s+", "")
     if text == "" then
         autocompleteLabel.Visible = false
+        ghostLabel.Text = ""
         currentSuggestion = ""
         return
     end
@@ -699,6 +713,7 @@ cmdBar:GetPropertyChangedSignal("Text"):Connect(function()
     for _, cmd in ipairs(cmds) do
         if cmd.NAME:sub(1, #text) == text then
             currentSuggestion = cmd.NAME
+            ghostLabel.Text = cmd.NAME
             autocompleteLabel.Text = "  Tab/→:" .. cmd.NAME .. (cmd.DESC ~= "" and ("  —  " .. cmd.DESC) or "")
             autocompleteLabel.Visible = true
             return
@@ -706,6 +721,7 @@ cmdBar:GetPropertyChangedSignal("Text"):Connect(function()
         for _, a in ipairs(cmd.ALIAS) do
             if a:sub(1, #text) == text then
                 currentSuggestion = a
+                ghostLabel.Text = a
                 autocompleteLabel.Text = "  Tab/→:" .. a .. " (" .. cmd.NAME .. ")"
                 autocompleteLabel.Visible = true
                 return
@@ -713,6 +729,7 @@ cmdBar:GetPropertyChangedSignal("Text"):Connect(function()
         end
     end
     autocompleteLabel.Visible = false
+    ghostLabel.Text = ""
     currentSuggestion = ""
 end)
 
@@ -724,6 +741,7 @@ connect(UserInputService.InputBegan, function(input, gpe)
             cmdBar.Text = currentSuggestion .. " "
             cmdBar.CursorPosition = #cmdBar.Text + 1
             autocompleteLabel.Visible = false
+            ghostLabel.Text = ""
         end
     elseif input.KeyCode == Enum.KeyCode.Up then
         if #cmdHistory > 0 then
@@ -1957,7 +1975,28 @@ end)
 
 addcmd("unantifling", {}, "Disable anti-fling", function(args)
     stopLoop("antifling")
+    stopLoop("antifling2")
     notify("Anti-Fling", "Disabled")
+end)
+
+addcmd("antifling2", {"afling2", "defling"}, "Stop fling momentum on yourself (zeros velocity each frame)", function(args)
+    stopLoop("antifling2")
+    startLoop("antifling2", 0, function()
+        local root = myRoot()
+        if root then
+            local vel = root.AssemblyLinearVelocity
+            if vel.Magnitude > 80 then
+                root.AssemblyLinearVelocity = Vector3.new(0, math.min(vel.Y, 0), 0)
+                root.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+    end)
+    notify("Anti-Fling 2", "Enabled — kills fling momentum on you")
+end)
+
+addcmd("unantifling2", {"undefling"}, "Disable anti-fling 2", function(args)
+    stopLoop("antifling2")
+    notify("Anti-Fling 2", "Disabled")
 end)
 
 addcmd("antilag", {"boostfps", "lowgraphics"}, "Full lag reduction: effects, shadows, fog, quality, materials (IY method)", function(args)
@@ -1997,19 +2036,21 @@ addcmd("antilag", {"boostfps", "lowgraphics"}, "Full lag reduction: effects, sha
     notify("Anti-Lag", "Full lag reduction applied")
 end)
 
-addcmd("antivoid", {}, "Teleport back up if you fall into the void", function(args)
+addcmd("antivoid", {}, "Teleport to last safe ground if you fall into the void", function(args)
     local lastSafe = myRoot() and myRoot().CFrame or CFrame.new(0, 50, 0)
     startLoop("antivoid", 0.1, function()
         local root = myRoot()
         if root then
-            if root.Position.Y > -200 then
+            local ray = workspace:Raycast(root.Position, Vector3.new(0, -500, 0))
+            if ray then
                 lastSafe = root.CFrame
-            else
+            elseif root.Position.Y < -50 then
                 root.CFrame = lastSafe
+                root.AssemblyLinearVelocity = Vector3.zero
             end
         end
     end)
-    notify("Anti-Void", "Enabled")
+    notify("Anti-Void", "Enabled — saves position when on solid ground")
 end)
 
 addcmd("unantivoid", {"noantivoid"}, "Disable anti-void", function(args)
