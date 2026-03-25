@@ -597,8 +597,14 @@ warn("[CZ] _G.CZ set. addcmd=" .. tostring(_G.CZ.addcmd) .. " notify=" .. tostri
 
 local MB = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
 local function loadMod(name)
-    local s, r = pcall(function() return loadstring(game:HttpGet(MB .. name))() end)
-    if not s then warn("[CZ] " .. name .. ": " .. tostring(r)) end
+    local code = game:HttpGet(MB .. name, true)
+    local fn, err = loadstring(code)
+    if not fn then
+        warn("[CZ] " .. name .. " PARSE ERROR: " .. tostring(err))
+        return nil
+    end
+    local s, r = pcall(fn)
+    if not s then warn("[CZ] " .. name .. " RUNTIME: " .. tostring(r)) end
     return s and r or nil
 end
 
