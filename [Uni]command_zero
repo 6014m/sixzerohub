@@ -4543,12 +4543,30 @@ addcmd("thaw", {"unfreeze2", "unfreeze", "unfr"}, "Unfreeze character", function
     execCmd("unfreezechar")
 end)
 
-addcmd("stun", {"platformstand"}, "Stun character (ragdoll)", function(args)
-    execCmd("ragdoll2")
+addcmd("stun", {"platformstand"}, "Ragdoll with Q/E to move up/down", function(args)
+    local hum = myHumanoid()
+    if not hum then return end
+    hum.PlatformStand = true
+    startLoop("stun", 0, function()
+        local root = myRoot()
+        local h = myHumanoid()
+        if not root or not h then return end
+        h.PlatformStand = true
+        local move = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.E) then move = move + Vector3.yAxis * 50 end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then move = move - Vector3.yAxis * 50 end
+        if move.Magnitude > 0 then
+            root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, move.Y, root.AssemblyLinearVelocity.Z)
+        end
+    end)
+    notify("Stun", "Ragdolled — Q/E to move up/down")
 end)
 
 addcmd("unstun", {"nostun", "unplatformstand", "noplatformstand"}, "Get up from stun", function(args)
-    execCmd("unragdoll")
+    stopLoop("stun")
+    local hum = myHumanoid()
+    if hum then hum.PlatformStand = false end
+    notify("Stun", "Disabled")
 end)
 
 addcmd("discord", {"support", "cord", "help"}, "Show Command Zero info", function(args)
@@ -6515,19 +6533,21 @@ addcmd("lay", {"laydown"}, "Lay down animation", function(args)
 end)
 
 addcmd("cambobble", {"headbob"}, "Camera head bobble effect", function(args)
-    local intensity = parseNumber(args[1], 0.3)
+    local intensity = parseNumber(args[1], 1)
     startLoop("cambobble", 0, function()
-        local cam = workspace.CurrentCamera
-        if cam then
-            local t = tick() * 5
-            cam.CFrame = cam.CFrame * CFrame.new(0, math.sin(t) * intensity * 0.01, 0)
+        local hum = myHumanoid()
+        if hum then
+            local t = tick() * 6
+            hum.CameraOffset = Vector3.new(math.sin(t * 0.7) * intensity * 0.15, math.sin(t) * intensity * 0.3, 0)
         end
     end)
-    notify("CamBobble", "Enabled")
+    notify("CamBobble", "Enabled (intensity " .. intensity .. ")")
 end)
 
 addcmd("uncambobble", {}, "Stop camera bobble", function(args)
     stopLoop("cambobble")
+    local hum = myHumanoid()
+    if hum then hum.CameraOffset = Vector3.zero end
 end)
 
 
