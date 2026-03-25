@@ -309,6 +309,17 @@ task.spawn(function()
 
             lockOn(target.player)
 
+            -- wait for target to stop moving before approaching
+            local waitStart = tick()
+            while active and tick() - waitStart < 15 do
+                if isArrested(target.player) then break end
+                local tRoot = getRoot(target.player.Character)
+                if not tRoot then break end
+                local hum = target.player.Character:FindFirstChildOfClass("Humanoid")
+                if hum and hum.MoveDirection.Magnitude < 0.1 then break end
+                task.wait(0.1)
+            end
+
             local arrested = false
             for attempt = 1, 25 do
                 if not active then break end
@@ -317,8 +328,12 @@ task.spawn(function()
                 local targetRoot = getRoot(target.player.Character)
                 if not targetRoot then break end
 
-                -- tween right behind target based on their facing direction
-                local behindOffset = -targetRoot.CFrame.LookVector * 2 + Vector3.new(0, 0.5, 0)
+                -- check they're still standing still, bail if they started running
+                local tHum = target.player.Character:FindFirstChildOfClass("Humanoid")
+                if tHum and tHum.MoveDirection.Magnitude > 0.1 then break end
+
+                -- tween right behind target, very close
+                local behindOffset = -targetRoot.CFrame.LookVector * 1 + Vector3.new(0, 0.5, 0)
                 tweenTo(CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position))
 
                 -- rapid-fire the arrest remote
