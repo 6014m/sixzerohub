@@ -550,7 +550,7 @@ local CZ_ENV = {
 local MB = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
 local function loadMod(name)
     local ok, err = pcall(function()
-        local src = game:HttpGet(MB..name)
+        local src = game:HttpGet(MB..name, true)
         local fn = loadstring(src)()
         if type(fn) == "function" then fn(CZ_ENV) end
     end)
@@ -562,7 +562,7 @@ end
 -- GUI
 local guiResult = nil
 local guiOk, guiErr = pcall(function()
-    local src = game:HttpGet(MB.."CZ_gui")
+    local src = game:HttpGet(MB.."CZ_gui", true)
     local fn = loadstring(src)()
     if type(fn) == "function" then guiResult = fn(CZ_ENV) end
 end)
