@@ -1122,12 +1122,12 @@ addcmd("tweengoto", {"tweento", "tgoto"}, "Tween to player smoothly", function(a
     end
 end)
 
-addcmd("sit", {"s"}, "Make your character sit", function(, "movement")
+addcmd("sit", {"s"}, "Make your character sit", function(args), "movement")
     local hum = myHumanoid()
     if hum then hum.Sit = true end
 end)
 
-addcmd("sitwalk", {"sitw"}, "Walk while sitting", function(, "movement")
+addcmd("sitwalk", {"sitw"}, "Walk while sitting", function(args), "movement")
     local hum = myHumanoid()
     if hum then
         hum.Sit = true
@@ -1136,12 +1136,12 @@ addcmd("sitwalk", {"sitw"}, "Walk while sitting", function(, "movement")
     end
 end)
 
-addcmd("jump", {"j"}, "Make character jump", function(, "movement")
+addcmd("jump", {"j"}, "Make character jump", function(args), "movement")
     local hum = myHumanoid()
     if hum then hum.Jump = true end
 end)
 
-addcmd("noclip", {"nc", "nocl"}, "Toggle noclip", function(, "movement")
+addcmd("noclip", {"nc", "nocl"}, "Toggle noclip", function(args), "movement")
     local on = toggleLoop("noclip", 0, function()
         local char = getChar()
         if char then
@@ -1153,7 +1153,7 @@ addcmd("noclip", {"nc", "nocl"}, "Toggle noclip", function(, "movement")
     notify("Noclip", on and "Enabled" or "Disabled")
 end)
 
-addcmd("clip", {"unnoclip"}, "Disable noclip", function(, "movement")
+addcmd("clip", {"unnoclip"}, "Disable noclip", function(args), "movement")
     stopLoop("noclip")
     notify("Noclip", "Disabled")
 end)
@@ -1206,7 +1206,7 @@ addcmd("fly", {"flygui"}, "Toggle fly (WASD + QE for up/down)", function(args, "
     end)
 end)
 
-addcmd("unfly", {"nofly"}, "Disable fly", function(, "movement")
+addcmd("unfly", {"nofly"}, "Disable fly", function(args), "movement")
     flyActive = false
     if flyBody then pcall(function() flyBody:Destroy() end); flyBody = nil end
     local hum = myHumanoid()
@@ -1225,12 +1225,12 @@ addcmd("teleportwalk", {"tpwalk"}, "Teleport in walk direction", function(args, 
     notify("TeleportWalk", on and ("Enabled (" .. dist .. " studs)") or "Disabled")
 end)
 
-addcmd("unteleportwalk", {"untpwalk"}, "Disable teleport walk", function(, "movement")
+addcmd("unteleportwalk", {"untpwalk"}, "Disable teleport walk", function(args), "movement")
     stopLoop("tpwalk")
     notify("TeleportWalk", "Disabled")
 end)
 
-addcmd("clickteleport", {"clicktp", "ctp"}, "Click to teleport", function(, "teleport")
+addcmd("clickteleport", {"clicktp", "ctp"}, "Click to teleport", function(args), "teleport")
     local on = toggleLoop("clicktp", 0.05, function() end)
     if on then
         notify("ClickTP", "Enabled — click anywhere to teleport")
@@ -1250,7 +1250,7 @@ addcmd("clickteleport", {"clicktp", "ctp"}, "Click to teleport", function(, "tel
     end
 end)
 
-addcmd("unclicktp", {"unctp"}, "Disable click teleport", function(, "teleport")
+addcmd("unclicktp", {"unctp"}, "Disable click teleport", function(args), "teleport")
     stopLoop("clicktp")
     notify("ClickTP", "Disabled")
 end)
@@ -1276,7 +1276,7 @@ addcmd("orbit", {"orb"}, "Orbit a player", function(args, "movement")
     notify("Orbit", "Orbiting " .. target.Name)
 end)
 
-addcmd("unorbit", {"unorb"}, "Stop orbiting", function(, "movement")
+addcmd("unorbit", {"unorb"}, "Stop orbiting", function(args), "movement")
     stopLoop("orbit")
     notify("Orbit", "Stopped")
 end)
@@ -1304,7 +1304,7 @@ addcmd("offset", {}, "Offset from player", function(args, "movement")
     end)
 end)
 
-addcmd("unoffset", {}, "Stop offset", function(, "movement")
+addcmd("unoffset", {}, "Stop offset", function(args), "movement")
     stopLoop("offset")
 end)
 
@@ -1312,7 +1312,7 @@ end)
 -- COMMANDS: CHARACTER
 --================================================================
 
-addcmd("refresh", {"re"}, "Refresh character (respawn at same position)", function(, "character")
+addcmd("refresh", {"re"}, "Refresh character (respawn at same position)", function(args), "character")
     local root = myRoot()
     if not root then return end
     local cf = root.CFrame
@@ -1324,12 +1324,12 @@ addcmd("refresh", {"re"}, "Refresh character (respawn at same position)", functi
     if newRoot then newRoot.CFrame = cf end
 end)
 
-addcmd("reset", {"die"}, "Reset character", function(, "character")
+addcmd("reset", {"die"}, "Reset character", function(args), "character")
     local hum = myHumanoid()
     if hum then hum.Health = 0 end
 end)
 
-addcmd("respawn", {"rspawn"}, "Force respawn", function(, "character")
+addcmd("respawn", {"rspawn"}, "Force respawn", function(args), "character")
     player:LoadCharacter()
 end)
 
@@ -1367,7 +1367,7 @@ end)
 -- COMMANDS: VISUAL / ESP
 --================================================================
 
-addcmd("esp", {"playeresp"}, "Toggle player ESP boxes", function(, "visual")
+addcmd("esp", {"playeresp"}, "Toggle player ESP boxes", function(args), "visual")
     if #espObjects > 0 then
         clearESP()
         notify("ESP", "Disabled")
@@ -1440,13 +1440,13 @@ addcmd("esp", {"playeresp"}, "Toggle player ESP boxes", function(, "visual")
     notify("ESP", "Enabled")
 end)
 
-addcmd("unesp", {"noesp"}, "Disable ESP", function(, "visual")
+addcmd("unesp", {"noesp"}, "Disable ESP", function(args), "visual")
     clearESP()
     stopLoop("esp")
     notify("ESP", "Disabled")
 end)
 
-addcmd("xray", {"x"}, "Make all parts transparent", function(, "visual")
+addcmd("xray", {"x"}, "Make all parts transparent", function(args), "visual")
     for _, p in ipairs(workspace:GetDescendants()) do
         if p:IsA("BasePart") and p.Transparency < 1 then
             p:SetAttribute("CZ_OrigTransparency", p.Transparency)
@@ -1456,7 +1456,7 @@ addcmd("xray", {"x"}, "Make all parts transparent", function(, "visual")
     notify("X-Ray", "Enabled")
 end)
 
-addcmd("unxray", {"noxray", "unx"}, "Restore part transparency", function(, "visual")
+addcmd("unxray", {"noxray", "unx"}, "Restore part transparency", function(args), "visual")
     for _, p in ipairs(workspace:GetDescendants()) do
         if p:IsA("BasePart") then
             local orig = p:GetAttribute("CZ_OrigTransparency")
@@ -1469,7 +1469,7 @@ addcmd("unxray", {"noxray", "unx"}, "Restore part transparency", function(, "vis
     notify("X-Ray", "Disabled")
 end)
 
-addcmd("fullbright", {"fb", "bright"}, "Remove all darkness/fog", function(, "visual")
+addcmd("fullbright", {"fb", "bright"}, "Remove all darkness/fog", function(args), "visual")
     Lighting.Brightness = 2
     Lighting.ClockTime = 14
     Lighting.FogEnd = 100000
@@ -1484,7 +1484,7 @@ addcmd("fullbright", {"fb", "bright"}, "Remove all darkness/fog", function(, "vi
     notify("Fullbright", "Enabled")
 end)
 
-addcmd("unfullbright", {"unfb"}, "Restore lighting", function(, "visual")
+addcmd("unfullbright", {"unfb"}, "Restore lighting", function(args), "visual")
     -- Can't perfectly restore, just set defaults
     Lighting.Brightness = 1
     Lighting.GlobalShadows = true
@@ -1508,11 +1508,11 @@ end)
 -- COMMANDS: SERVER / GAME INFO
 --================================================================
 
-addcmd("rejoin", {"rj", "rjn"}, "Rejoin current server", function(, "server")
+addcmd("rejoin", {"rj", "rjn"}, "Rejoin current server", function(args), "server")
     TeleportService:Teleport(game.PlaceId, player)
 end)
 
-addcmd("serverhop", {"shp", "shop"}, "Join a different server", function(, "server")
+addcmd("serverhop", {"shp", "shop"}, "Join a different server", function(args), "server")
     notify("ServerHop", "Finding server...")
     task.spawn(function()
         local ok, servers = pcall(function()
@@ -1532,25 +1532,25 @@ addcmd("serverhop", {"shp", "shop"}, "Join a different server", function(, "serv
     end)
 end)
 
-addcmd("copyplaceid", {"cpid"}, "Copy PlaceId to clipboard", function(, "server")
+addcmd("copyplaceid", {"cpid"}, "Copy PlaceId to clipboard", function(args), "server")
     local id = tostring(game.PlaceId)
     pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
     notify("Copied", "PlaceId: " .. id)
 end)
 
-addcmd("copygameid", {"cgid"}, "Copy GameId to clipboard", function(, "server")
+addcmd("copygameid", {"cgid"}, "Copy GameId to clipboard", function(args), "server")
     local id = tostring(game.GameId)
     pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
     notify("Copied", "GameId: " .. id)
 end)
 
-addcmd("jobid", {"jid"}, "Copy JobId to clipboard", function(, "server")
+addcmd("jobid", {"jid"}, "Copy JobId to clipboard", function(args), "server")
     local id = game.JobId
     pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
     notify("Copied", "JobId copied")
 end)
 
-addcmd("serverinfo", {"sinfo", "info"}, "Show server information", function(, "server")
+addcmd("serverinfo", {"sinfo", "info"}, "Show server information", function(args), "server")
     notify("Server Info",
         "Players: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers ..
         "\nPlaceId: " .. game.PlaceId ..
@@ -1585,7 +1585,7 @@ end)
 -- COMMANDS: ANTI / PROTECTION
 --================================================================
 
-addcmd("antiafk", {"antiidle", "aafk"}, "Prevent AFK kick", function(, "anti")
+addcmd("antiafk", {"antiidle", "aafk"}, "Prevent AFK kick", function(args), "anti")
     local vu = game:GetService("VirtualUser")
     startLoop("antiafk", 60, function()
         vu:CaptureController()
@@ -1594,31 +1594,33 @@ addcmd("antiafk", {"antiidle", "aafk"}, "Prevent AFK kick", function(, "anti")
     notify("Anti-AFK", "Enabled")
 end)
 
-addcmd("unantiafk", {}, "Disable anti-AFK", function(, "anti")
+addcmd("unantiafk", {}, "Disable anti-AFK", function(args), "anti")
     stopLoop("antiafk")
     notify("Anti-AFK", "Disabled")
 end)
 
-addcmd("antifling", {"antiflingg", "afling"}, "Prevent being flung", function(, "anti")
+addcmd("antifling", {"antiflingg", "afling"}, "Disable collisions on other players to prevent flings (IY method)", function(args, "anti")
+    stopLoop("antifling")
     startLoop("antifling", 0, function()
-        local root = myRoot()
-        if root then
-            local vel = root.AssemblyLinearVelocity
-            if vel.Magnitude > 100 then
-                root.AssemblyLinearVelocity = Vector3.zero
-                root.AssemblyAngularVelocity = Vector3.zero
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player and p.Character then
+                for _, v in ipairs(p.Character:GetDescendants()) do
+                    if v:IsA("BasePart") then
+                        v.CanCollide = false
+                    end
+                end
             end
         end
     end)
-    notify("Anti-Fling", "Enabled")
+    notify("Anti-Fling", "Enabled — other player collisions disabled")
 end)
 
-addcmd("unantifling", {}, "Disable anti-fling", function(, "anti")
+addcmd("unantifling", {}, "Disable anti-fling", function(args, "anti")
     stopLoop("antifling")
     notify("Anti-Fling", "Disabled")
 end)
 
-addcmd("antilag", {"boostfps", "lowgraphics"}, "Remove unnecessary visual effects to reduce lag", function(, "anti")
+addcmd("antilag", {"boostfps", "lowgraphics"}, "Remove unnecessary visual effects to reduce lag", function(args), "anti")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
             v.Enabled = false
@@ -1636,7 +1638,7 @@ addcmd("antilag", {"boostfps", "lowgraphics"}, "Remove unnecessary visual effect
     notify("Anti-Lag", "Visual effects reduced")
 end)
 
-addcmd("antivoid", {}, "Teleport back up if you fall into the void", function(, "anti")
+addcmd("antivoid", {}, "Teleport back up if you fall into the void", function(args), "anti")
     local lastSafe = myRoot() and myRoot().CFrame or CFrame.new(0, 50, 0)
     startLoop("antivoid", 0.1, function()
         local root = myRoot()
@@ -1651,12 +1653,12 @@ addcmd("antivoid", {}, "Teleport back up if you fall into the void", function(, 
     notify("Anti-Void", "Enabled")
 end)
 
-addcmd("unantivoid", {}, "Disable anti-void", function(, "anti")
+addcmd("unantivoid", {}, "Disable anti-void", function(args), "anti")
     stopLoop("antivoid")
     notify("Anti-Void", "Disabled")
 end)
 
-addcmd("infjump", {"infinitejump", "ij"}, "Infinite jump", function(, "anti")
+addcmd("infjump", {"infinitejump", "ij"}, "Infinite jump", function(args), "anti")
     startLoop("infjump", 0, function() end)
     local conn = connect(UserInputService.JumpRequest, function()
         if loopStates["infjump"] then
@@ -1667,12 +1669,12 @@ addcmd("infjump", {"infinitejump", "ij"}, "Infinite jump", function(, "anti")
     notify("Infinite Jump", "Enabled")
 end)
 
-addcmd("uninfjump", {"unij"}, "Disable infinite jump", function(, "anti")
+addcmd("uninfjump", {"unij"}, "Disable infinite jump", function(args), "anti")
     stopLoop("infjump")
     notify("Infinite Jump", "Disabled")
 end)
 
-addcmd("nosit", {"antisit", "uns"}, "Prevent sitting", function(, "anti")
+addcmd("nosit", {"antisit", "uns"}, "Prevent sitting", function(args), "anti")
     startLoop("nosit", 0, function()
         local hum = myHumanoid()
         if hum and hum.Sit then hum.Sit = false end
@@ -1680,7 +1682,7 @@ addcmd("nosit", {"antisit", "uns"}, "Prevent sitting", function(, "anti")
     notify("No Sit", "Enabled")
 end)
 
-addcmd("unnosit", {}, "Disable no sit", function(, "anti")
+addcmd("unnosit", {}, "Disable no sit", function(args), "anti")
     stopLoop("nosit")
     notify("No Sit", "Disabled")
 end)
@@ -1700,7 +1702,7 @@ addcmd("spin", {"beyblade"}, "Spin your character", function(args, "fun")
     notify("Spin", "Spinning at speed " .. speed)
 end)
 
-addcmd("unspin", {}, "Stop spinning", function(, "fun")
+addcmd("unspin", {}, "Stop spinning", function(args), "fun")
     stopLoop("spin")
     notify("Spin", "Stopped")
 end)
@@ -1746,7 +1748,7 @@ addcmd("trip", {}, "Trip a nearby player", function(args, "fun")
     end
 end)
 
-addcmd("strengthen", {"strong"}, "Increase local character density", function(, "character")
+addcmd("strengthen", {"strong"}, "Increase local character density", function(args), "character")
     local char = getChar()
     if not char then return end
     for _, p in ipairs(char:GetDescendants()) do
@@ -1757,7 +1759,7 @@ addcmd("strengthen", {"strong"}, "Increase local character density", function(, 
     notify("Strengthen", "Character density increased")
 end)
 
-addcmd("weaken", {"weak"}, "Decrease local character density", function(, "character")
+addcmd("weaken", {"weak"}, "Decrease local character density", function(args), "character")
     local char = getChar()
     if not char then return end
     for _, p in ipairs(char:GetDescendants()) do
@@ -1768,7 +1770,7 @@ addcmd("weaken", {"weak"}, "Decrease local character density", function(, "chara
     notify("Weaken", "Character density decreased")
 end)
 
-addcmd("unweaken", {"unstrengthen"}, "Reset character density", function(, "character")
+addcmd("unweaken", {"unstrengthen"}, "Reset character density", function(args), "character")
     local char = getChar()
     if not char then return end
     for _, p in ipairs(char:GetDescendants()) do
@@ -1796,12 +1798,12 @@ addcmd("spam", {"chatspam"}, "Spam a message in chat", function(args, "chat")
     notify("Spam", "Spamming: " .. msg)
 end)
 
-addcmd("unspam", {"unchatspam"}, "Stop chat spam", function(, "chat")
+addcmd("unspam", {"unchatspam"}, "Stop chat spam", function(args), "chat")
     stopLoop("chatspam")
     notify("Spam", "Stopped")
 end)
 
-addcmd("retardchat", {"uwuchat"}, "Auto-modify chat to uwu style", function(, "chat")
+addcmd("retardchat", {"uwuchat"}, "Auto-modify chat to uwu style", function(args), "chat")
     startLoop("retardchat", 0, function() end)
 
     local function uwuify(text)
@@ -1823,7 +1825,7 @@ addcmd("retardchat", {"uwuchat"}, "Auto-modify chat to uwu style", function(, "c
     notify("RetardChat", "Enabled — uwuifying your messages")
 end)
 
-addcmd("unretardchat", {"unuwuchat"}, "Stop uwu chat", function(, "chat")
+addcmd("unretardchat", {"unuwuchat"}, "Stop uwu chat", function(args), "chat")
     stopLoop("retardchat")
     notify("RetardChat", "Disabled")
 end)
@@ -1855,7 +1857,7 @@ addcmd("prefix", {"setprefix"}, "Change the command prefix", function(args, "set
     end
 end)
 
-addcmd("commands", {"cmds", "help"}, "Show the command list", function(, "settings")
+addcmd("commands", {"cmds", "help"}, "Show the command list", function(args), "settings")
     guiOpen = true
     main.Visible = true
     switchTab("Commands")
@@ -1869,7 +1871,7 @@ addcmd("notify", {"notification"}, "Show a notification", function(args, "settin
     notify("Notification", getstring(1, args))
 end)
 
-addcmd("breakloops", {"break", "stopall"}, "Stop all running loops", function(, "settings")
+addcmd("breakloops", {"break", "stopall"}, "Stop all running loops", function(args), "settings")
     lastBreakTime = tick()
     for k in pairs(loopStates) do
         loopStates[k] = nil
@@ -1885,7 +1887,7 @@ addcmd("breakloops", {"break", "stopall"}, "Stop all running loops", function(, 
     notify("Break", "All loops stopped")
 end)
 
-addcmd("exit", {"leave"}, "Leave the game", function(, "settings")
+addcmd("exit", {"leave"}, "Leave the game", function(args), "settings")
     player:Kick("Left via Command Zero")
 end)
 
@@ -1906,7 +1908,7 @@ addcmd("removealias", {"delalias"}, "Remove a custom alias", function(args, "set
     end
 end)
 
-addcmd("explorer", {"dex", "explore"}, "Open Dex explorer", function(, "tools")
+addcmd("explorer", {"dex", "explore"}, "Open Dex explorer", function(args), "tools")
     notify("Dex", "Loading...")
     task.spawn(function()
         pcall(function()
@@ -1915,7 +1917,7 @@ addcmd("explorer", {"dex", "explore"}, "Open Dex explorer", function(, "tools")
     end)
 end)
 
-addcmd("btools", {"bt"}, "Give basic building tools", function(, "tools")
+addcmd("btools", {"bt"}, "Give basic building tools", function(args), "tools")
     pcall(function()
         Instance.new("HopperBin", player.Backpack).BinType = 1
         Instance.new("HopperBin", player.Backpack).BinType = 2
@@ -1925,7 +1927,7 @@ addcmd("btools", {"bt"}, "Give basic building tools", function(, "tools")
     notify("BTools", "Building tools added")
 end)
 
-addcmd("savegame", {"saveplace", "sg"}, "Save a copy of the game (requires saveinstance)", function(, "tools")
+addcmd("savegame", {"saveplace", "sg"}, "Save a copy of the game (requires saveinstance)", function(args), "tools")
     if saveinstance then
         notify("Save", "Saving game... this may take a while")
         task.spawn(function()
@@ -1937,13 +1939,13 @@ addcmd("savegame", {"saveplace", "sg"}, "Save a copy of the game (requires savei
     end
 end)
 
-addcmd("anchor", {"anch"}, "Anchor your character in place", function(, "character")
+addcmd("anchor", {"anch"}, "Anchor your character in place", function(args), "character")
     local root = myRoot()
     if root then root.Anchored = true end
     notify("Anchor", "Anchored")
 end)
 
-addcmd("unanchor", {"unanch"}, "Unanchor your character", function(, "character")
+addcmd("unanchor", {"unanch"}, "Unanchor your character", function(args), "character")
     local root = myRoot()
     if root then root.Anchored = false end
     notify("Anchor", "Unanchored")
@@ -1956,7 +1958,7 @@ addcmd("maxslopeangle", {"msa", "maxsl"}, "Set max walkable slope angle", functi
     notify("Slope", "Max slope angle: " .. val)
 end)
 
-addcmd("autorejoin", {"arj", "autorj"}, "Auto rejoin when kicked", function(, "server")
+addcmd("autorejoin", {"arj", "autorj"}, "Auto rejoin when kicked", function(args), "server")
     if not queueteleport then
         notify("AutoRejoin", "queue_on_teleport not available")
         return
@@ -1965,7 +1967,7 @@ addcmd("autorejoin", {"arj", "autorj"}, "Auto rejoin when kicked", function(, "s
     notify("AutoRejoin", "Will rejoin on kick (uses queue_on_teleport)")
 end)
 
-addcmd("enableshiftlock", {"shiftlock"}, "Force enable shift lock", function(, "character")
+addcmd("enableshiftlock", {"shiftlock"}, "Force enable shift lock", function(args), "character")
     pcall(function()
         player.DevEnableMouseLock = true
         UserSettings():GetService("UserGameSettings").ControlMode = Enum.ControlMode.MouseLockSwitch
@@ -1991,7 +1993,7 @@ addcmd("boxreach", {"reach"}, "Extend reach for tools", function(args, "exploit"
     notify("BoxReach", "Reach set to " .. range)
 end)
 
-addcmd("unboxreach", {"unreach"}, "Disable reach", function(, "exploit")
+addcmd("unboxreach", {"unreach"}, "Disable reach", function(args), "exploit")
     stopLoop("boxreach")
     notify("BoxReach", "Disabled")
 end)
@@ -2002,7 +2004,7 @@ addcmd("setfpscap", {"fpscap"}, "Set FPS cap", function(args, "settings")
     notify("FPS", "Cap set to " .. val)
 end)
 
-addcmd("removeads", {"noads"}, "Remove common ad GUIs", function(, "exploit")
+addcmd("removeads", {"noads"}, "Remove common ad GUIs", function(args), "exploit")
     local count = 0
     for _, gui in ipairs(playerGui:GetDescendants()) do
         if gui:IsA("GuiObject") then
@@ -2016,21 +2018,21 @@ addcmd("removeads", {"noads"}, "Remove common ad GUIs", function(, "exploit")
     notify("Remove Ads", "Hid " .. count .. " potential ad elements")
 end)
 
-addcmd("noprompts", {"noprompt"}, "Disable all proximity prompts", function(, "exploit")
+addcmd("noprompts", {"noprompt"}, "Disable all proximity prompts", function(args), "exploit")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ProximityPrompt") then v.Enabled = false end
     end
     notify("No Prompts", "All proximity prompts disabled")
 end)
 
-addcmd("showprompts", {}, "Re-enable all proximity prompts", function(, "exploit")
+addcmd("showprompts", {}, "Re-enable all proximity prompts", function(args), "exploit")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ProximityPrompt") then v.Enabled = true end
     end
     notify("Prompts", "All proximity prompts enabled")
 end)
 
-addcmd("logs", {"chatlogs"}, "Show chat log", function(, "info")
+addcmd("logs", {"chatlogs"}, "Show chat log", function(args), "info")
     notify("Logs", "Chat logging started — check output")
     connect(Players.PlayerChatted and Players.PlayerChatted or player.Chatted, function(msg)
         print("[ChatLog]", msg)
@@ -2043,7 +2045,7 @@ addcmd("clear", {"cls"}, "Clear the notification holder", function()
     end
 end)
 
-addcmd("debug", {}, "Show debug info", function(, "settings")
+addcmd("debug", {}, "Show debug info", function(args), "settings")
     local stats = Stats:FindFirstChild("PerformanceStats")
     local ping = "N/A"
     pcall(function() ping = tostring(math.floor(player:GetNetworkPing() * 1000)) .. "ms" end)
@@ -2060,7 +2062,7 @@ end)
 -- COMMANDS: CmdX EXCLUSIVES (chat, fun, misc)
 --================================================================
 
-addcmd("seizure", {"juicewrld"}, "Make character have a seizure", function(, "fun")
+addcmd("seizure", {"juicewrld"}, "Make character have a seizure", function(args), "fun")
     startLoop("seizure", 0.05, function()
         local root = myRoot()
         if root then
@@ -2070,11 +2072,11 @@ addcmd("seizure", {"juicewrld"}, "Make character have a seizure", function(, "fu
     notify("Seizure", "Started")
 end)
 
-addcmd("unseizure", {}, "Stop seizure", function(, "fun")
+addcmd("unseizure", {}, "Stop seizure", function(args), "fun")
     stopLoop("seizure")
 end)
 
-addcmd("cartwheel", {}, "Make character cartwheel", function(, "fun")
+addcmd("cartwheel", {}, "Make character cartwheel", function(args), "fun")
     startLoop("cartwheel", 0, function()
         local root = myRoot()
         if root then
@@ -2083,7 +2085,7 @@ addcmd("cartwheel", {}, "Make character cartwheel", function(, "fun")
     end)
 end)
 
-addcmd("uncartwheel", {}, "Stop cartwheel", function(, "fun")
+addcmd("uncartwheel", {}, "Stop cartwheel", function(args), "fun")
     stopLoop("cartwheel")
 end)
 
@@ -2103,11 +2105,11 @@ addcmd("annoy", {"mimic"}, "Follow and mimic a player annoyingly", function(args
     notify("Annoy", "Annoying " .. target.Name)
 end)
 
-addcmd("unannoy", {}, "Stop annoying", function(, "fun")
+addcmd("unannoy", {}, "Stop annoying", function(args), "fun")
     stopLoop("annoy")
 end)
 
-addcmd("lag", {"stutter"}, "Make character appear laggy", function(, "fun")
+addcmd("lag", {"stutter"}, "Make character appear laggy", function(args), "fun")
     startLoop("lag", 0, function()
         local root = myRoot()
         if root then
@@ -2117,11 +2119,11 @@ addcmd("lag", {"stutter"}, "Make character appear laggy", function(, "fun")
     notify("Lag", "Lag effect enabled")
 end)
 
-addcmd("unlag", {"unstutter"}, "Stop lag effect", function(, "fun")
+addcmd("unlag", {"unstutter"}, "Stop lag effect", function(args), "fun")
     stopLoop("lag")
 end)
 
-addcmd("copyanimationid", {"copyanimid"}, "Copy animation ID of current animation", function(, "info")
+addcmd("copyanimationid", {"copyanimid"}, "Copy animation ID of current animation", function(args), "info")
     local hum = myHumanoid()
     if not hum then return end
     local animator = hum:FindFirstChildOfClass("Animator")
@@ -2138,13 +2140,13 @@ addcmd("copyanimationid", {"copyanimid"}, "Copy animation ID of current animatio
     end
 end)
 
-addcmd("noprompts", {"noprox"}, "Disable proximity prompts", function(, "exploit")
+addcmd("noprompts", {"noprox"}, "Disable proximity prompts", function(args), "exploit")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ProximityPrompt") then v.Enabled = false end
     end
 end)
 
-addcmd("clickdelete", {"cdel"}, "Click parts to delete them", function(, "tools")
+addcmd("clickdelete", {"cdel"}, "Click parts to delete them", function(args), "tools")
     local on = toggleLoop("clickdel", 0.05, function() end)
     if on then
         notify("ClickDelete", "Click parts to delete them")
@@ -2161,7 +2163,7 @@ addcmd("clickdelete", {"cdel"}, "Click parts to delete them", function(, "tools"
     end
 end)
 
-addcmd("unclickdelete", {"uncdel"}, "Disable click delete", function(, "tools")
+addcmd("unclickdelete", {"uncdel"}, "Disable click delete", function(args), "tools")
     stopLoop("clickdel")
 end)
 
@@ -2181,13 +2183,13 @@ addcmd("platform", {"plat"}, "Create a platform under your feet", function(args,
     notify("Platform", size .. "x" .. size .. " platform created")
 end)
 
-addcmd("removeplatform", {"unplat"}, "Remove platforms", function(, "tools")
+addcmd("removeplatform", {"unplat"}, "Remove platforms", function(args), "tools")
     for _, v in ipairs(workspace:GetChildren()) do
         if v.Name == "CZ_Platform" then v:Destroy() end
     end
 end)
 
-addcmd("aimbot", {}, "Basic aimbot (snaps camera to nearest player)", function(, "camera")
+addcmd("aimbot", {}, "Basic aimbot (snaps camera to nearest player)", function(args), "camera")
     local on = toggleLoop("aimbot", 0, function()
         local cam = workspace.CurrentCamera
         local closest, closestDist = nil, math.huge
@@ -2215,12 +2217,12 @@ addcmd("aimbot", {}, "Basic aimbot (snaps camera to nearest player)", function(,
     notify("Aimbot", on and "Enabled" or "Disabled")
 end)
 
-addcmd("unaimbot", {}, "Disable aimbot", function(, "camera")
+addcmd("unaimbot", {}, "Disable aimbot", function(args), "camera")
     stopLoop("aimbot")
     notify("Aimbot", "Disabled")
 end)
 
-addcmd("admindetect", {"admins"}, "Check if admins are in server", function(, "info")
+addcmd("admindetect", {"admins"}, "Check if admins are in server", function(args), "info")
     local found = false
     for _, p in ipairs(Players:GetPlayers()) do
         if p:IsInGroup(1200769) then -- Roblox Admins group
@@ -2592,7 +2594,7 @@ addcmd("deletewaypoint", {"dwp", "dpos"}, "Delete a saved waypoint", function(ar
     end
 end)
 
-addcmd("clearwaypoints", {"cwp", "cpos"}, "Clear all waypoints", function(, "teleport")
+addcmd("clearwaypoints", {"cwp", "cpos"}, "Clear all waypoints", function(args), "teleport")
     waypoints = {}
     notify("Waypoints", "All cleared")
 end)
@@ -2601,7 +2603,7 @@ end)
 -- COMMANDS: CAMERA (IY + CmdX)
 --================================================================
 
-addcmd("freecam", {"fc"}, "Enter freecam mode", function(, "camera")
+addcmd("freecam", {"fc"}, "Enter freecam mode", function(args), "camera")
     local cam = workspace.CurrentCamera
     cam.CameraType = Enum.CameraType.Scriptable
     notify("Freecam", "WASD to move, Right-click drag to look. Use unfreecam to exit.")
@@ -2624,7 +2626,7 @@ addcmd("freecam", {"fc"}, "Enter freecam mode", function(, "camera")
     end)
 end)
 
-addcmd("unfreecam", {"unfc", "nofreecam"}, "Exit freecam", function(, "camera")
+addcmd("unfreecam", {"unfc", "nofreecam"}, "Exit freecam", function(args), "camera")
     stopLoop("freecam")
     local cam = workspace.CurrentCamera
     cam.CameraType = Enum.CameraType.Custom
@@ -2632,7 +2634,7 @@ addcmd("unfreecam", {"unfc", "nofreecam"}, "Exit freecam", function(, "camera")
     notify("Freecam", "Disabled")
 end)
 
-addcmd("gotocamera", {"gotocam"}, "Teleport to camera position", function(, "teleport")
+addcmd("gotocamera", {"gotocam"}, "Teleport to camera position", function(args), "teleport")
     local root = myRoot()
     if root then root.CFrame = workspace.CurrentCamera.CFrame end
 end)
@@ -2651,7 +2653,7 @@ addcmd("lookat", {}, "Force camera to look at a player", function(args, "camera"
     notify("LookAt", "Looking at " .. target.Name)
 end)
 
-addcmd("unlookat", {}, "Stop looking at player", function(, "camera")
+addcmd("unlookat", {}, "Stop looking at player", function(args), "camera")
     stopLoop("lookat")
 end)
 
@@ -2667,7 +2669,7 @@ addcmd("view", {"spectate"}, "Spectate a player", function(args, "camera")
     end
 end)
 
-addcmd("unview", {"unspectate"}, "Stop spectating", function(, "camera")
+addcmd("unview", {"unspectate"}, "Stop spectating", function(args), "camera")
     local cam = workspace.CurrentCamera
     cam.CameraSubject = myHumanoid()
     notify("View", "Stopped spectating")
@@ -2689,7 +2691,7 @@ addcmd("cameraspin", {"camspin"}, "Spin the camera around player", function(args
     end)
 end)
 
-addcmd("uncameraspin", {"uncamspin"}, "Stop camera spin", function(, "camera")
+addcmd("uncameraspin", {"uncamspin"}, "Stop camera spin", function(args), "camera")
     stopLoop("camspin")
 end)
 
@@ -2697,7 +2699,7 @@ end)
 -- COMMANDS: TOOLS & BACKPACK (CmdX + IY)
 --================================================================
 
-addcmd("equip", {"equipall"}, "Equip all tools from backpack", function(, "tools")
+addcmd("equip", {"equipall"}, "Equip all tools from backpack", function(args), "tools")
     pcall(function()
         local bp = player:FindFirstChild("Backpack")
         if bp then
@@ -2708,7 +2710,7 @@ addcmd("equip", {"equipall"}, "Equip all tools from backpack", function(, "tools
     end)
 end)
 
-addcmd("unequip", {"drop"}, "Unequip current tool", function(, "tools")
+addcmd("unequip", {"drop"}, "Unequip current tool", function(args), "tools")
     local char = getChar()
     if char then
         local tool = char:FindFirstChildOfClass("Tool")
@@ -2718,7 +2720,7 @@ addcmd("unequip", {"drop"}, "Unequip current tool", function(, "tools")
     end
 end)
 
-addcmd("dropgears", {"droptools"}, "Drop all tools on ground", function(, "tools")
+addcmd("dropgears", {"droptools"}, "Drop all tools on ground", function(args), "tools")
     local char = getChar()
     if not char then return end
     local root = myRoot()
@@ -2757,11 +2759,11 @@ end)
 -- COMMANDS: LIGHTING & ENVIRONMENT (CmdX)
 --================================================================
 
-addcmd("day", {"time14"}, "Set time to day", function(, "environment")
+addcmd("day", {"time14"}, "Set time to day", function(args), "environment")
     Lighting.ClockTime = 14
 end)
 
-addcmd("night", {"time0"}, "Set time to night", function(, "environment")
+addcmd("night", {"time0"}, "Set time to night", function(args), "environment")
     Lighting.ClockTime = 0
 end)
 
@@ -2773,20 +2775,20 @@ addcmd("fog", {"setfog"}, "Set fog distance", function(args, "environment")
     Lighting.FogEnd = parseNumber(args[1], 100000)
 end)
 
-addcmd("removesky", {"nosky", "rsky"}, "Remove skybox", function(, "environment")
+addcmd("removesky", {"nosky", "rsky"}, "Remove skybox", function(args), "environment")
     for _, v in ipairs(Lighting:GetChildren()) do
         if v:IsA("Sky") then v:Destroy() end
     end
 end)
 
-addcmd("removeeffects", {"noeffects", "reffects"}, "Remove post-processing effects", function(, "environment")
+addcmd("removeeffects", {"noeffects", "reffects"}, "Remove post-processing effects", function(args), "environment")
     for _, v in ipairs(Lighting:GetDescendants()) do
         if v:IsA("PostEffect") or v:IsA("Atmosphere") then v:Destroy() end
     end
     notify("Effects", "Removed all post-processing")
 end)
 
-addcmd("removeseats", {"noseats", "rseats"}, "Disable all seats", function(, "environment")
+addcmd("removeseats", {"noseats", "rseats"}, "Disable all seats", function(args), "environment")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Seat") or v:IsA("VehicleSeat") then
@@ -2797,7 +2799,7 @@ addcmd("removeseats", {"noseats", "rseats"}, "Disable all seats", function(, "en
     notify("Seats", "Disabled " .. count .. " seats")
 end)
 
-addcmd("removeinviswalls", {"noinviswalls"}, "Remove invisible walls", function(, "exploit")
+addcmd("removeinviswalls", {"noinviswalls"}, "Remove invisible walls", function(args), "exploit")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") and v.Transparency >= 0.9 and v.CanCollide then
@@ -2821,7 +2823,7 @@ addcmd("userid", {"uid"}, "Get player's UserId", function(args, "info")
     end
 end)
 
-addcmd("position", {"pos", "getpos"}, "Get your current position", function(, "info")
+addcmd("position", {"pos", "getpos"}, "Get your current position", function(args), "info")
     local root = myRoot()
     if root then
         local p = root.Position
@@ -2831,13 +2833,13 @@ addcmd("position", {"pos", "getpos"}, "Get your current position", function(, "i
     end
 end)
 
-addcmd("ping", {}, "Show your network ping", function(, "info")
+addcmd("ping", {}, "Show your network ping", function(args), "info")
     local p = "N/A"
     pcall(function() p = tostring(math.floor(player:GetNetworkPing() * 1000)) .. "ms" end)
     notify("Ping", p)
 end)
 
-addcmd("players", {"plist"}, "List all players in server", function(, "info")
+addcmd("players", {"plist"}, "List all players in server", function(args), "info")
     local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
         table.insert(list, p.Name .. " (" .. p.DisplayName .. ")")
@@ -2854,19 +2856,19 @@ addcmd("inspect", {"examine"}, "Open player inspect menu", function(args, "info"
     end
 end)
 
-addcmd("creatorid", {}, "Get the game creator's UserId", function(, "server")
+addcmd("creatorid", {}, "Get the game creator's UserId", function(args), "server")
     notify("Creator", "Creator ID: " .. game.CreatorId)
 end)
 
-addcmd("filtering", {}, "Check if game has filtering enabled", function(, "server")
+addcmd("filtering", {}, "Check if game has filtering enabled", function(args), "server")
     notify("Filtering", workspace.FilteringEnabled and "Filtering is ENABLED" or "Filtering is DISABLED")
 end)
 
-addcmd("placeid", {}, "Show current PlaceId", function(, "server")
+addcmd("placeid", {}, "Show current PlaceId", function(args), "server")
     notify("PlaceId", tostring(game.PlaceId))
 end)
 
-addcmd("gameinfo", {}, "Show detailed game info", function(, "server")
+addcmd("gameinfo", {}, "Show detailed game info", function(args), "server")
     local info = {
         "Place: " .. MarketplaceService:GetProductInfo(game.PlaceId).Name,
         "PlaceId: " .. game.PlaceId,
@@ -2882,7 +2884,7 @@ end)
 -- COMMANDS: EXTRA MOVEMENT (CmdX)
 --================================================================
 
-addcmd("bunnyhop", {"bhop"}, "Auto jump while walking", function(, "movement")
+addcmd("bunnyhop", {"bhop"}, "Auto jump while walking", function(args), "movement")
     startLoop("bhop", 0, function()
         local hum = myHumanoid()
         if hum and hum.MoveDirection.Magnitude > 0 then
@@ -2892,7 +2894,7 @@ addcmd("bunnyhop", {"bhop"}, "Auto jump while walking", function(, "movement")
     notify("BunnyHop", "Enabled")
 end)
 
-addcmd("unbunnyhop", {"unbhop"}, "Disable bunny hop", function(, "movement")
+addcmd("unbunnyhop", {"unbhop"}, "Disable bunny hop", function(args), "movement")
     stopLoop("bhop")
     notify("BunnyHop", "Disabled")
 end)
@@ -2911,7 +2913,7 @@ addcmd("follow", {"stalk"}, "Follow a player", function(args, "movement")
     notify("Follow", "Following " .. target.Name)
 end)
 
-addcmd("unfollow", {"unstalk"}, "Stop following", function(, "movement")
+addcmd("unfollow", {"unstalk"}, "Stop following", function(args), "movement")
     stopLoop("follow")
 end)
 
@@ -2926,7 +2928,7 @@ addcmd("walkto", {}, "Walk to a player", function(args, "movement")
     end
 end)
 
-addcmd("float", {"plat"}, "Float on invisible platform", function(, "movement")
+addcmd("float", {"plat"}, "Float on invisible platform", function(args), "movement")
     local root = myRoot()
     if not root then return end
     local p = Instance.new("Part")
@@ -2945,14 +2947,14 @@ addcmd("float", {"plat"}, "Float on invisible platform", function(, "movement")
     notify("Float", "Floating")
 end)
 
-addcmd("unfloat", {"unplat", "nofloat"}, "Stop floating", function(, "movement")
+addcmd("unfloat", {"unplat", "nofloat"}, "Stop floating", function(args), "movement")
     stopLoop("float")
     for _, v in ipairs(workspace:GetChildren()) do
         if v.Name == "CZ_Float" then v:Destroy() end
     end
 end)
 
-addcmd("swim", {}, "Swim in air", function(, "movement")
+addcmd("swim", {}, "Swim in air", function(args), "movement")
     local oldGrav = workspace.Gravity
     workspace.Gravity = 0
     local hum = myHumanoid()
@@ -2963,7 +2965,7 @@ addcmd("swim", {}, "Swim in air", function(, "movement")
     notify("Swim", "Swimming (gravity off)")
 end)
 
-addcmd("unswim", {"noswim"}, "Stop swimming", function(, "movement")
+addcmd("unswim", {"noswim"}, "Stop swimming", function(args), "movement")
     stopLoop("swim")
     workspace.Gravity = 196.2
     notify("Swim", "Disabled")
@@ -2981,7 +2983,7 @@ addcmd("bodypositionwalkspeed", {"bpws", "bpwalkspeed"}, "BodyPosition-based wal
     notify("BPWS", "Speed: " .. speed)
 end)
 
-addcmd("unbodypositionwalkspeed", {"unbpws"}, "Disable BP walkspeed", function(, "movement")
+addcmd("unbodypositionwalkspeed", {"unbpws"}, "Disable BP walkspeed", function(args), "movement")
     stopLoop("bpws")
 end)
 
@@ -3012,7 +3014,7 @@ addcmd("stare", {"faceto"}, "Stare at a player (face them)", function(args, "fun
     notify("Stare", "Staring at " .. target.Name)
 end)
 
-addcmd("unstare", {}, "Stop staring", function(, "fun")
+addcmd("unstare", {}, "Stop staring", function(args), "fun")
     stopLoop("stare")
 end)
 
@@ -3072,11 +3074,11 @@ addcmd("tpwalk", {"teleportwalkspeed"}, "TP-based walkspeed (bypasses speed caps
     notify("TPWalk", "Speed: " .. speed)
 end)
 
-addcmd("untpwalk", {}, "Disable TP walk", function(, "movement")
+addcmd("untpwalk", {}, "Disable TP walk", function(args), "movement")
     stopLoop("tpwalkspeed")
 end)
 
-addcmd("chams", {"highlight"}, "Highlight all players through walls", function(, "visual")
+addcmd("chams", {"highlight"}, "Highlight all players through walls", function(args), "visual")
     if #espObjects > 0 then clearESP() end
     for _, p in ipairs(Players:GetPlayers()) do
         if p == player then continue end
@@ -3096,7 +3098,7 @@ addcmd("chams", {"highlight"}, "Highlight all players through walls", function(,
     notify("Chams", "Enabled")
 end)
 
-addcmd("unchams", {"nochams", "unhighlight"}, "Disable chams", function(, "visual")
+addcmd("unchams", {"nochams", "unhighlight"}, "Disable chams", function(args), "visual")
     clearESP()
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Character then
@@ -3108,28 +3110,28 @@ addcmd("unchams", {"nochams", "unhighlight"}, "Disable chams", function(, "visua
     notify("Chams", "Disabled")
 end)
 
-addcmd("hideiy", {"hidegui"}, "Hide the Command Zero GUI completely", function(, "settings")
+addcmd("hideiy", {"hidegui"}, "Hide the Command Zero GUI completely", function(args), "settings")
     gui.Enabled = false
     notify("GUI", "Hidden — use prefix command 'showgui' to restore")
 end)
 
-addcmd("showgui", {"unhidegui", "showiy"}, "Show the Command Zero GUI", function(, "settings")
+addcmd("showgui", {"unhidegui", "showiy"}, "Show the Command Zero GUI", function(args), "settings")
     gui.Enabled = true
     main.Visible = true
     guiOpen = true
 end)
 
-addcmd("screenshot", {"scrnshot"}, "Take a screenshot", function(, "info")
+addcmd("screenshot", {"scrnshot"}, "Take a screenshot", function(args), "info")
     pcall(function()
         game:GetService("CoreGui"):ToggleRecording()
     end)
 end)
 
-addcmd("clearerror", {"clearerrors"}, "Clear error messages", function(, "info")
+addcmd("clearerror", {"clearerrors"}, "Clear error messages", function(args), "info")
     pcall(function() game:GetService("GuiService"):ClearError() end)
 end)
 
-addcmd("clientantikick", {"antikick"}, "Try to prevent client-side kicks", function(, "anti")
+addcmd("clientantikick", {"antikick"}, "Try to prevent client-side kicks", function(args), "anti")
     if not hookmetamethod then
         notify("Anti-Kick", "Not supported on this executor (needs hookmetamethod)")
         return
@@ -3161,7 +3163,7 @@ addcmd("autoclick", {"aclick"}, "Auto-click at interval", function(args, "exploi
     notify("AutoClick", "Clicking every " .. interval .. "s")
 end)
 
-addcmd("unautoclick", {"unaclick"}, "Stop auto-clicking", function(, "exploit")
+addcmd("unautoclick", {"unaclick"}, "Stop auto-clicking", function(args), "exploit")
     stopLoop("autoclick")
     notify("AutoClick", "Disabled")
 end)
@@ -3196,7 +3198,7 @@ addcmd("breakvelocity", {"bv"}, "Zero out all velocity on character", function()
     end
 end)
 
-addcmd("nofall", {"antifalldamage", "antifall", "noragdoll"}, "Prevent fall damage", function(, "movement")
+addcmd("nofall", {"antifalldamage", "antifall", "noragdoll"}, "Prevent fall damage", function(args), "movement")
     startLoop("nofall", 0, function()
         local hum = myHumanoid()
         if hum then
@@ -3207,7 +3209,7 @@ addcmd("nofall", {"antifalldamage", "antifall", "noragdoll"}, "Prevent fall dama
     notify("NoFall", "Fall damage disabled")
 end)
 
-addcmd("unnofall", {}, "Re-enable fall damage", function(, "movement")
+addcmd("unnofall", {}, "Re-enable fall damage", function(args), "movement")
     stopLoop("nofall")
     local hum = myHumanoid()
     if hum then
@@ -3216,31 +3218,31 @@ addcmd("unnofall", {}, "Re-enable fall damage", function(, "movement")
     end
 end)
 
-addcmd("hidechat", {}, "Hide the chat window", function(, "chat")
+addcmd("hidechat", {}, "Hide the chat window", function(args), "chat")
     pcall(function()
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, false)
     end)
 end)
 
-addcmd("showchat", {"unhidechat"}, "Show the chat window", function(, "chat")
+addcmd("showchat", {"unhidechat"}, "Show the chat window", function(args), "chat")
     pcall(function()
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, true)
     end)
 end)
 
-addcmd("hideplayerlist", {"noplayerlist"}, "Hide the player list", function(, "settings")
+addcmd("hideplayerlist", {"noplayerlist"}, "Hide the player list", function(args), "settings")
     pcall(function()
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
     end)
 end)
 
-addcmd("showplayerlist", {}, "Show the player list", function(, "settings")
+addcmd("showplayerlist", {}, "Show the player list", function(args), "settings")
     pcall(function()
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, true)
     end)
 end)
 
-addcmd("lockws", {"lws"}, "Lock workspace (prevent changes)", function(, "tools")
+addcmd("lockws", {"lws"}, "Lock workspace (prevent changes)", function(args), "tools")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then
             v.Locked = true
@@ -3249,7 +3251,7 @@ addcmd("lockws", {"lws"}, "Lock workspace (prevent changes)", function(, "tools"
     notify("LockWS", "Workspace locked")
 end)
 
-addcmd("unlockws", {"uws"}, "Unlock workspace", function(, "tools")
+addcmd("unlockws", {"uws"}, "Unlock workspace", function(args), "tools")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then
             v.Locked = false
@@ -3258,7 +3260,7 @@ addcmd("unlockws", {"uws"}, "Unlock workspace", function(, "tools")
     notify("UnlockWS", "Workspace unlocked")
 end)
 
-addcmd("remotespy", {"rspy", "sspy"}, "Log remote calls to output", function(, "exploit")
+addcmd("remotespy", {"rspy", "sspy"}, "Log remote calls to output", function(args), "exploit")
     notify("RemoteSpy", "Logging remotes to output (F9)")
     connect(ReplicatedStorage.DescendantAdded, function(desc)
         if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then
@@ -3275,17 +3277,17 @@ addcmd("remotespy", {"rspy", "sspy"}, "Log remote calls to output", function(, "
     end
 end)
 
-addcmd("randomcmd", {"randcmd"}, "Execute a random command", function(, "settings")
+addcmd("randomcmd", {"randcmd"}, "Execute a random command", function(args), "settings")
     local safeCmds = {"spin", "dance", "sit", "jump", "sparkles", "fire", "smoke", "seizure", "emote wave"}
     execCmd(safeCmds[math.random(#safeCmds)], player, false)
 end)
 
-addcmd("credits", {}, "Show Command Zero credits", function(, "settings")
+addcmd("credits", {}, "Show Command Zero credits", function(args), "settings")
     notify("Command Zero",
         "Framework by Claude\nCommands from IY + CmdX\nBuilt for Wave executor\n\nIY by Edge\nCmdX by its creators", 10)
 end)
 
-addcmd("version", {"ver"}, "Show version", function(, "settings")
+addcmd("version", {"ver"}, "Show version", function(args), "settings")
     notify("Version", "Command Zero v1.0\n" .. #cmds .. " commands loaded")
 end)
 
@@ -3408,11 +3410,11 @@ addcmd("loopgoto", {"looptp"}, "Continuously teleport to player", function(args,
     notify("LoopGoto", "Loop teleporting to " .. target.Name)
 end)
 
-addcmd("unloopgoto", {"unlooptp"}, "Stop loop teleport", function(, "teleport")
+addcmd("unloopgoto", {"unlooptp"}, "Stop loop teleport", function(args), "teleport")
     stopLoop("loopgoto")
 end)
 
-addcmd("savepos", {"spos2"}, "Quick-save position (no name needed)", function(, "teleport")
+addcmd("savepos", {"spos2"}, "Quick-save position (no name needed)", function(args), "teleport")
     local root = myRoot()
     if root then
         genv.CZ_QUICKPOS = root.CFrame
@@ -3420,7 +3422,7 @@ addcmd("savepos", {"spos2"}, "Quick-save position (no name needed)", function(, 
     end
 end)
 
-addcmd("loadpos2", {"lpos2"}, "Quick-load last saved position", function(, "teleport")
+addcmd("loadpos2", {"lpos2"}, "Quick-load last saved position", function(args), "teleport")
     if genv.CZ_QUICKPOS then
         local root = myRoot()
         if root then root.CFrame = genv.CZ_QUICKPOS end
@@ -3433,7 +3435,7 @@ end)
 -- COMMANDS: CHARACTER EXTENDED (CmdX)
 --================================================================
 
-addcmd("removeanim", {"noanim", "ranim"}, "Remove all playing animations", function(, "character")
+addcmd("removeanim", {"noanim", "ranim"}, "Remove all playing animations", function(args), "character")
     local hum = myHumanoid()
     if not hum then return end
     local animator = hum:FindFirstChildOfClass("Animator")
@@ -3444,7 +3446,7 @@ addcmd("removeanim", {"noanim", "ranim"}, "Remove all playing animations", funct
     end
 end)
 
-addcmd("restoreanim", {"reanim"}, "Restore default animations", function(, "character")
+addcmd("restoreanim", {"reanim"}, "Restore default animations", function(args), "character")
     local char = getChar()
     if not char then return end
     local animate = char:FindFirstChild("Animate")
@@ -3467,11 +3469,11 @@ addcmd("animspeed", {"animationspeed"}, "Set animation speed", function(args, "c
     end
 end)
 
-addcmd("r6", {}, "Request R6 avatar type", function(, "character")
+addcmd("r6", {}, "Request R6 avatar type", function(args), "character")
     notify("R6", "Avatar type changes require server-side support")
 end)
 
-addcmd("r15", {}, "Request R15 avatar type", function(, "character")
+addcmd("r15", {}, "Request R15 avatar type", function(args), "character")
     notify("R15", "Avatar type changes require server-side support")
 end)
 
@@ -3506,7 +3508,7 @@ end)
 -- COMMANDS: TROLLING EXTENDED (CmdX)
 --================================================================
 
-addcmd("walkfling", {"wfling"}, "Fling by walking into people", function(, "fun")
+addcmd("walkfling", {"wfling"}, "Fling by walking into people", function(args), "fun")
     startLoop("walkfling", 0, function()
         local root = myRoot()
         if root then
@@ -3516,7 +3518,7 @@ addcmd("walkfling", {"wfling"}, "Fling by walking into people", function(, "fun"
     notify("WalkFling", "Enabled — walk into people to fling them")
 end)
 
-addcmd("unwalkfling", {"unwfling"}, "Stop walk fling", function(, "fun")
+addcmd("unwalkfling", {"unwfling"}, "Stop walk fling", function(args), "fun")
     stopLoop("walkfling")
     local root = myRoot()
     if root then root.AssemblyAngularVelocity = Vector3.zero end
@@ -3534,7 +3536,7 @@ addcmd("flyfling", {}, "Fly into people to fling them", function(args, "fun")
     notify("FlyFling", "Fly into players to fling")
 end)
 
-addcmd("unflyfling", {}, "Stop fly fling", function(, "fun")
+addcmd("unflyfling", {}, "Stop fly fling", function(args), "fun")
     stopLoop("flyfling")
     execCmd("unfly")
     local root = myRoot()
@@ -3565,7 +3567,7 @@ addcmd("bang", {}, "Dance animation near player", function(args, "fun")
     notify("Bang", "Targeting " .. target.Name)
 end)
 
-addcmd("unbang", {}, "Stop bang", function(, "fun")
+addcmd("unbang", {}, "Stop bang", function(args), "fun")
     stopLoop("bang")
     local hum = myHumanoid()
     if hum then
@@ -3603,11 +3605,11 @@ addcmd("jerk", {}, "Inappropriate animation near player", function(args, "fun")
     end)
 end)
 
-addcmd("unjerk", {}, "Stop jerk", function(, "fun")
+addcmd("unjerk", {}, "Stop jerk", function(args), "fun")
     stopLoop("jerk")
 end)
 
-addcmd("plague", {}, "Spread damage to nearby players", function(, "fun")
+addcmd("plague", {}, "Spread damage to nearby players", function(args), "fun")
     startLoop("plague", 0.5, function()
         local root = myRoot()
         if not root then return end
@@ -3625,7 +3627,7 @@ addcmd("plague", {}, "Spread damage to nearby players", function(, "fun")
     notify("Plague", "Spreading to nearby players")
 end)
 
-addcmd("unplague", {}, "Stop plague", function(, "fun")
+addcmd("unplague", {}, "Stop plague", function(args), "fun")
     stopLoop("plague")
 end)
 
@@ -3643,7 +3645,7 @@ addcmd("glue", {"stick"}, "Stick to a player", function(args, "fun")
     notify("Glue", "Stuck to " .. target.Name)
 end)
 
-addcmd("unglue", {"unstick"}, "Unstick from player", function(, "fun")
+addcmd("unglue", {"unstick"}, "Unstick from player", function(args), "fun")
     stopLoop("glue")
 end)
 
@@ -3660,7 +3662,7 @@ addcmd("facefuck", {}, "Position face animation on player", function(args, "fun"
     end)
 end)
 
-addcmd("unfacefuck", {}, "Stop facefuck", function(, "fun")
+addcmd("unfacefuck", {}, "Stop facefuck", function(args), "fun")
     stopLoop("facefuck")
 end)
 
@@ -3678,7 +3680,7 @@ addcmd("piggyback", {"ride", "headsit"}, "Ride on top of a player", function(arg
     notify("Piggyback", "Riding " .. target.Name)
 end)
 
-addcmd("unpiggyback", {"unride"}, "Stop piggyback", function(, "fun")
+addcmd("unpiggyback", {"unride"}, "Stop piggyback", function(args), "fun")
     stopLoop("piggyback")
 end)
 
@@ -3697,11 +3699,11 @@ addcmd("teamchat", {"tc"}, "Send team chat message", function(args, "chat")
     sendChat("/team " .. getstring(1, args))
 end)
 
-addcmd("advertise", {"ad"}, "Advertise Command Zero in chat", function(, "chat")
+addcmd("advertise", {"ad"}, "Advertise Command Zero in chat", function(args), "chat")
     sendChat("I'm using Command Zero — the ultimate command script!")
 end)
 
-addcmd("copyoutput", {"cpout"}, "Copy output log to clipboard", function(, "info")
+addcmd("copyoutput", {"cpout"}, "Copy output log to clipboard", function(args), "info")
     local log = {}
     pcall(function()
         local logService = game:GetService("LogService")
@@ -3716,7 +3718,7 @@ addcmd("copyoutput", {"cpout"}, "Copy output log to clipboard", function(, "info
     notify("Output", "Copied " .. #log .. " lines")
 end)
 
-addcmd("clearoutput", {"clsout"}, "Clear the output log", function(, "info")
+addcmd("clearoutput", {"clsout"}, "Clear the output log", function(args), "info")
     pcall(function()
         -- there's no official API for this, just notify
         for i = 1, 50 do print("") end
@@ -3728,7 +3730,7 @@ end)
 -- COMMANDS: WORKSPACE MANIPULATION (CmdX)
 --================================================================
 
-addcmd("bringunanchored", {"bringparts", "buna"}, "Bring unanchored parts to you", function(, "tools")
+addcmd("bringunanchored", {"bringparts", "buna"}, "Bring unanchored parts to you", function(args), "tools")
     local root = myRoot()
     if not root then return end
     local count = 0
@@ -3742,7 +3744,7 @@ addcmd("bringunanchored", {"bringparts", "buna"}, "Bring unanchored parts to you
     notify("Bring", "Brought " .. count .. " parts")
 end)
 
-addcmd("listunanchored", {"listparts", "luna"}, "List unanchored parts", function(, "tools")
+addcmd("listunanchored", {"listparts", "luna"}, "List unanchored parts", function(args), "tools")
     local parts = {}
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(getChar() or workspace) then
@@ -3753,7 +3755,7 @@ addcmd("listunanchored", {"listparts", "luna"}, "List unanchored parts", functio
     notify("Unanchored (" .. #parts .. "+)", table.concat(parts, "\n"), 10)
 end)
 
-addcmd("clearunanchored", {"clearparts"}, "Remove all unanchored parts", function(, "tools")
+addcmd("clearunanchored", {"clearparts"}, "Remove all unanchored parts", function(args), "tools")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(getChar() or workspace) then
@@ -3764,7 +3766,7 @@ addcmd("clearunanchored", {"clearparts"}, "Remove all unanchored parts", functio
     notify("Clear", "Removed " .. count .. " parts")
 end)
 
-addcmd("partpath", {"ppath"}, "Get full path of a part (click)", function(, "info")
+addcmd("partpath", {"ppath"}, "Get full path of a part (click)", function(args), "info")
     notify("PartPath", "Click a part...")
     local mouse = player:GetMouse()
     local conn
@@ -3778,21 +3780,21 @@ addcmd("partpath", {"ppath"}, "Get full path of a part (click)", function(, "inf
     end)
 end)
 
-addcmd("anchorall", {}, "Anchor all parts in workspace", function(, "tools")
+addcmd("anchorall", {}, "Anchor all parts in workspace", function(args), "tools")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then v.Anchored = true end
     end
     notify("Anchor", "All parts anchored")
 end)
 
-addcmd("unanchorall", {}, "Unanchor all parts", function(, "tools")
+addcmd("unanchorall", {}, "Unanchor all parts", function(args), "tools")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then v.Anchored = false end
     end
     notify("Unanchor", "All parts unanchored")
 end)
 
-addcmd("removeterrain", {"noterrain"}, "Remove all terrain", function(, "environment")
+addcmd("removeterrain", {"noterrain"}, "Remove all terrain", function(args), "environment")
     pcall(function() workspace.Terrain:Clear() end)
     notify("Terrain", "Cleared")
 end)
@@ -3813,7 +3815,7 @@ addcmd("audiotp", {"playaudio", "playsound", "atp"}, "Play an audio ID", functio
     notify("Audio", "Playing " .. id)
 end)
 
-addcmd("stopsound", {"stopsounds"}, "Stop all playing sounds", function(, "audio")
+addcmd("stopsound", {"stopsounds"}, "Stop all playing sounds", function(args), "audio")
     for _, v in ipairs(SoundService:GetDescendants()) do
         if v:IsA("Sound") then v:Stop() end
     end
@@ -3823,7 +3825,7 @@ addcmd("stopsound", {"stopsounds"}, "Stop all playing sounds", function(, "audio
     notify("Sound", "All sounds stopped")
 end)
 
-addcmd("mutesounds", {"mutegame"}, "Mute all sounds", function(, "audio")
+addcmd("mutesounds", {"mutegame"}, "Mute all sounds", function(args), "audio")
     SoundService.AmbientReverb = Enum.ReverbType.NoReverb
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("Sound") then v.Volume = 0 end
@@ -3875,7 +3877,7 @@ addcmd("fakelag", {"simulatelag"}, "Simulate laggy movement", function(args, "fu
     notify("FakeLag", "Simulating lag")
 end)
 
-addcmd("unfakelag", {}, "Stop fake lag", function(, "fun")
+addcmd("unfakelag", {}, "Stop fake lag", function(args), "fun")
     stopLoop("fakelag")
 end)
 
@@ -3883,19 +3885,19 @@ end)
 -- COMMANDS: MISCELLANEOUS (CmdX + IY)
 --================================================================
 
-addcmd("afk", {}, "Go AFK (freeze + message)", function(, "fun")
+addcmd("afk", {}, "Go AFK (freeze + message)", function(args), "fun")
     local root = myRoot()
     if root then root.Anchored = true end
     notify("AFK", "You are now AFK. Use unafk to return.")
 end)
 
-addcmd("unafk", {}, "Return from AFK", function(, "fun")
+addcmd("unafk", {}, "Return from AFK", function(args), "fun")
     local root = myRoot()
     if root then root.Anchored = false end
     notify("AFK", "Welcome back")
 end)
 
-addcmd("rejoinexecute", {"rjexec"}, "Re-execute Command Zero after rejoin", function(, "settings")
+addcmd("rejoinexecute", {"rjexec"}, "Re-execute Command Zero after rejoin", function(args), "settings")
     local qt = queue_on_teleport or (syn and syn.queue_on_teleport) or (getgenv and getgenv().queue_on_teleport)
     if qt then
         -- If CZ is loaded from a URL, this would need that URL
@@ -3974,7 +3976,7 @@ addcmd("badges", {}, "List your badges for this game", function()
     end)
 end)
 
-addcmd("autoobby", {"aobby"}, "Auto-complete obby — jumps at block edges when walking", function(, "movement")
+addcmd("autoobby", {"aobby"}, "Auto-complete obby — jumps at block edges when walking", function(args), "movement")
     local autoObbyActive = true
     loopStates["autoobby"] = true
     local char = getChar()
@@ -4002,7 +4004,7 @@ addcmd("autoobby", {"aobby"}, "Auto-complete obby — jumps at block edges when 
     notify("AutoObby", "Enabled — jumps at block edges while walking")
 end)
 
-addcmd("unautoobby", {}, "Stop auto obby", function(, "movement")
+addcmd("unautoobby", {}, "Stop auto obby", function(args), "movement")
     loopStates["autoobby"] = nil
 end)
 
@@ -4014,7 +4016,7 @@ addcmd("chatframe", {"chatpos"}, "Move chat frame position", function(args, "cha
     end)
 end)
 
-addcmd("cinematic", {"cinema"}, "Enable cinematic mode (hide UI, letterbox)", function(, "environment")
+addcmd("cinematic", {"cinema"}, "Enable cinematic mode (hide UI, letterbox)", function(args), "environment")
     pcall(function()
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
     end)
@@ -4035,7 +4037,7 @@ addcmd("cinematic", {"cinema"}, "Enable cinematic mode (hide UI, letterbox)", fu
     notify("Cinematic", "Mode enabled. Use uncinematic to exit.")
 end)
 
-addcmd("uncinematic", {"uncinema"}, "Exit cinematic mode", function(, "environment")
+addcmd("uncinematic", {"uncinema"}, "Exit cinematic mode", function(args), "environment")
     pcall(function()
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true)
     end)
@@ -4044,7 +4046,7 @@ addcmd("uncinematic", {"uncinema"}, "Exit cinematic mode", function(, "environme
     end
 end)
 
-addcmd("nohurtoverlay", {"nohurt"}, "Remove red damage overlay", function(, "environment")
+addcmd("nohurtoverlay", {"nohurt"}, "Remove red damage overlay", function(args), "environment")
     pcall(function()
         for _, v in ipairs(game:GetService("CoreGui"):GetDescendants()) do
             if v.Name == "HurtOverlay" or v.Name == "RedVignette" then
@@ -4055,7 +4057,7 @@ addcmd("nohurtoverlay", {"nohurt"}, "Remove red damage overlay", function(, "env
     notify("HurtOverlay", "Disabled")
 end)
 
-addcmd("wallwalk", {"wallclimb"}, "Walk on walls", function(, "movement")
+addcmd("wallwalk", {"wallclimb"}, "Walk on walls", function(args), "movement")
     startLoop("wallwalk", 0, function()
         local root = myRoot()
         if root then
@@ -4070,11 +4072,11 @@ addcmd("wallwalk", {"wallclimb"}, "Walk on walls", function(, "movement")
     notify("WallWalk", "Enabled")
 end)
 
-addcmd("unwallwalk", {"unwallclimb"}, "Disable wall walk", function(, "movement")
+addcmd("unwallwalk", {"unwallclimb"}, "Disable wall walk", function(args), "movement")
     stopLoop("wallwalk")
 end)
 
-addcmd("tptool", {}, "Click to teleport with tool equipped", function(, "teleport")
+addcmd("tptool", {}, "Click to teleport with tool equipped", function(args), "teleport")
     local on = toggleLoop("tptool", 0.05, function() end)
     if on then
         notify("TPTool", "Enabled — click to teleport tool to location")
@@ -4098,11 +4100,11 @@ addcmd("tptool", {}, "Click to teleport with tool equipped", function(, "telepor
     end
 end)
 
-addcmd("untptool", {}, "Disable TP tool", function(, "teleport")
+addcmd("untptool", {}, "Disable TP tool", function(args), "teleport")
     stopLoop("tptool")
 end)
 
-addcmd("loopxray", {}, "Keep xray on continuously", function(, "visual")
+addcmd("loopxray", {}, "Keep xray on continuously", function(args), "visual")
     startLoop("loopxray", 2, function()
         for _, p in ipairs(workspace:GetDescendants()) do
             if p:IsA("BasePart") and p.Transparency < 1 then
@@ -4116,12 +4118,12 @@ addcmd("loopxray", {}, "Keep xray on continuously", function(, "visual")
     notify("LoopXray", "Enabled")
 end)
 
-addcmd("unloopxray", {}, "Disable loop xray", function(, "visual")
+addcmd("unloopxray", {}, "Disable loop xray", function(args), "visual")
     stopLoop("loopxray")
     execCmd("unxray")
 end)
 
-addcmd("antiwindowafk", {"antitab"}, "Prevent AFK when window not focused", function(, "anti")
+addcmd("antiwindowafk", {"antitab"}, "Prevent AFK when window not focused", function(args), "anti")
     startLoop("antiwindowafk", 30, function()
         pcall(function()
             local vu = game:GetService("VirtualUser")
@@ -4132,7 +4134,7 @@ addcmd("antiwindowafk", {"antitab"}, "Prevent AFK when window not focused", func
     notify("AntiWindowAFK", "Enabled")
 end)
 
-addcmd("unantiwindowafk", {}, "Disable anti window AFK", function(, "anti")
+addcmd("unantiwindowafk", {}, "Disable anti window AFK", function(args), "anti")
     stopLoop("antiwindowafk")
 end)
 
@@ -4158,7 +4160,7 @@ addcmd("clicktphotkey", {"ctpkey"}, "Set click TP to a keybind (hold key + click
     notify("ClickTP", "Hold " .. keyName .. " + click to teleport")
 end)
 
-addcmd("unclicktphotkey", {"unctpkey"}, "Disable click TP hotkey", function(, "teleport")
+addcmd("unclicktphotkey", {"unctpkey"}, "Disable click TP hotkey", function(args), "teleport")
     stopLoop("ctpkey")
 end)
 
@@ -4166,7 +4168,7 @@ end)
 -- COMMANDS: NAMETAGS & BILLBOARDS (CmdX)
 --================================================================
 
-addcmd("nametags", {"ntags"}, "Show custom nametags above all players", function(, "visual")
+addcmd("nametags", {"ntags"}, "Show custom nametags above all players", function(args), "visual")
     local function applyTag(p)
         if p == player then return end
         if not p.Character then return end
@@ -4224,7 +4226,7 @@ addcmd("nametags", {"ntags"}, "Show custom nametags above all players", function
     notify("Nametags", "Enabled")
 end)
 
-addcmd("unnametags", {"unntags"}, "Remove custom nametags", function(, "visual")
+addcmd("unnametags", {"unntags"}, "Remove custom nametags", function(args), "visual")
     stopLoop("nametags")
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Character then
@@ -4238,7 +4240,7 @@ addcmd("unnametags", {"unntags"}, "Remove custom nametags", function(, "visual")
     notify("Nametags", "Disabled")
 end)
 
-addcmd("tracers", {}, "Draw lines to all players", function(, "visual")
+addcmd("tracers", {}, "Draw lines to all players", function(args), "visual")
     startLoop("tracers", 0, function() end)
     notify("Tracers", "Enabled (visual in 3D via beams)")
     for _, p in ipairs(Players:GetPlayers()) do
@@ -4269,7 +4271,7 @@ addcmd("tracers", {}, "Draw lines to all players", function(, "visual")
     end
 end)
 
-addcmd("untracers", {"notracers"}, "Remove tracers", function(, "visual")
+addcmd("untracers", {"notracers"}, "Remove tracers", function(args), "visual")
     stopLoop("tracers")
     for _, v in ipairs(workspace:GetChildren()) do
         if v.Name == "CZ_Tracer" then v:Destroy() end
@@ -4353,7 +4355,7 @@ addcmd("freereach", {"longreach"}, "Extended reach via touch interest", function
     notify("FreeReach", "Range: " .. range)
 end)
 
-addcmd("unfreereach", {"unlongreach"}, "Disable free reach", function(, "exploit")
+addcmd("unfreereach", {"unlongreach"}, "Disable free reach", function(args), "exploit")
     stopLoop("freereach")
 end)
 
@@ -4384,7 +4386,7 @@ addcmd("killaura", {"aura"}, "Damage nearby players with tool", function(args, "
     notify("KillAura", "Range: " .. range)
 end)
 
-addcmd("unkillaura", {"unaura"}, "Disable kill aura", function(, "exploit")
+addcmd("unkillaura", {"unaura"}, "Disable kill aura", function(args), "exploit")
     stopLoop("killaura")
 end)
 
@@ -4402,7 +4404,7 @@ addcmd("autoclicker", {"ac"}, "Auto-click rapidly", function(args, "exploit")
     notify("AutoClicker", "Clicking every " .. delay .. "s")
 end)
 
-addcmd("unautoclicker", {"unac"}, "Stop auto clicker", function(, "exploit")
+addcmd("unautoclicker", {"unac"}, "Stop auto clicker", function(args), "exploit")
     stopLoop("autoclicker")
 end)
 
@@ -4446,7 +4448,7 @@ addcmd("friendjoin", {"fj"}, "Join a friend's server", function(args, "server")
     end)
 end)
 
-addcmd("massfollowedinto", {}, "Check which players followed someone into this server", function(, "info")
+addcmd("massfollowedinto", {}, "Check which players followed someone into this server", function(args), "info")
     local results = {}
     for _, p in ipairs(Players:GetPlayers()) do
         if p.FollowUserId > 0 then
@@ -4462,7 +4464,7 @@ addcmd("massfollowedinto", {}, "Check which players followed someone into this s
     end
 end)
 
-addcmd("backpack", {"bp"}, "List items in your backpack", function(, "info")
+addcmd("backpack", {"bp"}, "List items in your backpack", function(args), "info")
     local items = {}
     local bp = player:FindFirstChild("Backpack")
     if bp then
@@ -4520,7 +4522,7 @@ addcmd("fogcolor", {}, "Set fog color (R G B)", function(args, "environment")
     Lighting.FogColor = Color3.new(r, g, b)
 end)
 
-addcmd("restorelighting", {"fixlighting"}, "Restore default lighting", function(, "environment")
+addcmd("restorelighting", {"fixlighting"}, "Restore default lighting", function(args), "environment")
     Lighting.Brightness = 1
     Lighting.ClockTime = 14
     Lighting.FogEnd = 100000
@@ -4534,7 +4536,7 @@ addcmd("restorelighting", {"fixlighting"}, "Restore default lighting", function(
     notify("Lighting", "Restored")
 end)
 
-addcmd("restorecamera", {"fixcamera", "fixcam"}, "Reset camera to default", function(, "camera")
+addcmd("restorecamera", {"fixcamera", "fixcam"}, "Reset camera to default", function(args), "camera")
     local cam = workspace.CurrentCamera
     cam.CameraType = Enum.CameraType.Custom
     cam.CameraSubject = myHumanoid()
@@ -4559,7 +4561,7 @@ addcmd("loopspeed", {}, "Continuously enforce walkspeed", function(args, "moveme
     notify("LoopSpeed", "Enforcing " .. val)
 end)
 
-addcmd("unloopspeed", {}, "Stop loop speed", function(, "movement")
+addcmd("unloopspeed", {}, "Stop loop speed", function(args), "movement")
     stopLoop("loopspeed")
 end)
 
@@ -4572,7 +4574,7 @@ addcmd("loopjp", {}, "Continuously enforce jump power", function(args, "movement
     notify("LoopJP", "Enforcing " .. val)
 end)
 
-addcmd("unloopjp", {}, "Stop loop jump power", function(, "movement")
+addcmd("unloopjp", {}, "Stop loop jump power", function(args), "movement")
     stopLoop("loopjp")
 end)
 
@@ -4585,7 +4587,7 @@ addcmd("loopfov", {}, "Continuously enforce FOV", function(args, "visual")
     end)
 end)
 
-addcmd("unloopfov", {}, "Stop loop FOV", function(, "visual")
+addcmd("unloopfov", {}, "Stop loop FOV", function(args), "visual")
     stopLoop("loopfov")
 end)
 
@@ -4593,11 +4595,11 @@ end)
 -- COMMANDS: MISC UTILITY (IY + CmdX remaining)
 --================================================================
 
-addcmd("lastcommand", {"lastcmd"}, "Re-run last command", function(, "settings")
+addcmd("lastcommand", {"lastcmd"}, "Re-run last command", function(args), "settings")
     if cmdHistory[1] then execCmd(cmdHistory[1]) end
 end)
 
-addcmd("history", {"cmdhistory"}, "Show command history", function(, "settings")
+addcmd("history", {"cmdhistory"}, "Show command history", function(args), "settings")
     local list = {}
     for i = 1, math.min(15, #cmdHistory) do
         table.insert(list, i .. ". " .. cmdHistory[i])
@@ -4605,13 +4607,13 @@ addcmd("history", {"cmdhistory"}, "Show command history", function(, "settings")
     notify("History", #list > 0 and table.concat(list, "\n") or "No history", 10)
 end)
 
-addcmd("output", {"console"}, "Open F9 output console", function(, "info")
+addcmd("output", {"console"}, "Open F9 output console", function(args), "info")
     pcall(function()
         game:GetService("StarterGui"):SetCore("DevConsoleVisible", true)
     end)
 end)
 
-addcmd("joinlogs", {}, "Show when players join/leave", function(, "info")
+addcmd("joinlogs", {}, "Show when players join/leave", function(args), "info")
     connect(Players.PlayerAdded, function(p)
         notify("Join", p.Name .. " joined", 3)
     end)
@@ -4638,18 +4640,18 @@ addcmd("listento", {"listen"}, "Listen to another player's audio", function(args
     notify("Listen", "Listening at " .. target.Name .. "'s position")
 end)
 
-addcmd("unlistento", {"unlisten"}, "Stop listening", function(, "audio")
+addcmd("unlistento", {"unlisten"}, "Stop listening", function(args), "audio")
     stopLoop("listento")
     pcall(function()
         SoundService:SetListener(Enum.ListenerType.Camera)
     end)
 end)
 
-addcmd("rec", {"record"}, "Toggle Roblox recording", function(, "info")
+addcmd("rec", {"record"}, "Toggle Roblox recording", function(args), "info")
     pcall(function() game:GetService("CoreGui"):ToggleRecording() end)
 end)
 
-addcmd("togglefs", {"fullscreen"}, "Toggle fullscreen", function(, "info")
+addcmd("togglefs", {"fullscreen"}, "Toggle fullscreen", function(args), "info")
     pcall(function() game:GetService("GuiService"):ToggleFullscreen() end)
 end)
 
@@ -4691,7 +4693,7 @@ addcmd("disable", {}, "Disable a CoreGui element", function(args, "settings")
     notify("Disable", "Disabled: " .. name)
 end)
 
-addcmd("showguis", {}, "Force show all hidden GUI frames", function(, "exploit")
+addcmd("showguis", {}, "Force show all hidden GUI frames", function(args), "exploit")
     local count = 0
     for _, v in ipairs(playerGui:GetDescendants()) do
         if (v:IsA("Frame") or v:IsA("ImageLabel") or v:IsA("ScrollingFrame")) and not v.Visible then
@@ -4702,7 +4704,7 @@ addcmd("showguis", {}, "Force show all hidden GUI frames", function(, "exploit")
     notify("ShowGuis", "Showed " .. count .. " elements")
 end)
 
-addcmd("hideguis", {}, "Hide all visible GUI frames", function(, "exploit")
+addcmd("hideguis", {}, "Hide all visible GUI frames", function(args), "exploit")
     local count = 0
     for _, v in ipairs(playerGui:GetDescendants()) do
         if (v:IsA("Frame") or v:IsA("ImageLabel") or v:IsA("ScrollingFrame")) and v.Visible then
@@ -4735,7 +4737,7 @@ addcmd("datalimit", {}, "Set incoming data limit", function(args, "exploit")
     end)
 end)
 
-addcmd("removelocalscripts", {"nolocalscripts", "rls"}, "Disable all LocalScripts", function(, "exploit")
+addcmd("removelocalscripts", {"nolocalscripts", "rls"}, "Disable all LocalScripts", function(args), "exploit")
     local count = 0
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("LocalScript") and v.Enabled then
@@ -4762,7 +4764,7 @@ addcmd("autokey", {}, "Auto-press a key repeatedly", function(args, "exploit")
     notify("AutoKey", "Pressing " .. keyName .. " every " .. interval .. "s")
 end)
 
-addcmd("unautokey", {}, "Stop auto key", function(, "exploit")
+addcmd("unautokey", {}, "Stop auto key", function(args), "exploit")
     stopLoop("autokey")
 end)
 
@@ -4834,7 +4836,7 @@ addcmd("isingroup", {"checkgroup"}, "Check if player is in a group", function(ar
     end
 end)
 
-addcmd("tpall", {}, "Teleport all players to you (requires firetouchinterest)", function(, "teleport")
+addcmd("tpall", {}, "Teleport all players to you (requires firetouchinterest)", function(args), "teleport")
     local root = myRoot()
     if not root then return end
     if not firetouchinterest then
@@ -4853,7 +4855,7 @@ addcmd("tpall", {}, "Teleport all players to you (requires firetouchinterest)", 
     end
 end)
 
-addcmd("freezechar", {"freeze"}, "Freeze character in place", function(, "character")
+addcmd("freezechar", {"freeze"}, "Freeze character in place", function(args), "character")
     local char = getChar()
     if not char then return end
     for _, p in ipairs(char:GetDescendants()) do
@@ -4862,7 +4864,7 @@ addcmd("freezechar", {"freeze"}, "Freeze character in place", function(, "charac
     notify("Freeze", "Frozen")
 end)
 
-addcmd("unfreezechar", {"unfreeze", "thaw"}, "Unfreeze character", function(, "character")
+addcmd("unfreezechar", {"unfreeze", "thaw"}, "Unfreeze character", function(args), "character")
     local char = getChar()
     if not char then return end
     for _, p in ipairs(char:GetDescendants()) do
@@ -4871,21 +4873,21 @@ addcmd("unfreezechar", {"unfreeze", "thaw"}, "Unfreeze character", function(, "c
     notify("Unfreeze", "Unfrozen")
 end)
 
-addcmd("trip2", {}, "Make yourself trip", function(, "character")
+addcmd("trip2", {}, "Make yourself trip", function(args), "character")
     local hum = myHumanoid()
     if hum then
         hum:ChangeState(Enum.HumanoidStateType.FallingDown)
     end
 end)
 
-addcmd("ragdoll2", {"stun", "ragdoll"}, "Make yourself ragdoll", function(, "character")
+addcmd("ragdoll2", {"stun", "ragdoll"}, "Make yourself ragdoll", function(args), "character")
     local hum = myHumanoid()
     if hum then
         hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
     end
 end)
 
-addcmd("unragdoll", {"unstun"}, "Get up from ragdoll", function(, "character")
+addcmd("unragdoll", {"unstun"}, "Get up from ragdoll", function(args), "character")
     local hum = myHumanoid()
     if hum then
         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -4900,17 +4902,17 @@ addcmd("minzoom", {}, "Set min camera zoom", function(args, "camera")
     player.CameraMinZoomDistance = parseNumber(args[1], 0.5)
 end)
 
-addcmd("firstperson", {"fp"}, "Force first person", function(, "camera")
+addcmd("firstperson", {"fp"}, "Force first person", function(args), "camera")
     player.CameraMinZoomDistance = 0.5
     player.CameraMaxZoomDistance = 0.5
 end)
 
-addcmd("thirdperson", {"tp3"}, "Force third person", function(, "camera")
+addcmd("thirdperson", {"tp3"}, "Force third person", function(args), "camera")
     player.CameraMinZoomDistance = 10
     player.CameraMaxZoomDistance = 128
 end)
 
-addcmd("defaultcam", {}, "Reset camera zoom limits", function(, "camera")
+addcmd("defaultcam", {}, "Reset camera zoom limits", function(args), "camera")
     player.CameraMinZoomDistance = 0.5
     player.CameraMaxZoomDistance = 128
 end)
@@ -4925,7 +4927,7 @@ addcmd("notify2", {"toast"}, "Show Roblox native notification", function(args, "
     end)
 end)
 
-addcmd("removefog", {"nofog"}, "Remove all fog", function(, "environment")
+addcmd("removefog", {"nofog"}, "Remove all fog", function(args), "environment")
     Lighting.FogEnd = 9999999
     Lighting.FogStart = 9999999
     for _, v in ipairs(Lighting:GetDescendants()) do
@@ -4933,7 +4935,7 @@ addcmd("removefog", {"nofog"}, "Remove all fog", function(, "environment")
     end
 end)
 
-addcmd("copies", {"servercount"}, "Show how many servers this game has", function(, "server")
+addcmd("copies", {"servercount"}, "Show how many servers this game has", function(args), "server")
     task.spawn(function()
         pcall(function()
             local data = HttpService:JSONDecode(game:HttpGet(
@@ -4954,7 +4956,7 @@ end)
 -- COMMANDS: CHAT MESSAGES (CmdX style — repaired for TextChatService)
 --================================================================
 
-addcmd("rappu", {"rappublic"}, "Rap lyrics in public chat", function(, "chat")
+addcmd("rappu", {"rappublic"}, "Rap lyrics in public chat", function(args), "chat")
     local lyrics = {
         "I'm the king of this server no cap",
         "Command Zero running, watch me snap",
@@ -4998,7 +5000,7 @@ addcmd("spacechat", {}, "Chat with spaces between every letter", function(args, 
     sendChat(table.concat(result, " "))
 end)
 
-addcmd("emojispam", {}, "Spam random emojis in chat", function(, "chat")
+addcmd("emojispam", {}, "Spam random emojis in chat", function(args), "chat")
     local emojis = {"😂", "💀", "🔥", "😭", "🗿", "💯", "⚡", "🎯", "👀", "🤡"}
     startLoop("emojispam", 1, function()
         local msg = ""
@@ -5007,7 +5009,7 @@ addcmd("emojispam", {}, "Spam random emojis in chat", function(, "chat")
     end)
 end)
 
-addcmd("unemojispam", {}, "Stop emoji spam", function(, "chat")
+addcmd("unemojispam", {}, "Stop emoji spam", function(args), "chat")
     stopLoop("emojispam")
 end)
 
@@ -5024,7 +5026,7 @@ addcmd("copychat", {}, "Copy what a player says", function(args, "chat")
     notify("CopyChat", "Copying " .. target.Name)
 end)
 
-addcmd("uncopychat", {}, "Stop copying chat", function(, "chat")
+addcmd("uncopychat", {}, "Stop copying chat", function(args), "chat")
     stopLoop("copychat")
 end)
 
@@ -5032,7 +5034,7 @@ end)
 -- COMMANDS: EXPLOIT SPECIFIC (CmdX)
 --================================================================
 
-addcmd("remoteevents", {"res"}, "List all RemoteEvents", function(, "exploit")
+addcmd("remoteevents", {"res"}, "List all RemoteEvents", function(args), "exploit")
     local list = {}
     for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
         if v:IsA("RemoteEvent") then table.insert(list, v:GetFullName()) end
@@ -5041,7 +5043,7 @@ addcmd("remoteevents", {"res"}, "List all RemoteEvents", function(, "exploit")
     notify("RemoteEvents (" .. #list .. "+)", table.concat(list, "\n"), 12)
 end)
 
-addcmd("remotefunctions", {"rfs"}, "List all RemoteFunctions", function(, "exploit")
+addcmd("remotefunctions", {"rfs"}, "List all RemoteFunctions", function(args), "exploit")
     local list = {}
     for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
         if v:IsA("RemoteFunction") then table.insert(list, v:GetFullName()) end
@@ -5050,7 +5052,7 @@ addcmd("remotefunctions", {"rfs"}, "List all RemoteFunctions", function(, "explo
     notify("RemoteFunctions (" .. #list .. "+)", table.concat(list, "\n"), 12)
 end)
 
-addcmd("bindableevents", {"bes"}, "List all BindableEvents", function(, "exploit")
+addcmd("bindableevents", {"bes"}, "List all BindableEvents", function(args), "exploit")
     local list = {}
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("BindableEvent") then table.insert(list, v:GetFullName()) end
@@ -5108,7 +5110,7 @@ end)
 -- COMMANDS: MASS / MULTI-TARGET (CmdX)
 --================================================================
 
-addcmd("massgoto", {}, "Teleport to every player one by one", function(, "teleport")
+addcmd("massgoto", {}, "Teleport to every player one by one", function(args), "teleport")
     task.spawn(function()
         for _, p in ipairs(Players:GetPlayers()) do
             if p == player then continue end
@@ -5123,7 +5125,7 @@ addcmd("massgoto", {}, "Teleport to every player one by one", function(, "telepo
     end)
 end)
 
-addcmd("masscompliment", {}, "Compliment every player", function(, "chat")
+addcmd("masscompliment", {}, "Compliment every player", function(args), "chat")
     local compliments = {
         " is awesome!", " has great style!", " is really cool!",
         " is a legend!", " is the best!", " is incredibly talented!",
@@ -5152,7 +5154,7 @@ end)
 -- COMMANDS: GAME SPECIFIC FEATURES (CmdX)
 --================================================================
 
-addcmd("anticheat", {"antiac", "ac"}, "Attempt to disable client-side anti-cheat scripts", function(, "anti")
+addcmd("anticheat", {"antiac", "ac"}, "Attempt to disable client-side anti-cheat scripts", function(args), "anti")
     local count = 0
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("LocalScript") then
@@ -5166,7 +5168,7 @@ addcmd("anticheat", {"antiac", "ac"}, "Attempt to disable client-side anti-cheat
     notify("AntiCheat", "Disabled " .. count .. " suspected AC scripts")
 end)
 
-addcmd("bypass", {}, "Common exploit bypasses (noclip + speed + antikick)", function(, "exploit")
+addcmd("bypass", {}, "Common exploit bypasses (noclip + speed + antikick)", function(args), "exploit")
     execCmd("noclip")
     execCmd("antiafk")
     pcall(function()
@@ -5180,44 +5182,44 @@ addcmd("bypass", {}, "Common exploit bypasses (noclip + speed + antikick)", func
     notify("Bypass", "Applied common bypasses")
 end)
 
-addcmd("clearpos", {}, "Clear all saved waypoints", function(, "settings")
+addcmd("clearpos", {}, "Clear all saved waypoints", function(args), "settings")
     waypoints = {}
     notify("Waypoints", "Cleared")
 end)
 
-addcmd("config", {"settings2"}, "Open Command Zero settings tab", function(, "settings")
+addcmd("config", {"settings2"}, "Open Command Zero settings tab", function(args), "settings")
     guiOpen = true
     main.Visible = true
     switchTab("Settings")
 end)
 
-addcmd("playerlist", {"plist2"}, "Open players tab", function(, "settings")
+addcmd("playerlist", {"plist2"}, "Open players tab", function(args), "settings")
     guiOpen = true
     main.Visible = true
     switchTab("Players")
 end)
 
-addcmd("servertab", {}, "Open server info tab", function(, "settings")
+addcmd("servertab", {}, "Open server info tab", function(args), "settings")
     guiOpen = true
     main.Visible = true
     switchTab("Server")
 end)
 
-addcmd("refreshcmds", {"reloadcmds"}, "Refresh command list GUI", function(, "settings")
+addcmd("refreshcmds", {"reloadcmds"}, "Refresh command list GUI", function(args), "settings")
     populateCommands()
     notify("Refresh", "Command list refreshed")
 end)
 
-addcmd("cmdcount", {}, "Show total command count", function(, "settings")
+addcmd("cmdcount", {}, "Show total command count", function(args), "settings")
     notify("Commands", #cmds .. " commands loaded")
 end)
 
-addcmd("tpcancel", {"canceltp"}, "Cancel pending teleport", function(, "teleport")
+addcmd("tpcancel", {"canceltp"}, "Cancel pending teleport", function(args), "teleport")
     pcall(function() TeleportService:TeleportCancel() end)
     notify("Teleport", "Cancelled")
 end)
 
-addcmd("phonebook", {}, "List all player UserIds and display names", function(, "info")
+addcmd("phonebook", {}, "List all player UserIds and display names", function(args), "info")
     local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
         table.insert(list, p.Name .. " (" .. p.DisplayName .. ") ID:" .. p.UserId)
@@ -5225,7 +5227,7 @@ addcmd("phonebook", {}, "List all player UserIds and display names", function(, 
     notify("Phonebook", table.concat(list, "\n"), 12)
 end)
 
-addcmd("clearwaves", {}, "Remove ocean/water effects", function(, "environment")
+addcmd("clearwaves", {}, "Remove ocean/water effects", function(args), "environment")
     pcall(function()
         local terrain = workspace:FindFirstChildOfClass("Terrain")
         if terrain then
@@ -5236,7 +5238,7 @@ addcmd("clearwaves", {}, "Remove ocean/water effects", function(, "environment")
     end)
 end)
 
-addcmd("fakeout", {}, "Quick teleport behind nearest player", function(, "teleport")
+addcmd("fakeout", {}, "Quick teleport behind nearest player", function(args), "teleport")
     local closest, closestDist = nil, math.huge
     local mRoot = myRoot()
     if not mRoot then return end
@@ -5258,7 +5260,7 @@ addcmd("fakeout", {}, "Quick teleport behind nearest player", function(, "telepo
     end
 end)
 
-addcmd("ctrllock", {}, "Hold Ctrl to lock camera on nearest player", function(, "camera")
+addcmd("ctrllock", {}, "Hold Ctrl to lock camera on nearest player", function(args), "camera")
     startLoop("ctrllock", 0, function()
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
             local closest, closestDist = nil, math.huge
@@ -5281,11 +5283,11 @@ addcmd("ctrllock", {}, "Hold Ctrl to lock camera on nearest player", function(, 
     notify("CtrlLock", "Hold Left Ctrl to aim at nearest player")
 end)
 
-addcmd("unctrllock", {}, "Disable ctrl lock", function(, "camera")
+addcmd("unctrllock", {}, "Disable ctrl lock", function(args), "camera")
     stopLoop("ctrllock")
 end)
 
-addcmd("staffwatch", {}, "Alert when specific groups join (admins, mods)", function(, "info")
+addcmd("staffwatch", {}, "Alert when specific groups join (admins, mods)", function(args), "info")
     local watchGroups = {1200769} -- Roblox group
     connect(Players.PlayerAdded, function(p)
         for _, gid in ipairs(watchGroups) do
@@ -5297,7 +5299,7 @@ addcmd("staffwatch", {}, "Alert when specific groups join (admins, mods)", funct
     notify("StaffWatch", "Watching for staff joins")
 end)
 
-addcmd("unstaffwatch", {}, "Stop staff watch (can't unhook, just notifies)", function(, "info")
+addcmd("unstaffwatch", {}, "Stop staff watch (can't unhook, just notifies)", function(args), "info")
     notify("StaffWatch", "Note: existing hooks remain active until rejoin")
 end)
 
@@ -5312,17 +5314,17 @@ addcmd("rolewatch", {}, "Alert when specific team/role players join", function(a
     notify("RoleWatch", "Watching for role: " .. roleName)
 end)
 
-addcmd("promptr6", {}, "Prompt R6 bundles in catalog", function(, "character")
+addcmd("promptr6", {}, "Prompt R6 bundles in catalog", function(args), "character")
     notify("R6", "Opening avatar editor...")
     pcall(function() game:GetService("GuiService"):OpenBrowserWindow("https://www.roblox.com/my/avatar") end)
 end)
 
-addcmd("promptr15", {}, "Prompt R15 bundles in catalog", function(, "character")
+addcmd("promptr15", {}, "Prompt R15 bundles in catalog", function(args), "character")
     notify("R15", "Opening avatar editor...")
     pcall(function() game:GetService("GuiService"):OpenBrowserWindow("https://www.roblox.com/my/avatar") end)
 end)
 
-addcmd("benchmarkfps", {"fpstest"}, "Run a 5-second FPS benchmark", function(, "info")
+addcmd("benchmarkfps", {"fpstest"}, "Run a 5-second FPS benchmark", function(args), "info")
     task.spawn(function()
         notify("Benchmark", "Testing for 5 seconds...")
         local frames = 0
@@ -5338,12 +5340,12 @@ addcmd("benchmarkfps", {"fpstest"}, "Run a 5-second FPS benchmark", function(, "
     end)
 end)
 
-addcmd("memorystats", {"memstats"}, "Show memory usage", function(, "info")
+addcmd("memorystats", {"memstats"}, "Show memory usage", function(args), "info")
     local mem = math.floor(gcinfo() / 1024 * 100) / 100
     notify("Memory", mem .. " MB used by Lua")
 end)
 
-addcmd("copypos", {}, "Copy current XYZ to clipboard", function(, "info")
+addcmd("copypos", {}, "Copy current XYZ to clipboard", function(args), "info")
     local root = myRoot()
     if root then
         local p = root.Position
@@ -5353,7 +5355,7 @@ addcmd("copypos", {}, "Copy current XYZ to clipboard", function(, "info")
     end
 end)
 
-addcmd("copycframe", {}, "Copy full CFrame to clipboard", function(, "info")
+addcmd("copycframe", {}, "Copy full CFrame to clipboard", function(args), "info")
     local root = myRoot()
     if root then
         local str = tostring(root.CFrame)
@@ -5362,7 +5364,7 @@ addcmd("copycframe", {}, "Copy full CFrame to clipboard", function(, "info")
     end
 end)
 
-addcmd("listnil", {}, "List nil-parented instances", function(, "info")
+addcmd("listnil", {}, "List nil-parented instances", function(args), "info")
     if getnilinstances then
         local nils = getnilinstances()
         local list = {}
@@ -5375,7 +5377,7 @@ addcmd("listnil", {}, "List nil-parented instances", function(, "info")
     end
 end)
 
-addcmd("f3x", {"fex"}, "Load F3X building tools", function(, "tools")
+addcmd("f3x", {"fex"}, "Load F3X building tools", function(args), "tools")
     notify("F3X", "Loading...")
     task.spawn(function()
         pcall(function()
@@ -5384,7 +5386,7 @@ addcmd("f3x", {"fex"}, "Load F3X building tools", function(, "tools")
     end)
 end)
 
-addcmd("darkchat", {}, "Dark theme chat (client-side)", function(, "chat")
+addcmd("darkchat", {}, "Dark theme chat (client-side)", function(args), "chat")
     pcall(function()
         for _, v in ipairs(game:GetService("CoreGui"):GetDescendants()) do
             if v:IsA("Frame") or v:IsA("ScrollingFrame") or v:IsA("TextBox") then
@@ -5398,7 +5400,7 @@ addcmd("darkchat", {}, "Dark theme chat (client-side)", function(, "chat")
     notify("DarkChat", "Applied dark theme to chat")
 end)
 
-addcmd("mutevc", {"mutevoice"}, "Mute voice chat", function(, "audio")
+addcmd("mutevc", {"mutevoice"}, "Mute voice chat", function(args), "audio")
     pcall(function()
         for _, v in ipairs(game:GetDescendants()) do
             if v:IsA("AudioEmitter") or v:IsA("AudioPlayer") then
@@ -5409,7 +5411,7 @@ addcmd("mutevc", {"mutevoice"}, "Mute voice chat", function(, "audio")
     notify("MuteVC", "Voice chat muted")
 end)
 
-addcmd("unmutevc", {"unmutevoice"}, "Unmute voice chat", function(, "audio")
+addcmd("unmutevc", {"unmutevoice"}, "Unmute voice chat", function(args), "audio")
     pcall(function()
         for _, v in ipairs(game:GetDescendants()) do
             if v:IsA("AudioEmitter") or v:IsA("AudioPlayer") then
@@ -5419,7 +5421,7 @@ addcmd("unmutevc", {"unmutevoice"}, "Unmute voice chat", function(, "audio")
     end)
 end)
 
-addcmd("lay", {}, "Lay down animation", function(, "fun")
+addcmd("lay", {}, "Lay down animation", function(args), "fun")
     sendChat("/e lay")
     local hum = myHumanoid()
     if hum then
@@ -5444,7 +5446,7 @@ addcmd("cambobble", {"headbob"}, "Camera head bobble effect", function(args, "ca
     notify("CamBobble", "Enabled")
 end)
 
-addcmd("uncambobble", {}, "Stop camera bobble", function(, "camera")
+addcmd("uncambobble", {}, "Stop camera bobble", function(args), "camera")
     stopLoop("cambobble")
 end)
 
@@ -5457,7 +5459,7 @@ addcmd("cameraoffset", {"camoff", "camoffset"}, "Offset camera from character", 
     if hum then hum.CameraOffset = Vector3.new(x, y, z) end
 end)
 
-addcmd("nocameraoffset", {"uncamoff"}, "Reset camera offset", function(, "camera")
+addcmd("nocameraoffset", {"uncamoff"}, "Reset camera offset", function(args), "camera")
     local hum = myHumanoid()
     if hum then hum.CameraOffset = Vector3.zero end
 end)
@@ -5471,18 +5473,18 @@ addcmd("atmosphere", {"atmos"}, "Set atmosphere density and color", function(arg
     atmos.Density = density
 end)
 
-addcmd("noatmosphere", {"noatmos"}, "Remove atmosphere", function(, "environment")
+addcmd("noatmosphere", {"noatmos"}, "Remove atmosphere", function(args), "environment")
     for _, v in ipairs(Lighting:GetChildren()) do
         if v:IsA("Atmosphere") then v:Destroy() end
     end
 end)
 
-addcmd("antiwindow", {}, "Keep running even when window is unfocused", function(, "anti")
+addcmd("antiwindow", {}, "Keep running even when window is unfocused", function(args), "anti")
     execCmd("antiafk")
     notify("AntiWindow", "Anti-AFK keeps you in game when tabbed out")
 end)
 
-addcmd("disco", {}, "Disco lighting effect", function(, "fun")
+addcmd("disco", {}, "Disco lighting effect", function(args), "fun")
     startLoop("disco", 0.3, function()
         Lighting.Ambient = Color3.fromRGB(math.random(0, 255), math.random(0, 255), math.random(0, 255))
         Lighting.OutdoorAmbient = Color3.fromRGB(math.random(0, 255), math.random(0, 255), math.random(0, 255))
@@ -5491,12 +5493,12 @@ addcmd("disco", {}, "Disco lighting effect", function(, "fun")
     notify("Disco", "Party mode!")
 end)
 
-addcmd("undisco", {}, "Stop disco", function(, "fun")
+addcmd("undisco", {}, "Stop disco", function(args), "fun")
     stopLoop("disco")
     execCmd("restorelighting")
 end)
 
-addcmd("matrix", {}, "Matrix-style green rain effect (notification spam)", function(, "fun")
+addcmd("matrix", {}, "Matrix-style green rain effect (notification spam)", function(args), "fun")
     startLoop("matrix", 0.05, function()
         local chars = "01"
         local line = ""
@@ -5507,7 +5509,7 @@ addcmd("matrix", {}, "Matrix-style green rain effect (notification spam)", funct
     end)
 end)
 
-addcmd("unmatrix", {}, "Stop matrix", function(, "fun")
+addcmd("unmatrix", {}, "Stop matrix", function(args), "fun")
     stopLoop("matrix")
 end)
 
@@ -5533,13 +5535,13 @@ addcmd("tpabove", {}, "Teleport above a player", function(args, "teleport")
     end
 end)
 
-addcmd("nohurtoverlay2", {}, "Alternative hurt overlay removal", function(, "environment")
+addcmd("nohurtoverlay2", {}, "Alternative hurt overlay removal", function(args), "environment")
     pcall(function()
         game:GetService("GuiService"):ClearError()
     end)
 end)
 
-addcmd("antifalldamage", {"afd"}, "Prevent ragdoll on landing", function(, "anti")
+addcmd("antifalldamage", {"afd"}, "Prevent ragdoll on landing", function(args), "anti")
     startLoop("afd", 0, function()
         local hum = myHumanoid()
         if hum then
@@ -5550,7 +5552,7 @@ addcmd("antifalldamage", {"afd"}, "Prevent ragdoll on landing", function(, "anti
     notify("AntiFallDmg", "Enabled")
 end)
 
-addcmd("unantifalldamage", {"unafd"}, "Disable anti fall damage", function(, "anti")
+addcmd("unantifalldamage", {"unafd"}, "Disable anti fall damage", function(args), "anti")
     stopLoop("afd")
 end)
 
@@ -5577,13 +5579,13 @@ addcmd("cframefly", {"cfly"}, "CFrame-based flight (smoother)", function(args, "
     notify("CFly", "CFrame flight at speed " .. speed)
 end)
 
-addcmd("uncframefly", {"uncfly"}, "Stop CFrame fly", function(, "movement")
+addcmd("uncframefly", {"uncfly"}, "Stop CFrame fly", function(args), "movement")
     stopLoop("cfly")
     local hum = myHumanoid()
     if hum then hum.PlatformStand = false end
 end)
 
-addcmd("vehicleclip", {"vclip"}, "Noclip for vehicles", function(, "movement")
+addcmd("vehicleclip", {"vclip"}, "Noclip for vehicles", function(args), "movement")
     startLoop("vclip", 0, function()
         local hum = myHumanoid()
         if hum and hum.SeatPart then
@@ -5598,7 +5600,7 @@ addcmd("vehicleclip", {"vclip"}, "Noclip for vehicles", function(, "movement")
     notify("VehicleClip", "Enabled")
 end)
 
-addcmd("unvehicleclip", {"unvclip"}, "Disable vehicle clip", function(, "movement")
+addcmd("unvehicleclip", {"unvclip"}, "Disable vehicle clip", function(args), "movement")
     stopLoop("vclip")
 end)
 
@@ -5629,7 +5631,7 @@ addcmd("replicationlag2", {"netlag"}, "Simulate network lag", function(args, "ex
     notify("NetLag", ms .. "ms")
 end)
 
-addcmd("unreplicationlag", {"unnetlag"}, "Remove simulated lag", function(, "exploit")
+addcmd("unreplicationlag", {"unnetlag"}, "Remove simulated lag", function(args), "exploit")
     pcall(function()
         settings():GetService("NetworkSettings").IncomingReplicationLag = 0
     end)
@@ -5639,7 +5641,7 @@ end)
 -- COMMANDS: REMAINING CmdX EXCLUSIVES
 --================================================================
 
-addcmd("sword", {}, "Give yourself a classic sword", function(, "tools")
+addcmd("sword", {}, "Give yourself a classic sword", function(args), "tools")
     pcall(function()
         local tool = Instance.new("Tool")
         tool.Name = "Sword"
@@ -5673,7 +5675,7 @@ addcmd("leash", {}, "Attach a rope constraint to player", function(args, "tools"
     notify("Leash", "Leashed to " .. target.Name)
 end)
 
-addcmd("clearleash", {}, "Remove all rope constraints", function(, "tools")
+addcmd("clearleash", {}, "Remove all rope constraints", function(args), "tools")
     local char = getChar()
     if char then
         for _, v in ipairs(char:GetDescendants()) do
@@ -5682,7 +5684,7 @@ addcmd("clearleash", {}, "Remove all rope constraints", function(, "tools")
     end
 end)
 
-addcmd("oldroblox", {}, "Play old Roblox walk animation", function(, "character")
+addcmd("oldroblox", {}, "Play old Roblox walk animation", function(args), "character")
     local hum = myHumanoid()
     if not hum then return end
     local anim = Instance.new("Animation")
@@ -5692,7 +5694,7 @@ addcmd("oldroblox", {}, "Play old Roblox walk animation", function(, "character"
     track:Play()
 end)
 
-addcmd("chatnotify", {}, "Show notification when someone chats", function(, "chat")
+addcmd("chatnotify", {}, "Show notification when someone chats", function(args), "chat")
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player then
             connect(p.Chatted, function(msg)
@@ -5737,18 +5739,18 @@ end)
 
 
 
-addcmd("loopkill", {}, "Continuously kill yourself (for some game mechanics)", function(, "character")
+addcmd("loopkill", {}, "Continuously kill yourself (for some game mechanics)", function(args), "character")
     startLoop("loopkill", 1, function()
         local hum = myHumanoid()
         if hum then hum.Health = 0 end
     end)
 end)
 
-addcmd("unloopkill", {}, "Stop loop kill", function(, "character")
+addcmd("unloopkill", {}, "Stop loop kill", function(args), "character")
     stopLoop("loopkill")
 end)
 
-addcmd("cleareffects", {}, "Remove particles, fire, smoke from entire workspace", function(, "environment")
+addcmd("cleareffects", {}, "Remove particles, fire, smoke from entire workspace", function(args), "environment")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ParticleEmitter") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("Trail") then
@@ -5774,7 +5776,7 @@ addcmd("touchinterest", {"ti"}, "Fire touch interest on target", function(args, 
     end
 end)
 
-addcmd("antiteleport", {"antitp"}, "Block game teleports", function(, "anti")
+addcmd("antiteleport", {"antitp"}, "Block game teleports", function(args), "anti")
     if hookmetamethod then
         local old
         old = hookmetamethod(game, "__namecall", function(self, ...)
@@ -5825,12 +5827,12 @@ addcmd("vfly", {"vehiclefly"}, "Fly while in a vehicle seat", function(args, "mo
     notify("VFly", "Vehicle flying at speed " .. speed)
 end)
 
-addcmd("unvfly", {"unvehiclefly"}, "Stop vehicle fly", function(, "movement")
+addcmd("unvfly", {"unvehiclefly"}, "Stop vehicle fly", function(args), "movement")
     stopLoop("vfly")
 end)
 
 
-addcmd("togglenoclip", {}, "Toggle noclip", function(, "movement")
+addcmd("togglenoclip", {}, "Toggle noclip", function(args), "movement")
     if loopStates["noclip"] then
         execCmd("clip")
     else
@@ -5838,7 +5840,7 @@ addcmd("togglenoclip", {}, "Toggle noclip", function(, "movement")
     end
 end)
 
-addcmd("togglefly", {}, "Toggle fly", function(, "movement")
+addcmd("togglefly", {}, "Toggle fly", function(args), "movement")
     if flyActive then
         execCmd("unfly")
     else
@@ -5846,7 +5848,7 @@ addcmd("togglefly", {}, "Toggle fly", function(, "movement")
     end
 end)
 
-addcmd("toggleesp", {}, "Toggle ESP", function(, "visual")
+addcmd("toggleesp", {}, "Toggle ESP", function(args), "visual")
     if #espObjects > 0 then
         execCmd("unesp")
     else
@@ -5854,7 +5856,7 @@ addcmd("toggleesp", {}, "Toggle ESP", function(, "visual")
     end
 end)
 
-addcmd("togglexray", {}, "Toggle xray", function(, "visual")
+addcmd("togglexray", {}, "Toggle xray", function(args), "visual")
     -- check if any part has the attribute
     local hasXray = false
     for _, p in ipairs(workspace:GetDescendants()) do
@@ -5869,7 +5871,7 @@ addcmd("togglexray", {}, "Toggle xray", function(, "visual")
     end
 end)
 
-addcmd("togglefullbright", {"togglefb"}, "Toggle fullbright", function(, "visual")
+addcmd("togglefullbright", {"togglefb"}, "Toggle fullbright", function(args), "visual")
     if Lighting.Brightness > 1.5 then
         execCmd("unfullbright")
     else
@@ -5877,7 +5879,7 @@ addcmd("togglefullbright", {"togglefb"}, "Toggle fullbright", function(, "visual
     end
 end)
 
-addcmd("clearchat", {}, "Clear your visible chat (spam blank lines)", function(, "chat")
+addcmd("clearchat", {}, "Clear your visible chat (spam blank lines)", function(args), "chat")
     task.spawn(function()
         for _ = 1, 20 do
             sendChat(" ")
@@ -5886,7 +5888,7 @@ addcmd("clearchat", {}, "Clear your visible chat (spam blank lines)", function(,
     end)
 end)
 
-addcmd("abcspam", {}, "Spam the alphabet in chat", function(, "chat")
+addcmd("abcspam", {}, "Spam the alphabet in chat", function(args), "chat")
     startLoop("abcspam", 0.5, function()
         local letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         local idx = math.random(1, 26)
@@ -5894,11 +5896,11 @@ addcmd("abcspam", {}, "Spam the alphabet in chat", function(, "chat")
     end)
 end)
 
-addcmd("unabcspam", {}, "Stop ABC spam", function(, "chat")
+addcmd("unabcspam", {}, "Stop ABC spam", function(args), "chat")
     stopLoop("abcspam")
 end)
 
-addcmd("randomplayer", {"rplr"}, "Teleport to a random player", function(, "teleport")
+addcmd("randomplayer", {"rplr"}, "Teleport to a random player", function(args), "teleport")
     local plrs = Players:GetPlayers()
     local others = {}
     for _, p in ipairs(plrs) do
@@ -5921,7 +5923,7 @@ addcmd("countdown2", {}, "Visual countdown notification", function(args, "fun")
     end)
 end)
 
-addcmd("serveruptime", {"uptime"}, "Show how long the server has been running", function(, "server")
+addcmd("serveruptime", {"uptime"}, "Show how long the server has been running", function(args), "server")
     notify("Uptime", string.format("%.0f seconds (%.1f minutes)", workspace.DistributedGameTime, workspace.DistributedGameTime / 60))
 end)
 
@@ -5932,7 +5934,7 @@ end)
 -- COMMANDS: REMAINING BATCH (IY + CmdX parity)
 --================================================================
 
-addcmd("keepcz", {}, "Re-execute Command Zero after teleport", function(, "settings")
+addcmd("keepcz", {}, "Re-execute Command Zero after teleport", function(args), "settings")
     local qt = queue_on_teleport or (syn and syn.queue_on_teleport) or (getgenv and getgenv().queue_on_teleport)
     if qt then
         notify("KeepCZ", "Command Zero will persist through teleports")
@@ -5941,7 +5943,7 @@ addcmd("keepcz", {}, "Re-execute Command Zero after teleport", function(, "setti
     end
 end)
 
-addcmd("unkeep", {}, "Stop persisting through teleports", function(, "settings")
+addcmd("unkeep", {}, "Stop persisting through teleports", function(args), "settings")
     notify("KeepCZ", "Disabled")
 end)
 
@@ -5952,11 +5954,11 @@ addcmd("looprefresh", {}, "Continuously refresh character", function(args, "char
     end)
 end)
 
-addcmd("unlooprefresh", {}, "Stop loop refresh", function(, "character")
+addcmd("unlooprefresh", {}, "Stop loop refresh", function(args), "character")
     stopLoop("looprefresh")
 end)
 
-addcmd("stealtools", {}, "Steal all tools from all players (firetouchinterest)", function(, "tools")
+addcmd("stealtools", {}, "Steal all tools from all players (firetouchinterest)", function(args), "tools")
     if not firetouchinterest then notify("Steal", "Requires firetouchinterest"); return end
     local root = myRoot()
     if not root then return end
@@ -5975,12 +5977,12 @@ addcmd("stealtools", {}, "Steal all tools from all players (firetouchinterest)",
     notify("Steal", "Attempted to steal all tools")
 end)
 
-addcmd("norotate", {"noautorotate"}, "Disable auto rotation", function(, "character")
+addcmd("norotate", {"noautorotate"}, "Disable auto rotation", function(args), "character")
     local hum = myHumanoid()
     if hum then hum.AutoRotate = false end
 end)
 
-addcmd("rotate", {"autorotate"}, "Enable auto rotation", function(, "character")
+addcmd("rotate", {"autorotate"}, "Enable auto rotation", function(args), "character")
     local hum = myHumanoid()
     if hum then hum.AutoRotate = true end
 end)
@@ -5993,11 +5995,11 @@ addcmd("loopjump", {}, "Continuously jump", function(args, "fun")
     end)
 end)
 
-addcmd("unloopjump", {}, "Stop loop jump", function(, "fun")
+addcmd("unloopjump", {}, "Stop loop jump", function(args), "fun")
     stopLoop("loopjump")
 end)
 
-addcmd("danceall", {}, "Make all visible emotes play", function(, "fun")
+addcmd("danceall", {}, "Make all visible emotes play", function(args), "fun")
     for i = 1, 3 do sendChat("/e dance" .. i); task.wait(0.3) end
 end)
 
@@ -6006,19 +6008,19 @@ addcmd("pointat", {}, "Point at a player", function(args, "fun")
     if #targets > 0 then sendChat("/e point") end
 end)
 
-addcmd("wave", {}, "Wave emote", function(, "fun")
+addcmd("wave", {}, "Wave emote", function(args), "fun")
     sendChat("/e wave")
 end)
 
-addcmd("laugh", {}, "Laugh emote", function(, "fun")
+addcmd("laugh", {}, "Laugh emote", function(args), "fun")
     sendChat("/e laugh")
 end)
 
-addcmd("cheer", {}, "Cheer emote", function(, "fun")
+addcmd("cheer", {}, "Cheer emote", function(args), "fun")
     sendChat("/e cheer")
 end)
 
-addcmd("shrug", {}, "Shrug emote", function(, "fun")
+addcmd("shrug", {}, "Shrug emote", function(args), "fun")
     sendChat("/e shrug")
 end)
 
@@ -6030,14 +6032,14 @@ addcmd("tilt", {}, "Tilt your character", function(args, "character")
     end
 end)
 
-addcmd("upsidedown", {"flip2"}, "Flip character upside down", function(, "character")
+addcmd("upsidedown", {"flip2"}, "Flip character upside down", function(args), "character")
     local root = myRoot()
     if root then
         root.CFrame = root.CFrame * CFrame.Angles(math.rad(180), 0, 0)
     end
 end)
 
-addcmd("flatchar", {"flat"}, "Flatten character horizontally", function(, "character")
+addcmd("flatchar", {"flat"}, "Flatten character horizontally", function(args), "character")
     local root = myRoot()
     if root then
         root.CFrame = root.CFrame * CFrame.Angles(math.rad(90), 0, 0)
@@ -6057,7 +6059,7 @@ addcmd("team2", {"changeteam"}, "Try to change team by name (game dependent)", f
     notify("Team", "Team not found: " .. teamName)
 end)
 
-addcmd("teams", {"listteams"}, "List all teams", function(, "info")
+addcmd("teams", {"listteams"}, "List all teams", function(args), "info")
     local list = {}
     for _, t in ipairs(game:GetService("Teams"):GetTeams()) do
         table.insert(list, t.Name .. " (" .. #t:GetPlayers() .. " players)")
@@ -6065,7 +6067,7 @@ addcmd("teams", {"listteams"}, "List all teams", function(, "info")
     notify("Teams", #list > 0 and table.concat(list, "\n") or "No teams", 8)
 end)
 
-addcmd("serverage", {}, "Average account age of players in server", function(, "server")
+addcmd("serverage", {}, "Average account age of players in server", function(args), "server")
     local total = 0
     local count = #Players:GetPlayers()
     for _, p in ipairs(Players:GetPlayers()) do
@@ -6074,7 +6076,7 @@ addcmd("serverage", {}, "Average account age of players in server", function(, "
     notify("Server Age", "Average: " .. math.floor(total / count) .. " days")
 end)
 
-addcmd("oldest", {}, "Find oldest account in server", function(, "server")
+addcmd("oldest", {}, "Find oldest account in server", function(args), "server")
     local best, bestAge = nil, 0
     for _, p in ipairs(Players:GetPlayers()) do
         if p.AccountAge > bestAge then best, bestAge = p, p.AccountAge end
@@ -6084,7 +6086,7 @@ addcmd("oldest", {}, "Find oldest account in server", function(, "server")
     end
 end)
 
-addcmd("youngest", {}, "Find youngest account in server", function(, "server")
+addcmd("youngest", {}, "Find youngest account in server", function(args), "server")
     local best, bestAge = nil, math.huge
     for _, p in ipairs(Players:GetPlayers()) do
         if p.AccountAge < bestAge then best, bestAge = p, p.AccountAge end
@@ -6114,37 +6116,37 @@ addcmd("partesp2", {}, "Highlight all parts with a specific name", function(args
     notify("PartESP", "Highlighting " .. count .. " parts named '" .. name .. "'")
 end)
 
-addcmd("unpartesp", {}, "Remove part ESP highlights", function(, "visual")
+addcmd("unpartesp", {}, "Remove part ESP highlights", function(args), "visual")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Highlight") and v.Name == "CZ_PartESP" then v:Destroy() end
     end
 end)
 
-addcmd("noparticles", {}, "Disable all particle emitters", function(, "environment")
+addcmd("noparticles", {}, "Disable all particle emitters", function(args), "environment")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ParticleEmitter") then v.Enabled = false end
     end
 end)
 
-addcmd("notrails", {}, "Disable all trails", function(, "environment")
+addcmd("notrails", {}, "Disable all trails", function(args), "environment")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Trail") then v.Enabled = false end
     end
 end)
 
-addcmd("nobeams", {}, "Disable all beams", function(, "environment")
+addcmd("nobeams", {}, "Disable all beams", function(args), "environment")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Beam") then v.Enabled = false end
     end
 end)
 
-addcmd("nosounds", {"mutesounds2"}, "Stop all sounds in workspace", function(, "audio")
+addcmd("nosounds", {"mutesounds2"}, "Stop all sounds in workspace", function(args), "audio")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Sound") then v:Stop(); v.Volume = 0 end
     end
 end)
 
-addcmd("removemeshes", {"nomeshes"}, "Remove all meshes from workspace", function(, "environment")
+addcmd("removemeshes", {"nomeshes"}, "Remove all meshes from workspace", function(args), "environment")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("SpecialMesh") or v:IsA("FileMesh") then
@@ -6155,7 +6157,7 @@ addcmd("removemeshes", {"nomeshes"}, "Remove all meshes from workspace", functio
     notify("Meshes", "Removed " .. count)
 end)
 
-addcmd("removetextures", {"notextures"}, "Remove all textures/decals", function(, "environment")
+addcmd("removetextures", {"notextures"}, "Remove all textures/decals", function(args), "environment")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Texture") or v:IsA("Decal") then
@@ -6166,7 +6168,7 @@ addcmd("removetextures", {"notextures"}, "Remove all textures/decals", function(
     notify("Textures", "Removed " .. count)
 end)
 
-addcmd("spawnpoint", {"setspawn"}, "Set spawn point to current position", function(, "tools")
+addcmd("spawnpoint", {"setspawn"}, "Set spawn point to current position", function(args), "tools")
     local root = myRoot()
     if not root then return end
     local sp = Instance.new("SpawnLocation")
@@ -6184,7 +6186,7 @@ addcmd("clientkick", {}, "Kick yourself from game with message", function(args, 
     player:Kick(msg ~= "" and msg or "Kicked via Command Zero")
 end)
 
-addcmd("getgenv2", {"printgenv"}, "Print getgenv table keys to output", function(, "info")
+addcmd("getgenv2", {"printgenv"}, "Print getgenv table keys to output", function(args), "info")
     if getgenv then
         for k, v in pairs(getgenv()) do
             print("[getgenv]", k, "=", type(v))
@@ -6193,12 +6195,12 @@ addcmd("getgenv2", {"printgenv"}, "Print getgenv table keys to output", function
     end
 end)
 
-addcmd("mousepos", {}, "Show mouse position on screen", function(, "info")
+addcmd("mousepos", {}, "Show mouse position on screen", function(args), "info")
     local m = UserInputService:GetMouseLocation()
     notify("Mouse", string.format("X: %.0f  Y: %.0f", m.X, m.Y))
 end)
 
-addcmd("getfps", {"fps"}, "Show current FPS", function(, "info")
+addcmd("getfps", {"fps"}, "Show current FPS", function(args), "info")
     local frames = 0
     local conn
     conn = RunService.RenderStepped:Connect(function() frames = frames + 1 end)
@@ -6207,7 +6209,7 @@ addcmd("getfps", {"fps"}, "Show current FPS", function(, "info")
     notify("FPS", tostring(frames))
 end)
 
-addcmd("serverlag", {}, "Show server heartbeat rate", function(, "server")
+addcmd("serverlag", {}, "Show server heartbeat rate", function(args), "server")
     local start = tick()
     local steps = 0
     local conn = RunService.Heartbeat:Connect(function() steps = steps + 1 end)
@@ -6249,12 +6251,12 @@ addcmd("isverified", {}, "Check if player has verified badge", function(args, "i
     end
 end)
 
-addcmd("ismobile", {}, "Check if you're on mobile", function(, "info")
+addcmd("ismobile", {}, "Check if you're on mobile", function(args), "info")
     local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
     notify("Platform", isMobile and "Mobile" or "Desktop")
 end)
 
-addcmd("crosshair", {}, "Show a crosshair on screen", function(, "visual")
+addcmd("crosshair", {}, "Show a crosshair on screen", function(args), "visual")
     local ch = Instance.new("Frame", gui)
     ch.Name = "CZ_Crosshair_H"
     ch.Size = UDim2.new(0, 20, 0, 2)
@@ -6272,13 +6274,13 @@ addcmd("crosshair", {}, "Show a crosshair on screen", function(, "visual")
     notify("Crosshair", "Enabled")
 end)
 
-addcmd("uncrosshair", {}, "Remove crosshair", function(, "visual")
+addcmd("uncrosshair", {}, "Remove crosshair", function(args), "visual")
     for _, v in ipairs(gui:GetChildren()) do
         if v.Name:find("CZ_Crosshair") then v:Destroy() end
     end
 end)
 
-addcmd("fixchar", {}, "Fix broken character (refresh at same spot)", function(, "character")
+addcmd("fixchar", {}, "Fix broken character (refresh at same spot)", function(args), "character")
     execCmd("refresh")
 end)
 
@@ -6296,7 +6298,7 @@ addcmd("playanimid", {"animid"}, "Play animation by raw asset ID", function(args
     notify("Animation", "Playing " .. id)
 end)
 
-addcmd("stopanim", {"stopallanims"}, "Stop all playing animations", function(, "character")
+addcmd("stopanim", {"stopallanims"}, "Stop all playing animations", function(args), "character")
     local hum = myHumanoid()
     if not hum then return end
     local animator = hum:FindFirstChildOfClass("Animator")
@@ -6307,7 +6309,7 @@ addcmd("stopanim", {"stopallanims"}, "Stop all playing animations", function(, "
     end
 end)
 
-addcmd("listanims", {}, "List currently playing animations", function(, "character")
+addcmd("listanims", {}, "List currently playing animations", function(args), "character")
     local hum = myHumanoid()
     if not hum then return end
     local animator = hum:FindFirstChildOfClass("Animator")
@@ -6344,12 +6346,12 @@ addcmd("animsync", {}, "Sync your animation with another player", function(args,
     notify("AnimSync", "Syncing with " .. target.Name)
 end)
 
-addcmd("unanimsync", {}, "Stop anim sync", function(, "character")
+addcmd("unanimsync", {}, "Stop anim sync", function(args), "character")
     stopLoop("animsync")
 end)
 
 
-addcmd("networkowner", {}, "Show network owner of parts you click", function(, "info")
+addcmd("networkowner", {}, "Show network owner of parts you click", function(args), "info")
     notify("NetOwner", "Click a part...")
     local mouse = player:GetMouse()
     local conn
@@ -6366,7 +6368,7 @@ addcmd("networkowner", {}, "Show network owner of parts you click", function(, "
     end)
 end)
 
-addcmd("serverlist", {}, "List available servers for this game", function(, "server")
+addcmd("serverlist", {}, "List available servers for this game", function(args), "server")
     task.spawn(function()
         pcall(function()
             local data = HttpService:JSONDecode(game:HttpGet(
@@ -6383,12 +6385,12 @@ addcmd("serverlist", {}, "List available servers for this game", function(, "ser
     end)
 end)
 
-addcmd("hideui", {}, "Hide all game UI", function(, "settings")
+addcmd("hideui", {}, "Hide all game UI", function(args), "settings")
     pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false) end)
     notify("UI", "All game UI hidden")
 end)
 
-addcmd("showui", {}, "Show all game UI", function(, "settings")
+addcmd("showui", {}, "Show all game UI", function(args), "settings")
     pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true) end)
 end)
 
@@ -6408,20 +6410,20 @@ end)
 
 
 
-addcmd("rage", {}, "Rage combo: speed + fling + spin", function(, "fun")
+addcmd("rage", {}, "Rage combo: speed + fling + spin", function(args), "fun")
     execCmd("speed 200")
     execCmd("spin 50")
     notify("Rage", "RAGE MODE")
 end)
 
-addcmd("unrage", {}, "Stop rage", function(, "fun")
+addcmd("unrage", {}, "Stop rage", function(args), "fun")
     execCmd("speed 16")
     execCmd("unspin")
 end)
 
 
 
-addcmd("admin", {}, "Give yourself admin-like abilities", function(, "settings")
+addcmd("admin", {}, "Give yourself admin-like abilities", function(args), "settings")
     execCmd("fly")
     execCmd("noclip")
     execCmd("esp")
@@ -6429,7 +6431,7 @@ addcmd("admin", {}, "Give yourself admin-like abilities", function(, "settings")
     notify("Admin", "Admin powers enabled")
 end)
 
-addcmd("unadmin", {}, "Remove admin abilities", function(, "settings")
+addcmd("unadmin", {}, "Remove admin abilities", function(args), "settings")
     execCmd("unfly")
     execCmd("clip")
     execCmd("unesp")
@@ -6441,7 +6443,7 @@ end)
 -- COMMANDS: FINAL BATCH
 --================================================================
 
-addcmd("gotofreecam", {"fcgoto"}, "Teleport to freecam position", function(, "teleport")
+addcmd("gotofreecam", {"fcgoto"}, "Teleport to freecam position", function(args), "teleport")
     local cam = workspace.CurrentCamera
     local root = myRoot()
     if root and cam then root.CFrame = cam.CFrame end
@@ -6468,11 +6470,11 @@ addcmd("robloxnotify", {"rnotify"}, "Send Roblox native notification", function(
     end)
 end)
 
-addcmd("resetcamera", {"rcam"}, "Full camera reset", function(, "camera")
+addcmd("resetcamera", {"rcam"}, "Full camera reset", function(args), "camera")
     execCmd("restorecamera")
 end)
 
-addcmd("nofall2", {}, "Cancel downward velocity", function(, "movement")
+addcmd("nofall2", {}, "Cancel downward velocity", function(args), "movement")
     startLoop("nofall2", 0, function()
         local root = myRoot()
         if root then
@@ -6485,7 +6487,7 @@ addcmd("nofall2", {}, "Cancel downward velocity", function(, "movement")
     notify("NoFall2", "Velocity-based fall prevention")
 end)
 
-addcmd("unnofall2", {}, "Disable nofall2", function(, "movement")
+addcmd("unnofall2", {}, "Disable nofall2", function(args), "movement")
     stopLoop("nofall2")
 end)
 
@@ -6502,7 +6504,7 @@ addcmd("clientbring", {}, "Bring player to you (client CFrame)", function(args, 
 end)
 
 
-addcmd("antiragdoll", {}, "Prevent ragdoll state", function(, "anti")
+addcmd("antiragdoll", {}, "Prevent ragdoll state", function(args), "anti")
     startLoop("antiragdoll", 0, function()
         local hum = myHumanoid()
         if hum then
@@ -6516,7 +6518,7 @@ addcmd("antiragdoll", {}, "Prevent ragdoll state", function(, "anti")
     notify("AntiRagdoll", "Enabled")
 end)
 
-addcmd("unantiragdoll", {}, "Disable anti ragdoll", function(, "anti")
+addcmd("unantiragdoll", {}, "Disable anti ragdoll", function(args), "anti")
     stopLoop("antiragdoll")
 end)
 
@@ -6529,7 +6531,7 @@ end)
 
 
 
-addcmd("removescripts", {"noscripts"}, "Remove all scripts from workspace", function(, "environment")
+addcmd("removescripts", {"noscripts"}, "Remove all scripts from workspace", function(args), "environment")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Script") then v:Destroy(); count = count + 1 end
@@ -6537,7 +6539,7 @@ addcmd("removescripts", {"noscripts"}, "Remove all scripts from workspace", func
     notify("Scripts", "Removed " .. count .. " server scripts (client effect only)")
 end)
 
-addcmd("parts2", {"partcount"}, "Count parts in workspace", function(, "info")
+addcmd("parts2", {"partcount"}, "Count parts in workspace", function(args), "info")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then count = count + 1 end
@@ -6545,11 +6547,11 @@ addcmd("parts2", {"partcount"}, "Count parts in workspace", function(, "info")
     notify("Parts", count .. " BaseParts in workspace")
 end)
 
-addcmd("descendants", {}, "Count all descendants in workspace", function(, "info")
+addcmd("descendants", {}, "Count all descendants in workspace", function(args), "info")
     notify("Descendants", #workspace:GetDescendants() .. " instances in workspace")
 end)
 
-addcmd("services", {}, "List all game services", function(, "info")
+addcmd("services", {}, "List all game services", function(args), "info")
     local list = {}
     for _, v in ipairs(game:GetChildren()) do
         table.insert(list, v.ClassName)
@@ -6565,11 +6567,11 @@ addcmd("nomusic", {}, "Stop all music/sounds", function()
     execCmd("stopsound")
 end)
 
-addcmd("rejoin2", {}, "Rejoin via TeleportToPlaceInstance", function(, "server")
+addcmd("rejoin2", {}, "Rejoin via TeleportToPlaceInstance", function(args), "server")
     TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
 end)
 
-addcmd("antiplatformstand", {"antips"}, "Prevent platform stand", function(, "anti")
+addcmd("antiplatformstand", {"antips"}, "Prevent platform stand", function(args), "anti")
     startLoop("antips", 0, function()
         local hum = myHumanoid()
         if hum and hum.PlatformStand then
@@ -6579,11 +6581,11 @@ addcmd("antiplatformstand", {"antips"}, "Prevent platform stand", function(, "an
     notify("AntiPS", "Enabled")
 end)
 
-addcmd("unantiplatformstand", {"unantips"}, "Disable anti platform stand", function(, "anti")
+addcmd("unantiplatformstand", {"unantips"}, "Disable anti platform stand", function(args), "anti")
     stopLoop("antips")
 end)
 
-addcmd("clickinfo", {}, "Click parts to see their info", function(, "info")
+addcmd("clickinfo", {}, "Click parts to see their info", function(args), "info")
     notify("ClickInfo", "Click any part...")
     local mouse = player:GetMouse()
     local conn
@@ -6612,11 +6614,11 @@ addcmd("teleportspeed", {"tpspeed"}, "Teleport-based speed (even faster than tpw
     notify("TPSpeed", "Multiplier: " .. mult)
 end)
 
-addcmd("unteleportspeed", {"untpspeed"}, "Stop teleport speed", function(, "movement")
+addcmd("unteleportspeed", {"untpspeed"}, "Stop teleport speed", function(args), "movement")
     stopLoop("tpspeed")
 end)
 
-addcmd("autosit", {}, "Automatically sit on any seat you touch", function(, "movement")
+addcmd("autosit", {}, "Automatically sit on any seat you touch", function(args), "movement")
     startLoop("autosit", 0.5, function()
         local root = myRoot()
         if not root then return end
@@ -6633,22 +6635,22 @@ addcmd("autosit", {}, "Automatically sit on any seat you touch", function(, "mov
     notify("AutoSit", "Enabled")
 end)
 
-addcmd("unautosit", {}, "Disable auto sit", function(, "movement")
+addcmd("unautosit", {}, "Disable auto sit", function(args), "movement")
     stopLoop("autosit")
 end)
 
-addcmd("wallhack", {}, "See and walk through all walls", function(, "visual")
+addcmd("wallhack", {}, "See and walk through all walls", function(args), "visual")
     execCmd("xray")
     execCmd("noclip")
     notify("WallHack", "X-ray + Noclip")
 end)
 
-addcmd("unwallhack", {}, "Disable wallhack", function(, "visual")
+addcmd("unwallhack", {}, "Disable wallhack", function(args), "visual")
     execCmd("unxray")
     execCmd("clip")
 end)
 
-addcmd("survival", {}, "Survival kit: god + fly + esp + fullbright", function(, "settings")
+addcmd("survival", {}, "Survival kit: god + fly + esp + fullbright", function(args), "settings")
     execCmd("fly")
     execCmd("esp")
     execCmd("fullbright")
@@ -6656,7 +6658,7 @@ addcmd("survival", {}, "Survival kit: god + fly + esp + fullbright", function(, 
     notify("Survival", "Full survival kit enabled")
 end)
 
-addcmd("unsurvival", {}, "Disable survival kit", function(, "settings")
+addcmd("unsurvival", {}, "Disable survival kit", function(args), "settings")
     execCmd("unfly")
     execCmd("unesp")
     execCmd("unfullbright")
@@ -6671,13 +6673,13 @@ addcmd("copyusername", {}, "Copy target username", function(args, "info")
     end
 end)
 
-addcmd("crash", {}, "Crash your own game client", function(, "exploit")
+addcmd("crash", {}, "Crash your own game client", function(args), "exploit")
     notify("Crash", "Crashing in 3 seconds...")
     task.wait(3)
     while true do Instance.new("Part", workspace) end
 end)
 
-addcmd("reachall", {}, "Fire touch interest on ALL players (tool required)", function(, "exploit")
+addcmd("reachall", {}, "Fire touch interest on ALL players (tool required)", function(args), "exploit")
     if not firetouchinterest then return end
     local char = getChar()
     if not char then return end
@@ -6727,7 +6729,7 @@ addcmd("banlands", {}, "Teleport player to void using hat+tool (requires firetou
     end
 end)
 
-addcmd("hatgear2", {"hatgear", "hg"}, "Convert all hats to holdable gears", function(, "tools")
+addcmd("hatgear2", {"hatgear", "hg"}, "Convert all hats to holdable gears", function(args), "tools")
     local char = getChar()
     if not char then return end
     local count = 0
@@ -6767,7 +6769,7 @@ addcmd("give2", {}, "Give tool to player via firetouchinterest", function(args, 
     end
 end)
 
-addcmd("removeinnil", {}, "Remove instances parented to nil", function(, "tools")
+addcmd("removeinnil", {}, "Remove instances parented to nil", function(args), "tools")
     if getnilinstances then
         local nils = getnilinstances()
         local count = 0
@@ -6781,7 +6783,7 @@ addcmd("removeinnil", {}, "Remove instances parented to nil", function(, "tools"
     end
 end)
 
-addcmd("backpackplay", {}, "Play sounds from tools in backpack", function(, "audio")
+addcmd("backpackplay", {}, "Play sounds from tools in backpack", function(args), "audio")
     local bp = player:FindFirstChild("Backpack")
     if bp then
         for _, v in ipairs(bp:GetDescendants()) do
@@ -6790,7 +6792,7 @@ addcmd("backpackplay", {}, "Play sounds from tools in backpack", function(, "aud
     end
 end)
 
-addcmd("audiolog", {"audiolist"}, "List all sounds in workspace", function(, "audio")
+addcmd("audiolog", {"audiolist"}, "List all sounds in workspace", function(args), "audio")
     local list = {}
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Sound") and v.SoundId ~= "" then
@@ -6801,7 +6803,7 @@ addcmd("audiolog", {"audiolist"}, "List all sounds in workspace", function(, "au
     notify("Sounds (" .. #list .. "+)", #list > 0 and table.concat(list, "\n") or "None found", 10)
 end)
 
-addcmd("clickdetectors2", {"clickdets2", "cdms"}, "Max all click detector distances", function(, "exploit")
+addcmd("clickdetectors2", {"clickdets2", "cdms"}, "Max all click detector distances", function(args), "exploit")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ClickDetector") then
@@ -6812,7 +6814,7 @@ addcmd("clickdetectors2", {"clickdets2", "cdms"}, "Max all click detector distan
     notify("ClickDets", count .. " detectors maxed")
 end)
 
-addcmd("proxprompts2", {}, "Max all proximity prompt distances + remove hold time", function(, "exploit")
+addcmd("proxprompts2", {}, "Max all proximity prompt distances + remove hold time", function(args), "exploit")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ProximityPrompt") then
@@ -6825,7 +6827,7 @@ addcmd("proxprompts2", {}, "Max all proximity prompt distances + remove hold tim
     notify("ProxPrompts", count .. " prompts maxed")
 end)
 
-addcmd("attachmenttruesight", {"attts"}, "Show all attachments in workspace", function(, "tools")
+addcmd("attachmenttruesight", {"attts"}, "Show all attachments in workspace", function(args), "tools")
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Attachment") then
@@ -6836,13 +6838,13 @@ addcmd("attachmenttruesight", {"attts"}, "Show all attachments in workspace", fu
     notify("Attachments", count .. " attachments now visible")
 end)
 
-addcmd("unattachmenttruesight", {}, "Hide attachments", function(, "tools")
+addcmd("unattachmenttruesight", {}, "Hide attachments", function(args), "tools")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Attachment") then v.Visible = false end
     end
 end)
 
-addcmd("billboardtruesight", {"bbts"}, "Make all BillboardGuis always on top", function(, "tools")
+addcmd("billboardtruesight", {"bbts"}, "Make all BillboardGuis always on top", function(args), "tools")
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BillboardGui") then
             v.AlwaysOnTop = true
@@ -6851,14 +6853,14 @@ addcmd("billboardtruesight", {"bbts"}, "Make all BillboardGuis always on top", f
     end
 end)
 
-addcmd("calmwaves", {}, "Calm water waves", function(, "environment")
+addcmd("calmwaves", {}, "Calm water waves", function(args), "environment")
     pcall(function()
         workspace.Terrain.WaterWaveSize = 0
         workspace.Terrain.WaterWaveSpeed = 0
     end)
 end)
 
-addcmd("clearwaves2", {}, "Remove water entirely", function(, "environment")
+addcmd("clearwaves2", {}, "Remove water entirely", function(args), "environment")
     pcall(function()
         workspace.Terrain.WaterTransparency = 1
         workspace.Terrain.WaterWaveSize = 0
@@ -6866,7 +6868,7 @@ addcmd("clearwaves2", {}, "Remove water entirely", function(, "environment")
     end)
 end)
 
-addcmd("chaos", {}, "Unanchor everything and apply random forces", function(, "fun")
+addcmd("chaos", {}, "Unanchor everything and apply random forces", function(args), "fun")
     notify("Chaos", "Unleashing chaos...")
     task.spawn(function()
         for _, v in ipairs(workspace:GetDescendants()) do
@@ -6880,7 +6882,7 @@ addcmd("chaos", {}, "Unanchor everything and apply random forces", function(, "f
     end)
 end)
 
-addcmd("autoplatform", {"autopf"}, "Auto-create platform when falling", function(, "movement")
+addcmd("autoplatform", {"autopf"}, "Auto-create platform when falling", function(args), "movement")
     startLoop("autoplatform", 0.2, function()
         local root = myRoot()
         local hum = myHumanoid()
@@ -6904,7 +6906,7 @@ addcmd("autoplatform", {"autopf"}, "Auto-create platform when falling", function
     notify("AutoPlatform", "Will catch you when falling")
 end)
 
-addcmd("unautoplatform", {"unautopf"}, "Disable auto platform", function(, "movement")
+addcmd("unautoplatform", {"unautopf"}, "Disable auto platform", function(args), "movement")
     stopLoop("autoplatform")
 end)
 
@@ -6932,7 +6934,7 @@ addcmd("sitfly", {}, "Fly using sit method", function(args, "movement")
     notify("SitFly", "Flying via sit at " .. speed)
 end)
 
-addcmd("unsitfly", {}, "Stop sit fly", function(, "movement")
+addcmd("unsitfly", {}, "Stop sit fly", function(args), "movement")
     stopLoop("sitfly")
     local hum = myHumanoid()
     if hum then hum.Sit = false end
@@ -6968,7 +6970,7 @@ addcmd("platformfly", {}, "Fly on a visible platform", function(args, "movement"
     notify("PlatformFly", "Flying on platform at " .. speed)
 end)
 
-addcmd("unplatformfly", {}, "Stop platform fly", function(, "movement")
+addcmd("unplatformfly", {}, "Stop platform fly", function(args), "movement")
     stopLoop("platfly")
     for _, v in ipairs(workspace:GetChildren()) do
         if v.Name == "CZ_FlyPlat" then v:Destroy() end
@@ -7009,20 +7011,20 @@ addcmd("masscmd", {}, "Run a command for every player", function(args, "settings
     end
 end)
 
-addcmd("randomcmd2", {}, "Execute a truly random command from the list", function(, "settings")
+addcmd("randomcmd2", {}, "Execute a truly random command from the list", function(args), "settings")
     local cmd = cmds[math.random(#cmds)]
     notify("Random", "Running: " .. cmd.NAME)
     execCmd(cmd.NAME, player, false)
 end)
 
-addcmd("clearplatforms", {}, "Remove all CZ-created platforms", function(, "tools")
+addcmd("clearplatforms", {}, "Remove all CZ-created platforms", function(args), "tools")
     for _, v in ipairs(workspace:GetChildren()) do
         if v.Name:find("CZ_") and v:IsA("BasePart") then v:Destroy() end
     end
 end)
 
 
-addcmd("listscripts", {}, "List all LocalScripts", function(, "info")
+addcmd("listscripts", {}, "List all LocalScripts", function(args), "info")
     local list = {}
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("LocalScript") and v.Enabled then
@@ -7033,7 +7035,7 @@ addcmd("listscripts", {}, "List all LocalScripts", function(, "info")
     notify("Scripts (" .. #list .. "+)", table.concat(list, "\n"), 12)
 end)
 
-addcmd("antiwindowafk2", {}, "Alternative anti-AFK using mouse simulation", function(, "anti")
+addcmd("antiwindowafk2", {}, "Alternative anti-AFK using mouse simulation", function(args), "anti")
     startLoop("antiwin2", 45, function()
         pcall(function()
             local vim = game:GetService("VirtualInputManager")
@@ -7045,7 +7047,7 @@ addcmd("antiwindowafk2", {}, "Alternative anti-AFK using mouse simulation", func
     notify("AntiWindowAFK", "Mouse simulation active")
 end)
 
-addcmd("unantiwindowafk2", {}, "Stop alternative anti-AFK", function(, "anti")
+addcmd("unantiwindowafk2", {}, "Stop alternative anti-AFK", function(args), "anti")
     stopLoop("antiwin2")
 end)
 
@@ -7053,13 +7055,13 @@ addcmd("safechat", {}, "Send chat message with /e prefix to avoid filters", func
     sendChat("/e " .. getstring(1, args))
 end)
 
-addcmd("cmdbar2", {"opencmdbar"}, "Focus the command bar", function(, "settings")
+addcmd("cmdbar2", {"opencmdbar"}, "Focus the command bar", function(args), "settings")
     guiOpen = true
     main.Visible = true
     cmdBar:CaptureFocus()
 end)
 
-addcmd("hidecommands", {}, "Hide command list (minimize to bar only)", function(, "settings")
+addcmd("hidecommands", {}, "Hide command list (minimize to bar only)", function(args), "settings")
     main.Visible = false
     guiOpen = false
     notify("Hidden", "GUI hidden. Right Ctrl to show.")
@@ -7072,7 +7074,7 @@ addcmd("loopnotify", {}, "Loop a notification", function(args, "info")
     end)
 end)
 
-addcmd("unloopnotify", {}, "Stop loop notify", function(, "info")
+addcmd("unloopnotify", {}, "Stop loop notify", function(args), "info")
     stopLoop("loopnotify")
 end)
 
@@ -7097,7 +7099,7 @@ addcmd("fex", {}, "Load F3X building tools (alias)", function()
     execCmd("f3x")
 end)
 
-addcmd("anticheat2", {}, "Alternative anti-cheat bypass (delete detection scripts)", function(, "anti")
+addcmd("anticheat2", {}, "Alternative anti-cheat bypass (delete detection scripts)", function(args), "anti")
     local count = 0
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("LocalScript") or v:IsA("ModuleScript") then
@@ -7151,7 +7153,7 @@ addcmd("slowmo", {}, "Slow motion effect", function(args, "movement")
     notify("SlowMo", "Factor: " .. factor)
 end)
 
-addcmd("unslowmo", {}, "Restore normal speed", function(, "movement")
+addcmd("unslowmo", {}, "Restore normal speed", function(args), "movement")
     workspace.Gravity = 196.2
     local hum = myHumanoid()
     if hum then hum.WalkSpeed = 16; hum.JumpPower = 50 end
@@ -7168,26 +7170,26 @@ addcmd("fastmo", {}, "Fast motion effect", function(args, "movement")
     notify("FastMo", "Factor: " .. factor)
 end)
 
-addcmd("unfastmo", {}, "Restore normal speed", function(, "movement")
+addcmd("unfastmo", {}, "Restore normal speed", function(args), "movement")
     execCmd("unslowmo")
 end)
 
-addcmd("moon", {"moongravity"}, "Moon gravity", function(, "movement")
+addcmd("moon", {"moongravity"}, "Moon gravity", function(args), "movement")
     workspace.Gravity = 30
     notify("Moon", "Gravity set to 30")
 end)
 
-addcmd("mars", {"marsgravity"}, "Mars gravity", function(, "movement")
+addcmd("mars", {"marsgravity"}, "Mars gravity", function(args), "movement")
     workspace.Gravity = 72
     notify("Mars", "Gravity set to 72")
 end)
 
-addcmd("zerog", {"zerogravity"}, "Zero gravity", function(, "movement")
+addcmd("zerog", {"zerogravity"}, "Zero gravity", function(args), "movement")
     workspace.Gravity = 0
     notify("ZeroG", "Gravity set to 0")
 end)
 
-addcmd("normalgravity", {"earthgravity"}, "Normal earth gravity", function(, "movement")
+addcmd("normalgravity", {"earthgravity"}, "Normal earth gravity", function(args), "movement")
     workspace.Gravity = 196.2
 end)
 
@@ -7205,26 +7207,26 @@ addcmd("superspeed", {}, "Super walkspeed", function(args, "movement")
     notify("SuperSpeed", "Speed: " .. speed)
 end)
 
-addcmd("defaultspeed", {}, "Reset to default walkspeed", function(, "movement")
+addcmd("defaultspeed", {}, "Reset to default walkspeed", function(args), "movement")
     local hum = myHumanoid()
     if hum then hum.WalkSpeed = 16 end
 end)
 
-addcmd("defaultjump", {}, "Reset to default jump power", function(, "movement")
+addcmd("defaultjump", {}, "Reset to default jump power", function(args), "movement")
     local hum = myHumanoid()
     if hum then hum.JumpPower = 50; hum.UseJumpPower = true end
 end)
 
-addcmd("defaulthipheight", {}, "Reset hip height", function(, "movement")
+addcmd("defaulthipheight", {}, "Reset hip height", function(args), "movement")
     local hum = myHumanoid()
     if hum then hum.HipHeight = 0 end
 end)
 
-addcmd("defaultgravity", {}, "Reset gravity to default", function(, "movement")
+addcmd("defaultgravity", {}, "Reset gravity to default", function(args), "movement")
     workspace.Gravity = 196.2
 end)
 
-addcmd("defaultmaxslope", {}, "Reset max slope angle", function(, "movement")
+addcmd("defaultmaxslope", {}, "Reset max slope angle", function(args), "movement")
     local hum = myHumanoid()
     if hum then hum.MaxSlopeAngle = 89 end
 end)
@@ -7269,6 +7271,598 @@ local function czCleanup()
         UserInputService.MouseIconEnabled = true
     end)
 end
+
+--================================================================
+-- COMMANDS: MISSING IY COMMANDS (speed, tween, waypoints, etc)
+--================================================================
+
+local tweenSpeed = 1
+
+addcmd("tweenspeed", {"tspeed"}, "Set tween speed for all tween commands (default 1)", function(args)
+    tweenSpeed = parseNumber(args[1], 1)
+    notify("TweenSpeed", "Set to " .. tweenSpeed)
+end, "movement")
+
+addcmd("vflyspeed", {"vflysp", "vehicleflyspeed", "vehicleflysp"}, "Set vehicle fly speed", function(args)
+    local spd = parseNumber(args[1], 50)
+    notify("VFlySpeed", "Set to " .. spd)
+end, "movement")
+
+addcmd("cframeflyspeed", {"cflyspeed"}, "Set CFrame fly speed", function(args)
+    local spd = parseNumber(args[1], 1)
+    notify("CFlySpeed", "Set to " .. spd)
+end, "movement")
+
+addcmd("tweengotopart", {"tgotopart"}, "Tween to a part by name", function(args)
+    local name = getstring(1, args)
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") and v.Name:lower() == name:lower() then
+            local root = myRoot()
+            if root then tweenMove(root, v.CFrame + Vector3.new(0, 5, 0), tweenSpeed) end
+            return
+        end
+    end
+end, "teleport")
+
+addcmd("tweengotocamera", {"tgotocam", "ttocam"}, "Tween to camera position", function(args)
+    local root = myRoot()
+    if root then tweenMove(root, workspace.CurrentCamera.CFrame, tweenSpeed) end
+end, "teleport")
+
+addcmd("tweenwaypoint", {"twp"}, "Tween to a saved waypoint", function(args)
+    local name = getstring(1, args):lower()
+    if waypoints[name] then
+        local root = myRoot()
+        if root then tweenMove(root, waypoints[name], tweenSpeed) end
+    end
+end, "teleport")
+
+addcmd("walktowaypoint", {"wtwp"}, "Walk to a saved waypoint", function(args)
+    local name = getstring(1, args):lower()
+    if waypoints[name] then
+        local hum = myHumanoid()
+        if hum then hum:MoveTo(waypoints[name].Position) end
+    end
+end, "teleport")
+
+addcmd("waypoints", {"positions"}, "List all saved waypoints", function(args)
+    local list = {}
+    for name, cf in pairs(waypoints) do
+        table.insert(list, name .. " — " .. string.format("%.0f, %.0f, %.0f", cf.X, cf.Y, cf.Z))
+    end
+    notify("Waypoints", #list > 0 and table.concat(list, "\n") or "No waypoints saved", 10)
+end, "teleport")
+
+addcmd("showwaypoints", {"showwp", "showwps"}, "Show waypoint markers in 3D", function(args)
+    for name, cf in pairs(waypoints) do
+        local part = Instance.new("Part")
+        part.Name = "CZ_WP_" .. name
+        part.Size = Vector3.new(2, 2, 2)
+        part.CFrame = cf
+        part.Anchored = true
+        part.CanCollide = false
+        part.Color = Color3.fromRGB(0, 170, 255)
+        part.Material = Enum.Material.Neon
+        part.Transparency = 0.3
+        part.Parent = workspace
+        local bb = Instance.new("BillboardGui", part)
+        bb.Size = UDim2.new(0, 100, 0, 20)
+        bb.StudsOffset = Vector3.new(0, 2, 0)
+        bb.AlwaysOnTop = true
+        local lbl = Instance.new("TextLabel", bb)
+        lbl.Size = UDim2.new(1, 0, 1, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = name
+        lbl.TextColor3 = Color3.new(1, 1, 1)
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 14
+    end
+    notify("Waypoints", "Markers shown")
+end, "teleport")
+
+addcmd("hidewaypoints", {"hidewp", "hidewps"}, "Hide waypoint markers", function(args)
+    for _, v in ipairs(workspace:GetChildren()) do
+        if v.Name:find("CZ_WP_") then v:Destroy() end
+    end
+end, "teleport")
+
+addcmd("waypointpos", {"wpp", "setwaypointposition"}, "Create waypoint at XYZ coordinates", function(args)
+    local name = args[1] or "pos"
+    local x = parseNumber(args[2], 0)
+    local y = parseNumber(args[3], 50)
+    local z = parseNumber(args[4], 0)
+    waypoints[name:lower()] = CFrame.new(x, y, z)
+    notify("Waypoint", "Created: " .. name)
+end, "teleport")
+
+addcmd("cleargamewaypoints", {"cgamewp"}, "Clear all waypoints for this game", function(args)
+    waypoints = {}
+    notify("Waypoints", "Cleared")
+end, "teleport")
+
+addcmd("hitbox", {}, "Expand all player hitboxes", function(args)
+    local size = parseNumber(args[1], 10)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            local root = getRoot(p.Character)
+            if root then
+                root.Size = Vector3.new(size, size, size)
+                root.Transparency = 0.7
+            end
+        end
+    end
+    notify("Hitbox", "Expanded to " .. size)
+end, "exploit")
+
+addcmd("unhitbox", {}, "Reset hitboxes", function(args)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            local root = getRoot(p.Character)
+            if root then
+                root.Size = Vector3.new(2, 2, 1)
+                root.Transparency = 1
+            end
+        end
+    end
+end, "exploit")
+
+addcmd("loopbring", {}, "Continuously bring a player to you", function(args)
+    local targets = getPlayers(args[1])
+    if #targets == 0 then return end
+    local target = targets[1]
+    startLoop("loopbring", 0, function()
+        local tRoot = getRoot(target.Character)
+        local mRoot = myRoot()
+        if tRoot and mRoot then
+            tRoot.CFrame = mRoot.CFrame + mRoot.CFrame.LookVector * 5
+        end
+    end)
+    notify("LoopBring", "Bringing " .. target.Name)
+end, "teleport")
+
+addcmd("unloopbring", {}, "Stop loop bring", function(args)
+    stopLoop("loopbring")
+end, "teleport")
+
+addcmd("delete", {"deletepart"}, "Click a part to delete it", function(args)
+    notify("Delete", "Click a part to delete it")
+    local mouse = player:GetMouse()
+    local conn
+    conn = connect(mouse.Button1Down, function()
+        if mouse.Target then
+            mouse.Target:Destroy()
+            notify("Deleted", "Part removed")
+        end
+        conn:Disconnect()
+    end)
+end, "tools")
+
+addcmd("deleteclass", {"delclass"}, "Delete all instances of a ClassName", function(args)
+    local cls = args[1]
+    if not cls then return end
+    local count = 0
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v.ClassName == cls then v:Destroy(); count = count + 1 end
+    end
+    notify("DeleteClass", "Removed " .. count .. " " .. cls)
+end, "tools")
+
+addcmd("deleteinvisparts", {"delinvis"}, "Delete all invisible parts", function(args)
+    local count = 0
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") and v.Transparency >= 1 then
+            v:Destroy(); count = count + 1
+        end
+    end
+    notify("DeleteInvis", "Removed " .. count .. " invisible parts")
+end, "tools")
+
+addcmd("fireclickdetectors", {"fcd"}, "Fire all click detectors in range", function(args)
+    local range = parseNumber(args[1], 100)
+    local root = myRoot()
+    if not root then return end
+    local count = 0
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("ClickDetector") and fireclickdetector then
+            local par = v.Parent
+            if par and par:IsA("BasePart") and (par.Position - root.Position).Magnitude <= range then
+                pcall(fireclickdetector, v)
+                count = count + 1
+            end
+        end
+    end
+    notify("FireCD", "Fired " .. count)
+end, "exploit")
+
+addcmd("fireproximityprompts", {"fpp"}, "Fire all proximity prompts in range", function(args)
+    local range = parseNumber(args[1], 100)
+    local root = myRoot()
+    if not root then return end
+    local count = 0
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("ProximityPrompt") and fireproximityprompt then
+            local par = v.Parent
+            if par and par:IsA("BasePart") and (par.Position - root.Position).Magnitude <= range then
+                pcall(fireproximityprompt, v, 0)
+                count = count + 1
+            end
+        end
+    end
+    notify("FirePP", "Fired " .. count)
+end, "exploit")
+
+addcmd("noclickdetectorlimits", {"nocdlimits"}, "Remove all click detector distance limits", function(args)
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("ClickDetector") then v.MaxActivationDistance = math.huge end
+    end
+end, "exploit")
+
+addcmd("noproximitypromptlimits", {"nopplimits"}, "Remove all prox prompt limits + hold time", function(args)
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("ProximityPrompt") then
+            v.MaxActivationDistance = 100
+            v.HoldDuration = 0
+            v.RequiresLineOfSight = false
+        end
+    end
+end, "exploit")
+
+addcmd("instantproximityprompts", {"instantpp"}, "Make all proximity prompts instant", function(args)
+    startLoop("instantpp", 1, function()
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("ProximityPrompt") then v.HoldDuration = 0 end
+        end
+    end)
+    notify("InstantPP", "Enabled")
+end, "exploit")
+
+addcmd("uninstantproximityprompts", {"uninstantpp"}, "Disable instant prompts", function(args)
+    stopLoop("instantpp")
+end, "exploit")
+
+addcmd("destroyheight", {"dheight"}, "Set FallenPartsDestroyHeight", function(args)
+    local val = parseNumber(args[1], -500)
+    workspace.FallenPartsDestroyHeight = val
+    notify("DestroyHeight", "Set to " .. val)
+end, "environment")
+
+addcmd("loopfullbright", {}, "Keep fullbright on continuously", function(args)
+    startLoop("loopfb", 2, function()
+        Lighting.Brightness = 2
+        Lighting.ClockTime = 14
+        Lighting.FogEnd = 100000
+        Lighting.GlobalShadows = false
+        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+        Lighting.Ambient = Color3.new(1, 1, 1)
+    end)
+    notify("LoopFullbright", "Enabled")
+end, "visual")
+
+addcmd("unloopfullbright", {}, "Stop loop fullbright", function(args)
+    stopLoop("loopfb")
+end, "visual")
+
+addcmd("globalshadows", {}, "Toggle global shadows", function(args)
+    Lighting.GlobalShadows = not Lighting.GlobalShadows
+    notify("Shadows", Lighting.GlobalShadows and "ON" or "OFF")
+end, "environment")
+
+addcmd("unglobalshadows", {}, "Enable global shadows", function(args)
+    Lighting.GlobalShadows = true
+end, "environment")
+
+addcmd("reach", {}, "Extend tool reach (alias for boxreach)", function(args)
+    execCmd("boxreach " .. (args[1] or "50"))
+end, "exploit")
+
+addcmd("unreach", {}, "Disable reach", function(args)
+    execCmd("unboxreach")
+end, "exploit")
+
+addcmd("loopanimation", {"loopanim"}, "Loop an animation continuously", function(args)
+    local id = args[1]
+    local speed = parseNumber(args[2], 1)
+    if not id then return end
+    startLoop("loopanim", 0, function()
+        local hum = myHumanoid()
+        if not hum then return end
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if animator and #animator:GetPlayingAnimationTracks() == 0 then
+            local anim = Instance.new("Animation")
+            anim.AnimationId = "rbxassetid://" .. id
+            local track = animator:LoadAnimation(anim)
+            track:Play()
+            track:AdjustSpeed(speed)
+        end
+    end)
+end, "character")
+
+addcmd("unloopanimation", {"unloopanim"}, "Stop loop animation", function(args)
+    stopLoop("loopanim")
+    execCmd("stopanim")
+end, "character")
+
+addcmd("walktopos", {"wtp"}, "Walk to XYZ coordinates", function(args)
+    local x = parseNumber(args[1], 0)
+    local y = parseNumber(args[2], 0)
+    local z = parseNumber(args[3], 0)
+    local hum = myHumanoid()
+    if hum then hum:MoveTo(Vector3.new(x, y, z)) end
+end, "movement")
+
+addcmd("pathfindwalkto", {"pfwalk"}, "Pathfind walk to a player", function(args)
+    local targets = getPlayers(args[1])
+    if #targets == 0 then return end
+    local target = targets[1]
+    local tRoot = getRoot(target.Character)
+    local mRoot = myRoot()
+    if not tRoot or not mRoot then return end
+    local path = game:GetService("PathfindingService"):CreatePath()
+    path:ComputeAsync(mRoot.Position, tRoot.Position)
+    if path.Status == Enum.PathStatus.Success then
+        for _, wp in ipairs(path:GetWaypoints()) do
+            local hum = myHumanoid()
+            if hum then
+                hum:MoveTo(wp.Position)
+                if wp.Action == Enum.PathWaypointAction.Jump then hum.Jump = true end
+                hum.MoveToFinished:Wait()
+            end
+        end
+    end
+end, "movement")
+
+addcmd("droppabletools", {"dtools"}, "Make all tools droppable", function(args)
+    local bp = player:FindFirstChild("Backpack")
+    if bp then
+        for _, v in ipairs(bp:GetChildren()) do
+            if v:IsA("Tool") then v.CanBeDropped = true end
+        end
+    end
+    local char = getChar()
+    if char then
+        for _, v in ipairs(char:GetChildren()) do
+            if v:IsA("Tool") then v.CanBeDropped = true end
+        end
+    end
+    notify("Droppable", "All tools can now be dropped")
+end, "tools")
+
+addcmd("tools", {"listtools"}, "List all tools in backpack", function(args)
+    execCmd("backpack")
+end, "tools")
+
+addcmd("dupetools", {"dupet"}, "Duplicate all tools in backpack", function(args)
+    local bp = player:FindFirstChild("Backpack")
+    if bp then
+        for _, v in ipairs(bp:GetChildren()) do
+            if v:IsA("Tool") then v:Clone().Parent = bp end
+        end
+    end
+    notify("Dupe", "Tools duplicated")
+end, "tools")
+
+addcmd("deletevelocity", {"delvel"}, "Remove all velocity objects from character", function(args)
+    local char = getChar()
+    if not char then return end
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") or v:IsA("BodyForce") or v:IsA("BodyGyro") or v:IsA("BodyPosition") or v:IsA("LinearVelocity") or v:IsA("AngularVelocity") then
+            v:Destroy()
+        end
+    end
+    notify("DeleteVel", "Removed velocity objects")
+end, "character")
+
+addcmd("freeze", {}, "Freeze character (anchor all parts)", function(args)
+    execCmd("freezechar")
+end, "character")
+
+addcmd("thaw", {"unfreeze2"}, "Unfreeze character", function(args)
+    execCmd("unfreezechar")
+end, "character")
+
+addcmd("stun", {}, "Stun character (ragdoll)", function(args)
+    execCmd("ragdoll2")
+end, "fun")
+
+addcmd("unstun", {}, "Get up from stun", function(args)
+    execCmd("unragdoll")
+end, "fun")
+
+addcmd("discord", {"support", "cord"}, "Show Command Zero info", function(args)
+    notify("Command Zero", "Universal command framework\n582+ commands\nBuilt for Wave executor")
+end, "settings")
+
+addcmd("clraliases", {"clearaliases"}, "Clear all custom aliases", function(args)
+    customAliases = {}
+    saveSettings()
+    notify("Aliases", "All custom aliases cleared")
+end, "settings")
+
+addcmd("addalias", {}, "Add a custom alias (addalias name command)", function(args)
+    execCmd("alias " .. getstring(1, args))
+end, "settings")
+
+addcmd("removecmd", {"delcmd"}, "Disable a command", function(args)
+    local name = args[1]
+    if not name then return end
+    for i = #cmds, 1, -1 do
+        if cmds[i].NAME == name:lower() then
+            table.remove(cmds, i)
+            notify("RemoveCmd", "Removed: " .. name)
+            return
+        end
+    end
+end, "settings")
+
+addcmd("grabtools", {"gtools"}, "Grab all tools in workspace", function(args)
+    local char = getChar()
+    if not char then return end
+    local count = 0
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("Tool") then
+            v.Parent = player.Backpack
+            count = count + 1
+        end
+    end
+    notify("GrabTools", "Grabbed " .. count .. " tools")
+end, "tools")
+
+addcmd("nograbtools", {}, "Disable auto grab (does nothing, just a toggle pair)", function(args)
+    notify("GrabTools", "Disabled")
+end, "tools")
+
+addcmd("loopoof", {}, "Loop the oof sound", function(args)
+    startLoop("loopoof", 0.3, function()
+        pcall(function()
+            local s = Instance.new("Sound", SoundService)
+            s.SoundId = "rbxasset://sounds/uuhhh.mp3"
+            s.Volume = 1
+            s:Play()
+            game:GetService("Debris"):AddItem(s, 1)
+        end)
+    end)
+end, "audio")
+
+addcmd("unloopoof", {}, "Stop oof loop", function(args)
+    stopLoop("loopoof")
+end, "audio")
+
+addcmd("getposition", {"getpos"}, "Show and copy your position", function(args)
+    execCmd("position")
+end, "info")
+
+addcmd("copyposition", {"cppos"}, "Copy position to clipboard", function(args)
+    execCmd("copypos")
+end, "info")
+
+addcmd("tpposition", {"tppos2"}, "Teleport to XYZ", function(args)
+    execCmd("gotopos " .. getstring(1, args))
+end, "teleport")
+
+addcmd("tweentpposition", {"ttpos"}, "Tween to XYZ", function(args)
+    execCmd("tweenpos " .. getstring(1, args))
+end, "teleport")
+
+addcmd("friend", {"fr"}, "Send friend request", function(args)
+    local targets = getPlayers(args[1])
+    for _, t in ipairs(targets) do
+        pcall(function() player:RequestFriendship(t) end)
+        notify("Friend", "Sent request to " .. t.Name)
+    end
+end, "server")
+
+addcmd("unfriend", {"unfr"}, "Unfriend a player", function(args)
+    local targets = getPlayers(args[1])
+    for _, t in ipairs(targets) do
+        pcall(function() player:RevokeFriendship(t) end)
+        notify("Unfriend", "Unfriended " .. t.Name)
+    end
+end, "server")
+
+addcmd("notifyping", {}, "Show ping in notification", function(args)
+    local p = "N/A"
+    pcall(function() p = tostring(math.floor(player:GetNetworkPing() * 1000)) .. "ms" end)
+    notify("Ping", p)
+end, "info")
+
+addcmd("joindate", {}, "Show when player's account was created (estimated)", function(args)
+    local targets = getPlayers(args[1] or "me")
+    for _, t in ipairs(targets) do
+        local days = t.AccountAge
+        local created = os.date("%Y-%m-%d", os.time() - days * 86400)
+        notify("JoinDate", t.Name .. " created ~" .. created)
+    end
+end, "info")
+
+addcmd("chatage", {}, "Show player age in chat", function(args)
+    execCmd("agepublic " .. (args[1] or "me"))
+end, "chat")
+
+addcmd("chatjoindate", {}, "Show join date in chat", function(args)
+    local targets = getPlayers(args[1] or "me")
+    for _, t in ipairs(targets) do
+        local days = t.AccountAge
+        local created = os.date("%Y-%m-%d", os.time() - days * 86400)
+        sendChat(t.Name .. " account created ~" .. created)
+    end
+end, "chat")
+
+addcmd("light", {}, "Add point light to character", function(args)
+    local brightness = parseNumber(args[1], 5)
+    local root = myRoot()
+    if root then
+        local l = Instance.new("PointLight", root)
+        l.Name = "CZ_Light"
+        l.Brightness = brightness
+        l.Range = 30
+    end
+    notify("Light", "Added")
+end, "environment")
+
+addcmd("unlight", {}, "Remove point light", function(args)
+    local char = getChar()
+    if char then
+        for _, v in ipairs(char:GetDescendants()) do
+            if v.Name == "CZ_Light" then v:Destroy() end
+        end
+    end
+end, "environment")
+
+addcmd("edgejump", {}, "Auto-jump at edges while walking", function(args)
+    execCmd("autoobby")
+end, "movement")
+
+addcmd("unedgejump", {}, "Disable edge jump", function(args)
+    execCmd("unautoobby")
+end, "movement")
+
+addcmd("firstp", {}, "First person (alias)", function(args)
+    execCmd("firstperson")
+end, "camera")
+
+addcmd("thirdp", {}, "Third person (alias)", function(args)
+    execCmd("thirdperson")
+end, "camera")
+
+addcmd("fixcam", {}, "Fix camera (alias)", function(args)
+    execCmd("restorecamera")
+end, "camera")
+
+addcmd("flashback", {}, "Teleport to last death position", function(args)
+    if genv.CZ_LASTDEATH then
+        local root = myRoot()
+        if root then root.CFrame = genv.CZ_LASTDEATH end
+        notify("Flashback", "Teleported to last death")
+    else
+        notify("Flashback", "No death position saved")
+    end
+end, "teleport")
+
+-- Track death position for flashback
+task.spawn(function()
+    while true do
+        local hum = myHumanoid()
+        if hum then
+            hum.Died:Wait()
+            local root = myRoot()
+            if root then genv.CZ_LASTDEATH = root.CFrame end
+        end
+        player.CharacterAdded:Wait()
+        task.wait(0.5)
+    end
+end)
+
+addcmd("keepiy", {}, "Keep Command Zero running after teleport", function(args)
+    execCmd("keepcz")
+end, "settings")
+
+addcmd("unkeepiy", {}, "Stop keeping CZ after teleport", function(args)
+    execCmd("unkeep")
+end, "settings")
+
+addcmd("showiy", {"unhideiy"}, "Show the Command Zero GUI", function(args)
+    execCmd("showgui")
+end, "settings")
 
 if _G.SixZeroHubRegister then
     _G.SixZeroHubRegister("Command Zero", "[Uni]command_zero", czCleanup, "uni")
