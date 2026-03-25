@@ -1,42 +1,50 @@
--- Command Zero Module 1
--- Mid-section commands (settings, tools, camera, environment, etc.)
+-- Command Zero Module (reads shared state from getgenv)
+local _E = getgenv and getgenv() or _G
+local addcmd = _E.CZ_addcmd
+local getPlayers = _E.CZ_getPlayers
+local getstring = _E.CZ_getstring
+local parseNumber = _E.CZ_parseNumber
+local notify = _E.CZ_notify
+local sendChat = _E.CZ_sendChat
+local systemMsg = _E.CZ_systemMsg
+local startLoop = _E.CZ_startLoop
+local stopLoop = _E.CZ_stopLoop
+local toggleLoop = _E.CZ_toggleLoop
+local loopStates = _E.CZ_loopStates
+local execCmd = _E.CZ_execCmd
+local connect = _E.CZ_connect
+local myRoot = _E.CZ_myRoot
+local myHumanoid = _E.CZ_myHumanoid
+local getChar = _E.CZ_getChar
+local getRoot = _E.CZ_getRoot
+local getHumanoid = _E.CZ_getHumanoid
+local tweenMove = _E.CZ_tweenMove
+local clearESP = _E.CZ_clearESP
+local espObjects = _E.CZ_espObjects
+local waypoints = _E.CZ_waypoints
+local player = _E.CZ_player
+local prefix = _E.CZ_prefix
+local customAliases = _E.CZ_customAliases
+local cmdHistory = _E.CZ_cmdHistory
+local allConnections = _E.CZ_allConnections
+local saveSettings = _E.CZ_saveSettings
+local cmds = _E.CZ_cmds
+local activeLoops = _E.CZ_activeLoops
+local genv = _E
+local flyActive = _E.CZ_flyActive
+local flySpeed = _E.CZ_flySpeed
 
-return function(env)
-
-local addcmd = env.addcmd
-local getPlayers = env.getPlayers
-local getstring = env.getstring
-local parseNumber = env.parseNumber
-local notify = env.notify
-local sendChat = env.sendChat
-local systemMsg = env.systemMsg
-local startLoop = env.startLoop
-local stopLoop = env.stopLoop
-local toggleLoop = env.toggleLoop
-local loopStates = env.loopStates
-local execCmd = env.execCmd
-local connect = env.connect
-local myRoot = env.myRoot
-local myHumanoid = env.myHumanoid
-local getChar = env.getChar
-local getRoot = env.getRoot
-local getHumanoid = env.getHumanoid
-local tweenMove = env.tweenMove
-local clearESP = env.clearESP
-local espObjects = env.espObjects
-local waypoints = env.waypoints
-local player = env.player
-local prefix = env.prefix
-local customAliases = env.customAliases
-local cmdHistory = env.cmdHistory
-local flyActive = env.flyActive
-local flySpeed = env.flySpeed
-local allConnections = env.allConnections
-local saveSettings = env.saveSettings
-local genv = env.genv
-local cmds = env.cmds
-local guiOpen = env.guiOpen
-local activeLoops = env.activeLoops
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local StarterGui = game:GetService("StarterGui")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local THEME = {
     bg = Color3.fromRGB(15, 15, 20), panel = Color3.fromRGB(22, 22, 30),
@@ -2251,4 +2259,3 @@ addcmd("showiy", {"unhideiy"}, "Show the Command Zero GUI", function(args)
     execCmd("showgui")
 end)
 
-end

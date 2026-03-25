@@ -531,59 +531,65 @@ local flyBody = nil
 
 
 --================================================================
--- LOAD MODULES
+-- SHARE STATE VIA GETGENV (same method as lock-on script)
 --================================================================
 
-local CZ_ENV = {
-    addcmd=addcmd,getPlayers=getPlayers,getstring=getstring,parseNumber=parseNumber,
-    notify=notify,sendChat=sendChat,systemMsg=systemMsg,
-    startLoop=startLoop,stopLoop=stopLoop,toggleLoop=toggleLoop,loopStates=loopStates,
-    execCmd=execCmd,connect=connect,myRoot=myRoot,myHumanoid=myHumanoid,
-    getChar=getChar,getRoot=getRoot,getHumanoid=getHumanoid,tweenMove=tweenMove,
-    clearESP=clearESP,espObjects=espObjects,waypoints=waypoints,
-    player=player,prefix=prefix,customAliases=customAliases,cmdHistory=cmdHistory,
-    flyActive=flyActive,flySpeed=flySpeed,flyBody=flyBody,flyGyro=flyGyro,
-    allConnections=allConnections,saveSettings=saveSettings,
-    genv=genv,cmds=cmds,activeLoops=activeLoops,cmdDescriptions=cmdDescriptions,
-}
+local _E = genv
+_E.CZ_addcmd = addcmd
+_E.CZ_getPlayers = getPlayers
+_E.CZ_getstring = getstring
+_E.CZ_parseNumber = parseNumber
+_E.CZ_notify = notify
+_E.CZ_sendChat = sendChat
+_E.CZ_systemMsg = systemMsg
+_E.CZ_startLoop = startLoop
+_E.CZ_stopLoop = stopLoop
+_E.CZ_toggleLoop = toggleLoop
+_E.CZ_loopStates = loopStates
+_E.CZ_execCmd = execCmd
+_E.CZ_connect = connect
+_E.CZ_myRoot = myRoot
+_E.CZ_myHumanoid = myHumanoid
+_E.CZ_getChar = getChar
+_E.CZ_getRoot = getRoot
+_E.CZ_getHumanoid = getHumanoid
+_E.CZ_tweenMove = tweenMove
+_E.CZ_clearESP = clearESP
+_E.CZ_espObjects = espObjects
+_E.CZ_waypoints = waypoints
+_E.CZ_player = player
+_E.CZ_prefix = prefix
+_E.CZ_customAliases = customAliases
+_E.CZ_cmdHistory = cmdHistory
+_E.CZ_allConnections = allConnections
+_E.CZ_saveSettings = saveSettings
+_E.CZ_cmds = cmds
+_E.CZ_activeLoops = activeLoops
+_E.CZ_cmdDescriptions = cmdDescriptions
+_E.CZ_flyActive = flyActive
+_E.CZ_flySpeed = flySpeed
+
+--================================================================
+-- LOAD MODULES (same method as lock-on script)
+--================================================================
 
 local MB = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
-local function loadMod(name)
-    local ok, err = pcall(function()
-        local src = game:HttpGet(MB..name, true)
-        local fn = loadstring(src)()
-        if type(fn) == "function" then fn(CZ_ENV) end
-    end)
-    if not ok then
-        warn("[CZ] Module error (" .. name .. "): " .. tostring(err))
-    end
+local function loadModule(url)
+    local s, r = pcall(function() return loadstring(game:HttpGet(url))() end)
+    if not s then warn("[CZ] Module error: " .. tostring(r)) end
+    return s and r or nil
 end
 
--- GUI
-local guiResult = nil
-local guiOk, guiErr = pcall(function()
-    local src = game:HttpGet(MB.."CZ_gui", true)
-    local fn = loadstring(src)()
-    if type(fn) == "function" then guiResult = fn(CZ_ENV) end
-end)
-if not guiOk then
-    warn("[CZ] GUI module error: " .. tostring(guiErr))
-    notify("CZ Error", "GUI failed: " .. tostring(guiErr):sub(1, 80))
-end
-
+local guiResult = loadModule(MB .. "CZ_gui")
 local gui = guiResult and guiResult.gui
 local populateCommands = guiResult and guiResult.populateCommands
-local switchTab = guiResult and guiResult.switchTab
-local tabPages = guiResult and guiResult.tabPages
 if gui then genv[CZ_KEY].Gui = gui end
 
--- Commands
-loadMod("CZ_cmds_core")
-loadMod("CZ_cmds0")
-loadMod("CZ_cmds1")
-loadMod("CZ_cmds2")
+loadModule(MB .. "CZ_cmds_core")
+loadModule(MB .. "CZ_cmds0")
+loadModule(MB .. "CZ_cmds1")
+loadModule(MB .. "CZ_cmds2")
 
--- Populate
 if populateCommands then populateCommands() end
 
 

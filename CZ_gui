@@ -1,19 +1,19 @@
--- Command Zero GUI Module
-return function(env)
-local player = env.player
-local playerGui = player:WaitForChild("PlayerGui")
-local cmds = env.cmds
-local cmdDescriptions = env.cmdDescriptions
-local prefix = env.prefix
-local execCmd = env.execCmd
-local cmdHistory = env.cmdHistory
-local connect = env.connect
-local notify = env.notify
-local customAliases = env.customAliases
-local saveSettings = env.saveSettings
-local allConnections = env.allConnections
-local genv = env.genv
+-- Command Zero GUI Module (reads shared state from getgenv)
+local _E = getgenv and getgenv() or _G
+local player = _E.CZ_player
+local cmds = _E.CZ_cmds
+local cmdDescriptions = _E.CZ_cmdDescriptions
+local prefix = _E.CZ_prefix
+local execCmd = _E.CZ_execCmd
+local cmdHistory = _E.CZ_cmdHistory
+local connect = _E.CZ_connect
+local notify = _E.CZ_notify
+local customAliases = _E.CZ_customAliases
+local saveSettings = _E.CZ_saveSettings
+local allConnections = _E.CZ_allConnections
+local genv = _E
 
+local playerGui = player:WaitForChild("PlayerGui")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -861,4 +861,3 @@ return {
     toggleBtn = toggleBtn,
     guiOpen = guiOpen,
 }
-end

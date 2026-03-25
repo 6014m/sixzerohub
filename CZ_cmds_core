@@ -1,18 +1,50 @@
--- Command Zero Core Commands: Movement, Character, Visual, Server
-return function(env)
-local addcmd,getPlayers,getstring,parseNumber,notify,sendChat=env.addcmd,env.getPlayers,env.getstring,env.parseNumber,env.notify,env.sendChat
-local startLoop,stopLoop,toggleLoop,loopStates=env.startLoop,env.stopLoop,env.toggleLoop,env.loopStates
-local execCmd,connect,myRoot,myHumanoid,getChar,getRoot,getHumanoid=env.execCmd,env.connect,env.myRoot,env.myHumanoid,env.getChar,env.getRoot,env.getHumanoid
-local tweenMove,clearESP,espObjects,player=env.tweenMove,env.clearESP,env.espObjects,env.player
-local allConnections,flyActive,flySpeed,flyBody,flyGyro=env.allConnections,env.flyActive,env.flySpeed,env.flyBody,env.flyGyro
-local Players=game:GetService("Players")
-local RunService=game:GetService("RunService")
-local TweenService=game:GetService("TweenService")
-local UserInputService=game:GetService("UserInputService")
-local Lighting=game:GetService("Lighting")
-local TeleportService=game:GetService("TeleportService")
-local MarketplaceService=game:GetService("MarketplaceService")
-local SoundService=game:GetService("SoundService")
+-- Command Zero Module (reads shared state from getgenv)
+local _E = getgenv and getgenv() or _G
+local addcmd = _E.CZ_addcmd
+local getPlayers = _E.CZ_getPlayers
+local getstring = _E.CZ_getstring
+local parseNumber = _E.CZ_parseNumber
+local notify = _E.CZ_notify
+local sendChat = _E.CZ_sendChat
+local systemMsg = _E.CZ_systemMsg
+local startLoop = _E.CZ_startLoop
+local stopLoop = _E.CZ_stopLoop
+local toggleLoop = _E.CZ_toggleLoop
+local loopStates = _E.CZ_loopStates
+local execCmd = _E.CZ_execCmd
+local connect = _E.CZ_connect
+local myRoot = _E.CZ_myRoot
+local myHumanoid = _E.CZ_myHumanoid
+local getChar = _E.CZ_getChar
+local getRoot = _E.CZ_getRoot
+local getHumanoid = _E.CZ_getHumanoid
+local tweenMove = _E.CZ_tweenMove
+local clearESP = _E.CZ_clearESP
+local espObjects = _E.CZ_espObjects
+local waypoints = _E.CZ_waypoints
+local player = _E.CZ_player
+local prefix = _E.CZ_prefix
+local customAliases = _E.CZ_customAliases
+local cmdHistory = _E.CZ_cmdHistory
+local allConnections = _E.CZ_allConnections
+local saveSettings = _E.CZ_saveSettings
+local cmds = _E.CZ_cmds
+local activeLoops = _E.CZ_activeLoops
+local genv = _E
+local flyActive = _E.CZ_flyActive
+local flySpeed = _E.CZ_flySpeed
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local StarterGui = game:GetService("StarterGui")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 -- COMMANDS: MOVEMENT & TELEPORT
 --================================================================
@@ -563,4 +595,3 @@ end)
 
 --================================================================
 
-end
