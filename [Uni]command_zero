@@ -1185,39 +1185,8 @@ addcmd("respawn", {}, "Force respawn", function()
     player:LoadCharacter()
 end)
 
-addcmd("god", {"godmode"}, "Set health to huge number", function()
-    local hum = myHumanoid()
-    if hum then hum.MaxHealth = math.huge; hum.Health = math.huge end
-    notify("God", "God mode enabled (client-side)")
-end)
 
-addcmd("invisible", {"invis"}, "Make character invisible (client-side)", function()
-    local char = getChar()
-    if not char then return end
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") then
-            p.Transparency = 1
-        elseif p:IsA("Decal") or p:IsA("Texture") then
-            p.Transparency = 1
-        end
-    end
-    local face = char:FindFirstChild("Head") and char.Head:FindFirstChild("face")
-    if face then face.Transparency = 1 end
-    notify("Invisible", "You are now invisible (client-side)")
-end)
 
-addcmd("visible", {"vis"}, "Make character visible again", function()
-    local char = getChar()
-    if not char then return end
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-            p.Transparency = 0
-        elseif p:IsA("Decal") or p:IsA("Texture") then
-            p.Transparency = 0
-        end
-    end
-    notify("Visible", "You are now visible")
-end)
 
 addcmd("animation", {"anim"}, "Play animation by ID", function(args)
     local id = args[1]
@@ -1232,31 +1201,8 @@ addcmd("animation", {"anim"}, "Play animation by ID", function(args)
     track:AdjustSpeed(speed)
 end)
 
-addcmd("removehats", {"nohats", "rhats"}, "Remove all hats", function()
-    local char = getChar()
-    if char then
-        for _, v in ipairs(char:GetChildren()) do
-            if v:IsA("Accessory") then v:Destroy() end
-        end
-    end
-end)
 
-addcmd("removelimbs", {"nolimbs"}, "Remove arms and legs", function()
-    local char = getChar()
-    if not char then return end
-    for _, name in ipairs({"Left Arm", "Right Arm", "Left Leg", "Right Leg", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "LeftHand", "RightHand", "LeftFoot", "RightFoot"}) do
-        local part = char:FindFirstChild(name)
-        if part then part:Destroy() end
-    end
-end)
 
-addcmd("removeface", {"noface"}, "Remove face", function()
-    local char = getChar()
-    if char and char:FindFirstChild("Head") then
-        local face = char.Head:FindFirstChild("face") or char.Head:FindFirstChildOfClass("Decal")
-        if face then face:Destroy() end
-    end
-end)
 
 addcmd("emote", {}, "Play emote by name or /e command", function(args)
     local name = getstring(1, args)
@@ -1993,17 +1939,6 @@ addcmd("uncartwheel", {}, "Stop cartwheel", function()
     stopLoop("cartwheel")
 end)
 
-addcmd("nugget", {}, "Make character look like a nugget", function()
-    local char = getChar()
-    if not char then return end
-    for _, name in ipairs({"Left Arm", "Right Arm", "Left Leg", "Right Leg", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "LeftHand", "RightHand", "LeftFoot", "RightFoot"}) do
-        local p = char:FindFirstChild(name)
-        if p then p:Destroy() end
-    end
-    local head = char:FindFirstChild("Head")
-    if head then head.Size = Vector3.new(1, 1, 1) end
-    notify("Nugget", "You are now a nugget")
-end)
 
 addcmd("annoy", {}, "Follow and mimic a player annoyingly", function(args)
     local targets = getPlayers(args[1])
@@ -2721,47 +2656,11 @@ end)
 -- COMMANDS: FUN EXTRAS (CmdX)
 --================================================================
 
-addcmd("sparkles", {}, "Add sparkles to character", function()
-    local root = myRoot()
-    if root then Instance.new("Sparkles", root) end
-end)
 
-addcmd("unsparkles", {}, "Remove sparkles", function()
-    local char = getChar()
-    if char then
-        for _, v in ipairs(char:GetDescendants()) do
-            if v:IsA("Sparkles") then v:Destroy() end
-        end
-    end
-end)
 
-addcmd("fire", {}, "Add fire to character", function()
-    local root = myRoot()
-    if root then Instance.new("Fire", root) end
-end)
 
-addcmd("unfire", {}, "Remove fire", function()
-    local char = getChar()
-    if char then
-        for _, v in ipairs(char:GetDescendants()) do
-            if v:IsA("Fire") then v:Destroy() end
-        end
-    end
-end)
 
-addcmd("smoke", {}, "Add smoke to character", function()
-    local root = myRoot()
-    if root then Instance.new("Smoke", root) end
-end)
 
-addcmd("unsmoke", {}, "Remove smoke", function()
-    local char = getChar()
-    if char then
-        for _, v in ipairs(char:GetDescendants()) do
-            if v:IsA("Smoke") then v:Destroy() end
-        end
-    end
-end)
 
 addcmd("stare", {}, "Stare at a player (face them)", function(args)
     local targets = getPlayers(args[1])
@@ -2784,51 +2683,8 @@ addcmd("unstare", {}, "Stop staring", function()
     stopLoop("stare")
 end)
 
-addcmd("headless", {}, "Make character appear headless", function()
-    local char = getChar()
-    if char then
-        local head = char:FindFirstChild("Head")
-        if head then
-            head.Transparency = 1
-            local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
-            if face then face.Transparency = 1 end
-            for _, v in ipairs(head:GetChildren()) do
-                if v:IsA("SpecialMesh") then v:Destroy() end
-            end
-        end
-        for _, v in ipairs(char:GetChildren()) do
-            if v:IsA("Accessory") then
-                local handle = v:FindFirstChild("Handle")
-                if handle then
-                    for _, att in ipairs(handle:GetChildren()) do
-                        if att:IsA("Attachment") and att.Name:find("Hat") then
-                            handle.Transparency = 1
-                        end
-                    end
-                end
-            end
-        end
-    end
-    notify("Headless", "Head hidden")
-end)
 
-addcmd("removearms", {"noarms"}, "Remove arms", function()
-    local char = getChar()
-    if not char then return end
-    for _, n in ipairs({"Left Arm", "Right Arm", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftHand", "RightHand"}) do
-        local p = char:FindFirstChild(n)
-        if p then p:Destroy() end
-    end
-end)
 
-addcmd("removelegs", {"nolegs"}, "Remove legs", function()
-    local char = getChar()
-    if not char then return end
-    for _, n in ipairs({"Left Leg", "Right Leg", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot"}) do
-        local p = char:FindFirstChild(n)
-        if p then p:Destroy() end
-    end
-end)
 
 addcmd("eightball", {"8ball"}, "Ask the magic 8-ball a question", function(args)
     local answers = {
@@ -3305,120 +3161,13 @@ addcmd("hatgear", {}, "Convert accessories to tools you can hold", function()
     notify("HatGear", "Hats converted to tools")
 end)
 
-addcmd("clearcharacter", {"clearchar"}, "Remove everything from character except essentials", function()
-    local char = getChar()
-    if not char then return end
-    for _, v in ipairs(char:GetChildren()) do
-        if v:IsA("Accessory") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") then
-            v:Destroy()
-        end
-    end
-    local head = char:FindFirstChild("Head")
-    if head then
-        local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
-        if face then face:Destroy() end
-    end
-    notify("ClearChar", "Character stripped")
-end)
 
-addcmd("removeshirt", {"noshirt"}, "Remove shirt", function()
-    local char = getChar()
-    if char then
-        for _, v in ipairs(char:GetChildren()) do
-            if v:IsA("Shirt") then v:Destroy() end
-        end
-    end
-end)
 
-addcmd("removepants", {"nopants"}, "Remove pants", function()
-    local char = getChar()
-    if char then
-        for _, v in ipairs(char:GetChildren()) do
-            if v:IsA("Pants") then v:Destroy() end
-        end
-    end
-end)
 
-addcmd("removeclothes", {"noclothes", "naked"}, "Remove all clothing", function()
-    local char = getChar()
-    if char then
-        for _, v in ipairs(char:GetChildren()) do
-            if v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") then v:Destroy() end
-        end
-    end
-end)
 
-addcmd("changecolor", {"bodycolor"}, "Change body color (R G B)", function(args)
-    local r = parseNumber(args[1], 255)
-    local g = parseNumber(args[2], 255)
-    local b = parseNumber(args[3], 255)
-    local color = Color3.fromRGB(r, g, b)
-    local char = getChar()
-    if not char then return end
-    local bc = char:FindFirstChildOfClass("BodyColors")
-    if bc then
-        bc.HeadColor3 = color
-        bc.LeftArmColor3 = color
-        bc.RightArmColor3 = color
-        bc.LeftLegColor3 = color
-        bc.RightLegColor3 = color
-        bc.TorsoColor3 = color
-    end
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-            p.Color = color
-        end
-    end
-end)
 
-addcmd("tiny", {"small"}, "Make character tiny", function()
-    local char = getChar()
-    if not char then return end
-    local hum = getHumanoid(char)
-    if hum then
-        local desc = hum:GetAppliedDescription()
-        if desc then
-            desc.HeadScale = 0.5
-            desc.BodyTypeScale = 0
-            desc.HeightScale = 0.5
-            desc.WidthScale = 0.5
-            desc.DepthScale = 0.5
-            hum:ApplyDescription(desc)
-        end
-    end
-end)
 
-addcmd("big", {"giant"}, "Make character big", function()
-    local char = getChar()
-    if not char then return end
-    local hum = getHumanoid(char)
-    if hum then
-        local desc = hum:GetAppliedDescription()
-        if desc then
-            desc.HeadScale = 3
-            desc.HeightScale = 3
-            desc.WidthScale = 3
-            desc.DepthScale = 3
-            hum:ApplyDescription(desc)
-        end
-    end
-end)
 
-addcmd("normal", {"normalsize"}, "Reset character size", function()
-    local char = getChar()
-    if not char then return end
-    local hum = getHumanoid(char)
-    if hum then
-        local desc = hum:GetAppliedDescription()
-        if desc then
-            desc.HeadScale = 1
-            desc.HeightScale = 1
-            desc.WidthScale = 1
-            desc.DepthScale = 1
-            hum:ApplyDescription(desc)
-        end
-    end
-end)
 
 --================================================================
 -- COMMANDS: TROLLING EXTENDED (CmdX)
@@ -4480,17 +4229,7 @@ addcmd("unloopjp", {}, "Stop loop jump power", function()
     stopLoop("loopjp")
 end)
 
-addcmd("loopgod", {}, "Continuously enforce god mode", function()
-    startLoop("loopgod", 0.5, function()
-        local hum = myHumanoid()
-        if hum then hum.MaxHealth = math.huge; hum.Health = math.huge end
-    end)
-    notify("LoopGod", "Enabled")
-end)
 
-addcmd("unloopgod", {}, "Stop loop god", function()
-    stopLoop("loopgod")
-end)
 
 addcmd("loopfov", {}, "Continuously enforce FOV", function(args)
     local val = parseNumber(args[1], 70)
@@ -4712,32 +4451,7 @@ addcmd("loadlocation", {"loadloc"}, "Load location from file", function(args)
     end)
 end)
 
-addcmd("hidechar", {}, "Make entire character invisible + noclip", function()
-    local char = getChar()
-    if not char then return end
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") then
-            p.Transparency = 1
-            p.CanCollide = false
-        elseif p:IsA("Decal") or p:IsA("Texture") then
-            p.Transparency = 1
-        end
-    end
-    notify("HideChar", "Character hidden")
-end)
 
-addcmd("unhidechar", {"showchar"}, "Restore character visibility", function()
-    local char = getChar()
-    if not char then return end
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-            p.Transparency = 0
-            p.CanCollide = true
-        elseif p:IsA("Decal") or p:IsA("Texture") then
-            p.Transparency = 0
-        end
-    end
-end)
 
 addcmd("camshake", {}, "Shake the camera", function(args)
     local intensity = parseNumber(args[1], 2)
@@ -5387,20 +5101,6 @@ addcmd("uncambobble", {}, "Stop camera bobble", function()
     stopLoop("cambobble")
 end)
 
-addcmd("boobsize", {}, "Resize upper torso (R15 joke command)", function(args)
-    local size = parseNumber(args[1], 3)
-    local char = getChar()
-    if not char then return end
-    local ut = char:FindFirstChild("UpperTorso")
-    if ut then
-        local mesh = ut:FindFirstChildOfClass("SpecialMesh")
-        if not mesh then
-            mesh = Instance.new("SpecialMesh", ut)
-            mesh.MeshType = Enum.MeshType.Brick
-        end
-        mesh.Scale = Vector3.new(1, size, 1)
-    end
-end)
 
 addcmd("cameraoffset", {"camoff"}, "Offset camera from character", function(args)
     local x = parseNumber(args[1], 0)
@@ -5686,47 +5386,9 @@ addcmd("removeinworkspace", {"removews"}, "Remove all parts with a specific name
     notify("Remove", "Removed " .. count .. " instances named '" .. name .. "'")
 end)
 
-addcmd("clonechar", {}, "Clone your character model", function()
-    local char = getChar()
-    if char then
-        local clone = char.Archivable and char:Clone()
-        if not clone then
-            char.Archivable = true
-            clone = char:Clone()
-            char.Archivable = false
-        end
-        if clone then
-            clone.Parent = workspace
-            clone.Name = "Clone_" .. player.Name
-            local hum = clone:FindFirstChildOfClass("Humanoid")
-            if hum then hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
-            notify("Clone", "Character cloned")
-        end
-    end
-end)
 
-addcmd("removeclones", {}, "Remove character clones", function()
-    for _, v in ipairs(workspace:GetChildren()) do
-        if v.Name:find("Clone_") then v:Destroy() end
-    end
-end)
 
-addcmd("ghost", {}, "Ghost effect (semi-transparent + noclip)", function()
-    local char = getChar()
-    if not char then return end
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-            p.Transparency = 0.6
-        end
-    end
-    execCmd("noclip")
-    notify("Ghost", "Ghost mode active")
-end)
 
-addcmd("unghost", {}, "Disable ghost mode", function()
-    execCmd("visible")
-    execCmd("clip")
-end)
 
 addcmd("loopkill", {}, "Continuously kill yourself (for some game mechanics)", function()
     startLoop("loopkill", 1, function()
@@ -5820,16 +5482,6 @@ addcmd("unvfly", {"unvehiclefly"}, "Stop vehicle fly", function()
     stopLoop("vfly")
 end)
 
-addcmd("toggleinvis", {}, "Toggle invisible", function()
-    local char = getChar()
-    if not char then return end
-    local head = char:FindFirstChild("Head")
-    if head and head.Transparency >= 0.9 then
-        execCmd("visible")
-    else
-        execCmd("invisible")
-    end
-end)
 
 addcmd("togglenoclip", {}, "Toggle noclip", function()
     if loopStates["noclip"] then
@@ -5926,51 +5578,8 @@ addcmd("serveruptime", {"uptime"}, "Show how long the server has been running", 
     notify("Uptime", string.format("%.0f seconds (%.1f minutes)", workspace.DistributedGameTime, workspace.DistributedGameTime / 60))
 end)
 
-addcmd("charinfo", {}, "Show character info (health, speed, etc)", function()
-    local hum = myHumanoid()
-    local root = myRoot()
-    if not hum then return end
-    local info = {
-        "Health: " .. math.floor(hum.Health) .. "/" .. math.floor(hum.MaxHealth),
-        "WalkSpeed: " .. hum.WalkSpeed,
-        "JumpPower: " .. hum.JumpPower,
-        "HipHeight: " .. hum.HipHeight,
-        "MaxSlopeAngle: " .. hum.MaxSlopeAngle,
-    }
-    if root then
-        table.insert(info, "Position: " .. string.format("%.1f, %.1f, %.1f", root.Position.X, root.Position.Y, root.Position.Z))
-        table.insert(info, "Velocity: " .. string.format("%.1f", root.AssemblyLinearVelocity.Magnitude))
-    end
-    notify("Character Info", table.concat(info, "\n"), 10)
-end)
 
-addcmd("npc", {}, "Spawn a dummy NPC at your position", function()
-    local root = myRoot()
-    if not root then return end
-    local model = Instance.new("Model", workspace)
-    model.Name = "CZ_NPC"
-    local torso = Instance.new("Part", model)
-    torso.Name = "HumanoidRootPart"
-    torso.Size = Vector3.new(2, 2, 1)
-    torso.CFrame = root.CFrame + Vector3.new(3, 0, 0)
-    torso.Anchored = true
-    torso.Color = Color3.fromRGB(0, 170, 255)
-    local head = Instance.new("Part", model)
-    head.Name = "Head"
-    head.Size = Vector3.new(1, 1, 1)
-    head.CFrame = torso.CFrame + Vector3.new(0, 1.5, 0)
-    head.Anchored = true
-    head.Shape = Enum.PartType.Ball
-    local hum = Instance.new("Humanoid", model)
-    model.PrimaryPart = torso
-    notify("NPC", "Spawned dummy NPC")
-end)
 
-addcmd("removenpcs", {"clearnpcs"}, "Remove spawned NPCs", function()
-    for _, v in ipairs(workspace:GetChildren()) do
-        if v.Name == "CZ_NPC" then v:Destroy() end
-    end
-end)
 
 --================================================================
 -- COMMANDS: REMAINING BATCH (IY + CmdX parity)
@@ -6088,17 +5697,6 @@ addcmd("flatchar", {"flat"}, "Flatten character horizontally", function()
     end
 end)
 
-addcmd("randomcolor", {"rcolor"}, "Set character to random color", function()
-    local color = Color3.fromRGB(math.random(0, 255), math.random(0, 255), math.random(0, 255))
-    local char = getChar()
-    if char then
-        for _, p in ipairs(char:GetDescendants()) do
-            if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-                p.Color = color
-            end
-        end
-    end
-end)
 
 addcmd("team2", {"changeteam"}, "Try to change team by name (game dependent)", function(args)
     local teamName = getstring(1, args):lower()
@@ -6403,16 +6001,6 @@ addcmd("unanimsync", {}, "Stop anim sync", function()
     stopLoop("animsync")
 end)
 
-addcmd("humanoidinfo", {"huminfo"}, "Show humanoid properties", function()
-    local hum = myHumanoid()
-    if not hum then return end
-    notify("Humanoid", string.format(
-        "State: %s\nHealth: %.0f/%.0f\nWS: %.1f\nJP: %.1f\nHH: %.1f\nAutoRotate: %s\nSit: %s",
-        tostring(hum:GetState()), hum.Health, hum.MaxHealth,
-        hum.WalkSpeed, hum.JumpPower, hum.HipHeight,
-        tostring(hum.AutoRotate), tostring(hum.Sit)
-    ), 10)
-end)
 
 addcmd("networkowner", {}, "Show network owner of parts you click", function()
     notify("NetOwner", "Click a part...")
@@ -6457,48 +6045,12 @@ addcmd("showui", {}, "Show all game UI", function()
     pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true) end)
 end)
 
-addcmd("loopheal", {}, "Continuously heal yourself", function()
-    startLoop("loopheal", 0.1, function()
-        local hum = myHumanoid()
-        if hum then hum.Health = hum.MaxHealth end
-    end)
-    notify("LoopHeal", "Enabled")
-end)
 
-addcmd("unloopheal", {}, "Stop loop heal", function()
-    stopLoop("loopheal")
-end)
 
-addcmd("heal", {}, "Heal to max health", function()
-    local hum = myHumanoid()
-    if hum then hum.Health = hum.MaxHealth end
-end)
 
-addcmd("damage", {"dmg"}, "Damage yourself by amount", function(args)
-    local amount = parseNumber(args[1], 10)
-    local hum = myHumanoid()
-    if hum then hum.Health = hum.Health - amount end
-end)
 
-addcmd("sethealth", {"hp"}, "Set health to value", function(args)
-    local val = parseNumber(args[1], 100)
-    local hum = myHumanoid()
-    if hum then
-        hum.MaxHealth = val
-        hum.Health = val
-    end
-end)
 
-addcmd("setmaxhealth", {"maxhp"}, "Set max health", function(args)
-    local val = parseNumber(args[1], 100)
-    local hum = myHumanoid()
-    if hum then hum.MaxHealth = val end
-end)
 
-addcmd("godfly", {}, "God mode + fly", function()
-    execCmd("god")
-    execCmd("fly")
-end)
 
 addcmd("speedhack", {}, "Speed + noclip combo", function(args)
     local val = args[1] or "100"
@@ -6507,18 +6059,7 @@ addcmd("speedhack", {}, "Speed + noclip combo", function(args)
     notify("SpeedHack", "Speed " .. val .. " + Noclip")
 end)
 
-addcmd("troll", {}, "Troll combo: spin + fire + sparkles", function()
-    execCmd("spin 30")
-    execCmd("fire")
-    execCmd("sparkles")
-    notify("Troll", "Maximum trolling activated")
-end)
 
-addcmd("untroll", {}, "Stop troll effects", function()
-    execCmd("unspin")
-    execCmd("unfire")
-    execCmd("unsparkles")
-end)
 
 addcmd("rage", {}, "Rage combo: speed + fling + spin", function()
     execCmd("speed 200")
@@ -6531,26 +6072,14 @@ addcmd("unrage", {}, "Stop rage", function()
     execCmd("unspin")
 end)
 
-addcmd("ninja", {}, "Ninja combo: invisible + noclip + speed", function()
-    execCmd("invisible")
-    execCmd("noclip")
-    execCmd("speed 50")
-    notify("Ninja", "Stealth mode")
-end)
 
-addcmd("unninja", {}, "Stop ninja mode", function()
-    execCmd("visible")
-    execCmd("clip")
-    execCmd("speed 16")
-end)
 
-addcmd("admin", {}, "Give yourself admin-like abilities (client)", function()
+addcmd("admin", {}, "Give yourself admin-like abilities", function()
     execCmd("fly")
     execCmd("noclip")
-    execCmd("god")
     execCmd("esp")
     execCmd("infjump")
-    notify("Admin", "Client admin powers enabled")
+    notify("Admin", "Admin powers enabled")
 end)
 
 addcmd("unadmin", {}, "Remove admin abilities", function()
@@ -6625,13 +6154,6 @@ addcmd("clientbring", {}, "Bring player to you (client CFrame)", function(args)
     end
 end)
 
-addcmd("clientkill2", {}, "Kill player client-side (set health 0)", function(args)
-    local targets = getPlayers(args[1])
-    for _, t in ipairs(targets) do
-        local hum = getHumanoid(t.Character)
-        if hum then hum.Health = 0 end
-    end
-end)
 
 addcmd("antiragdoll", {}, "Prevent ragdoll state", function()
     startLoop("antiragdoll", 0, function()
@@ -6658,28 +6180,7 @@ addcmd("forceplace", {}, "Force teleport to a place ID", function(args)
     end
 end)
 
-addcmd("hideothers", {}, "Make all other players invisible to you", function()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            for _, part in ipairs(p.Character:GetDescendants()) do
-                if part:IsA("BasePart") then part.Transparency = 1 end
-                if part:IsA("Decal") then part.Transparency = 1 end
-            end
-        end
-    end
-    notify("HideOthers", "Other players hidden")
-end)
 
-addcmd("showothers", {"unhideothers"}, "Make all other players visible", function()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            for _, part in ipairs(p.Character:GetDescendants()) do
-                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then part.Transparency = 0 end
-                if part:IsA("Decal") then part.Transparency = 0 end
-            end
-        end
-    end
-end)
 
 addcmd("removescripts", {"noscripts"}, "Remove all scripts from workspace", function()
     local count = 0
@@ -6801,7 +6302,6 @@ addcmd("unwallhack", {}, "Disable wallhack", function()
 end)
 
 addcmd("survival", {}, "Survival kit: god + fly + esp + fullbright", function()
-    execCmd("god")
     execCmd("fly")
     execCmd("esp")
     execCmd("fullbright")
@@ -7174,15 +6674,6 @@ addcmd("clearplatforms", {}, "Remove all CZ-created platforms", function()
     end
 end)
 
-addcmd("nonick", {"blocknick"}, "Block display name changes (show username)", function()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Character then
-            local hum = getHumanoid(p.Character)
-            if hum then hum.DisplayName = p.Name end
-        end
-    end
-    notify("NoNick", "Display names set to usernames")
-end)
 
 addcmd("listscripts", {}, "List all LocalScripts", function()
     local list = {}
@@ -7249,87 +6740,11 @@ addcmd("countdown3", {}, "Countdown in system messages", function(args)
     end)
 end)
 
-addcmd("spinhats", {}, "Spin your hats around your head", function(args)
-    local speed = parseNumber(args[1], 5)
-    local char = getChar()
-    if not char then return end
-    local hats = {}
-    for _, v in ipairs(char:GetChildren()) do
-        if v:IsA("Accessory") then table.insert(hats, v) end
-    end
-    if #hats == 0 then return end
-    startLoop("spinhats", 0, function()
-        local root = myRoot()
-        if not root then return end
-        for i, hat in ipairs(hats) do
-            local handle = hat:FindFirstChild("Handle")
-            if handle then
-                local t = tick() * speed + (i / #hats) * math.pi * 2
-                local offset = Vector3.new(math.cos(t) * 3, 2, math.sin(t) * 3)
-                handle.CFrame = CFrame.new(root.Position + offset)
-            end
-        end
-    end)
-    notify("SpinHats", "Spinning " .. #hats .. " hats")
-end)
 
-addcmd("unspinhats", {}, "Stop spinning hats", function()
-    stopLoop("spinhats")
-end)
 
-addcmd("hatspin2", {}, "Individual hat spin on head", function(args)
-    local speed = parseNumber(args[1], 10)
-    startLoop("hatspin2", 0, function()
-        local char = getChar()
-        if not char then return end
-        for _, v in ipairs(char:GetChildren()) do
-            if v:IsA("Accessory") then
-                local handle = v:FindFirstChild("Handle")
-                if handle then
-                    handle.CFrame = handle.CFrame * CFrame.Angles(0, math.rad(speed), 0)
-                end
-            end
-        end
-    end)
-end)
 
-addcmd("unhatspin2", {}, "Stop hat spin", function()
-    stopLoop("hatspin2")
-end)
 
-addcmd("cleanhats", {}, "Remove hat meshes (invisible hats for flings)", function()
-    local char = getChar()
-    if not char then return end
-    for _, v in ipairs(char:GetChildren()) do
-        if v:IsA("Accessory") then
-            local handle = v:FindFirstChild("Handle")
-            if handle then
-                for _, m in ipairs(handle:GetChildren()) do
-                    if m:IsA("SpecialMesh") or m:IsA("FileMesh") then m:Destroy() end
-                end
-                handle.Transparency = 1
-            end
-        end
-    end
-end)
 
-addcmd("gethat", {}, "Get hat asset ID from accessories", function()
-    local char = getChar()
-    if not char then return end
-    local list = {}
-    for _, v in ipairs(char:GetChildren()) do
-        if v:IsA("Accessory") then
-            local handle = v:FindFirstChild("Handle")
-            if handle then
-                local mesh = handle:FindFirstChildOfClass("SpecialMesh")
-                if mesh then
-                    table.insert(list, v.Name .. " — " .. mesh.MeshId)
-                end
-            end
-        end
-    end
-    notify("Hats", #list > 0 and table.concat(list, "\n") or "No hats", 10)
-end)
 
 addcmd("fex", {}, "Load F3X building tools (alias)", function()
     execCmd("f3x")
