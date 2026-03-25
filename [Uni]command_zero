@@ -562,7 +562,7 @@ end
 -- GUI
 local guiResult = nil
 local guiOk, guiErr = pcall(function()
-    local src = game:HttpGet(MB.."%5BUni%5Dcommand_zero_gui")
+    local src = game:HttpGet(MB.."CZ_gui")
     local fn = loadstring(src)()
     if type(fn) == "function" then guiResult = fn(CZ_ENV) end
 end)
@@ -578,10 +578,10 @@ local tabPages = guiResult and guiResult.tabPages
 if gui then genv[CZ_KEY].Gui = gui end
 
 -- Commands
-loadMod("%5BUni%5Dcommand_zero_cmds_core")
-loadMod("%5BUni%5Dcommand_zero_cmds0")
-loadMod("%5BUni%5Dcommand_zero_cmds1")
-loadMod("%5BUni%5Dcommand_zero_cmds")
+loadMod("CZ_cmds_core")
+loadMod("CZ_cmds0")
+loadMod("CZ_cmds1")
+loadMod("CZ_cmds2")
 
 -- Populate
 if populateCommands then populateCommands() end

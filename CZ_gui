@@ -569,6 +569,8 @@ end)
 -- POPULATE PLAYERS TAB
 --================================================================
 
+local Players = game:GetService("Players")
+
 local function populatePlayers()
     local page = tabPages["Players"]
     if not page then return end
@@ -611,7 +613,6 @@ local function populatePlayers()
     end
 end
 
-local Players = game:GetService("Players")
 populatePlayers()
 connect(Players.PlayerAdded, function() task.wait(1); populatePlayers() end)
 connect(Players.PlayerRemoving, function() task.wait(0.5); populatePlayers() end)
