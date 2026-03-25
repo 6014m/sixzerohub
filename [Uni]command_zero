@@ -1411,10 +1411,10 @@ end)
 
 local levitateActive = false
 local levitateOldWS = 16
-addcmd("levitate", {"lev", "hover"}, "Hover and tilt toward move direction (speed optional)", function(args)
+addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [speed])", function(args)
     execCmd("unlevitate")
-    local bobSpeed = parseNumber(args[1], 0.8)
-    local max = 2
+    local max = parseNumber(args[1], 2)
+    local bobSpeed = parseNumber(args[2], 0.8)
     local min = max - 0.4
     local tiltAngle = 12
     local moveSpeed = 0.075
