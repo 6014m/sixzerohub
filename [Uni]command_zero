@@ -1267,6 +1267,8 @@ do
             .. "  Right Ctrl = toggle GUI\n"
             .. "  Tab = autocomplete command\n"
             .. "  Up/Down = command history\n\n"
+            .. "  TIPS\n"
+            .. "  x = use default value (e.g. levitate x x 5)\n\n"
             .. "  COMMANDS: " .. tostring(#cmds) .. " loaded"
 
         local infoLbl = Instance.new("TextLabel")
