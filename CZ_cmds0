@@ -102,7 +102,7 @@ addcmd("antivoid", {}, "Teleport back up if you fall into the void", function(ar
     notify("Anti-Void", "Enabled")
 end)
 
-addcmd("unantivoid", {}, "Disable anti-void", function(args)
+addcmd("unantivoid", {"noantivoid"}, "Disable anti-void", function(args)
     stopLoop("antivoid")
     notify("Anti-Void", "Disabled")
 end)
@@ -118,7 +118,7 @@ addcmd("infjump", {"infinitejump", "ij"}, "Infinite jump", function(args)
     notify("Infinite Jump", "Enabled")
 end)
 
-addcmd("uninfjump", {"unij"}, "Disable infinite jump", function(args)
+addcmd("uninfjump", {"unij", "uninfinitejump", "noinfjump", "noinfinitejump"}, "Disable infinite jump", function(args)
     stopLoop("infjump")
     notify("Infinite Jump", "Disabled")
 end)

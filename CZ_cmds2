@@ -130,7 +130,7 @@ addcmd("clearunanchored", {"clearparts"}, "Remove all unanchored parts", functio
     notify("Clear", "Removed " .. count .. " parts")
 end)
 
-addcmd("partpath", {"ppath"}, "Get full path of a part (click)", function(args)
+addcmd("partpath", {"ppath", "partname"}, "Get full path of a part (click)", function(args)
     notify("PartPath", "Click a part...")
     local mouse = player:GetMouse()
     local conn
@@ -158,7 +158,7 @@ addcmd("unanchorall", {}, "Unanchor all parts", function(args)
     notify("Unanchor", "All parts unanchored")
 end)
 
-addcmd("removeterrain", {"noterrain"}, "Remove all terrain", function(args)
+addcmd("removeterrain", {"noterrain", "rterrain"}, "Remove all terrain", function(args)
     pcall(function() workspace.Terrain:Clear() end)
     notify("Terrain", "Cleared")
 end)
@@ -428,7 +428,7 @@ addcmd("nohurtoverlay", {"nohurt"}, "Remove red damage overlay", function(args)
     notify("HurtOverlay", "Disabled")
 end)
 
-addcmd("wallwalk", {"wallclimb"}, "Walk on walls", function(args)
+addcmd("wallwalk", {"wallclimb", "walkonwalls"}, "Walk on walls", function(args)
     startLoop("wallwalk", 0, function()
         local root = myRoot()
         if root then
@@ -447,7 +447,7 @@ addcmd("unwallwalk", {"unwallclimb"}, "Disable wall walk", function(args)
     stopLoop("wallwalk")
 end)
 
-addcmd("tptool", {}, "Click to teleport with tool equipped", function(args)
+addcmd("tptool", {"teleporttool"}, "Click to teleport with tool equipped", function(args)
     local on = toggleLoop("tptool", 0.05, function() end)
     if on then
         notify("TPTool", "Enabled — click to teleport tool to location")
@@ -910,7 +910,7 @@ addcmd("fogcolor", {}, "Set fog color (R G B)", function(args)
     Lighting.FogColor = Color3.new(r, g, b)
 end)
 
-addcmd("restorelighting", {"fixlighting"}, "Restore default lighting", function(args)
+addcmd("restorelighting", {"fixlighting", "rlighting"}, "Restore default lighting", function(args)
     Lighting.Brightness = 1
     Lighting.ClockTime = 14
     Lighting.FogEnd = 100000
@@ -940,7 +940,7 @@ end)
 -- COMMANDS: LOOP VARIANTS (IY style)
 --================================================================
 
-addcmd("loopspeed", {}, "Continuously enforce walkspeed", function(args)
+addcmd("loopspeed", {"loopws"}, "Continuously enforce walkspeed", function(args)
     local val = parseNumber(args[1], 16)
     startLoop("loopspeed", 0.1, function()
         local hum = myHumanoid()
@@ -949,7 +949,7 @@ addcmd("loopspeed", {}, "Continuously enforce walkspeed", function(args)
     notify("LoopSpeed", "Enforcing " .. val)
 end)
 
-addcmd("unloopspeed", {}, "Stop loop speed", function(args)
+addcmd("unloopspeed", {"unloopws"}, "Stop loop speed", function(args)
     stopLoop("loopspeed")
 end)
 
@@ -1001,7 +1001,7 @@ addcmd("output", {"console"}, "Open F9 output console", function(args)
     end)
 end)
 
-addcmd("joinlogs", {}, "Show when players join/leave", function(args)
+addcmd("joinlogs", {"jlogs"}, "Show when players join/leave", function(args)
     connect(Players.PlayerAdded, function(p)
         notify("Join", p.Name .. " joined", 3)
     end)
@@ -1039,7 +1039,7 @@ addcmd("rec", {"record"}, "Toggle Roblox recording", function(args)
     pcall(function() game:GetService("CoreGui"):ToggleRecording() end)
 end)
 
-addcmd("togglefs", {"fullscreen"}, "Toggle fullscreen", function(args)
+addcmd("togglefs", {"fullscreen", "togglefullscreen"}, "Toggle fullscreen", function(args)
     pcall(function() game:GetService("GuiService"):ToggleFullscreen() end)
 end)
 
@@ -1103,7 +1103,7 @@ addcmd("hideguis", {}, "Hide all visible GUI frames", function(args)
     notify("HideGuis", "Hid " .. count .. " elements")
 end)
 
-addcmd("replicationlag", {"replag"}, "Set data send rate (simulates lag)", function(args)
+addcmd("replicationlag", {"replag", "backtrack"}, "Set data send rate (simulates lag)", function(args)
     local val = parseNumber(args[1], 30)
     pcall(function()
         settings():GetService("NetworkSettings").IncomingReplicationLag = val / 1000
@@ -1607,7 +1607,7 @@ addcmd("tpcancel", {"canceltp"}, "Cancel pending teleport", function(args)
     notify("Teleport", "Cancelled")
 end)
 
-addcmd("phonebook", {}, "List all player UserIds and display names", function(args)
+addcmd("phonebook", {"call"}, "List all player UserIds and display names", function(args)
     local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
         table.insert(list, p.Name .. " (" .. p.DisplayName .. ") ID:" .. p.UserId)
@@ -1809,7 +1809,7 @@ addcmd("unmutevc", {"unmutevoice"}, "Unmute voice chat", function(args)
     end)
 end)
 
-addcmd("lay", {}, "Lay down animation", function(args)
+addcmd("lay", {"laydown"}, "Lay down animation", function(args)
     sendChat("/e lay")
     local hum = myHumanoid()
     if hum then
@@ -1973,7 +1973,7 @@ addcmd("uncframefly", {"uncfly"}, "Stop CFrame fly", function(args)
     if hum then hum.PlatformStand = false end
 end)
 
-addcmd("vehicleclip", {"vclip"}, "Noclip for vehicles", function(args)
+addcmd("vehicleclip", {"vclip", "unvnoclip", "unvehiclenoclip"}, "Noclip for vehicles", function(args)
     startLoop("vclip", 0, function()
         local hum = myHumanoid()
         if hum and hum.SeatPart then
@@ -1992,7 +1992,7 @@ addcmd("unvehicleclip", {"unvclip"}, "Disable vehicle clip", function(args)
     stopLoop("vclip")
 end)
 
-addcmd("handlekill", {}, "Kill players using tool handle touch (requires firetouchinterest)", function(args)
+addcmd("handlekill", {"hkill"}, "Kill players using tool handle touch (requires firetouchinterest)", function(args)
     local targets = getPlayers(args[1])
     if not firetouchinterest then notify("HandleKill", "Requires firetouchinterest"); return end
     local char = getChar()
@@ -2504,7 +2504,7 @@ addcmd("partesp2", {}, "Highlight all parts with a specific name", function(args
     notify("PartESP", "Highlighting " .. count .. " parts named '" .. name .. "'")
 end)
 
-addcmd("unpartesp", {}, "Remove part ESP highlights", function(args)
+addcmd("unpartesp", {"nopartesp"}, "Remove part ESP highlights", function(args)
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Highlight") and v.Name == "CZ_PartESP" then v:Destroy() end
     end
@@ -2556,7 +2556,7 @@ addcmd("removetextures", {"notextures"}, "Remove all textures/decals", function(
     notify("Textures", "Removed " .. count)
 end)
 
-addcmd("spawnpoint", {"setspawn"}, "Set spawn point to current position", function(args)
+addcmd("spawnpoint", {"setspawn", "spawn"}, "Set spawn point to current position", function(args)
     local root = myRoot()
     if not root then return end
     local sp = Instance.new("SpawnLocation")
@@ -2606,7 +2606,7 @@ addcmd("serverlag", {}, "Show server heartbeat rate", function(args)
     notify("Server", "Heartbeat: " .. steps .. " Hz")
 end)
 
-addcmd("copyname", {}, "Copy player's username to clipboard", function(args)
+addcmd("copyname", {"copyuser"}, "Copy player's username to clipboard", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         pcall(function() if setclipboard then setclipboard(t.Name) end end)
@@ -2850,7 +2850,7 @@ addcmd("unnofall2", {}, "Disable nofall2", function(args)
     stopLoop("nofall2")
 end)
 
-addcmd("clientbring", {}, "Bring player to you (client CFrame)", function(args)
+addcmd("clientbring", {"cbring"}, "Bring player to you (client CFrame)", function(args)
     local targets = getPlayers(args[1])
     local root = myRoot()
     if not root then return end

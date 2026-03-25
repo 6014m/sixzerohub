@@ -31,7 +31,7 @@ addcmd("jumppower", {"jp"}, "Set jump power (default 50)", function(args)
     notify("Jump", "JumpPower set to " .. val)
 end)
 
-addcmd("hipheight", {"hh"}, "Set hip height", function(args)
+addcmd("hipheight", {"hh", "hheight"}, "Set hip height", function(args)
     local val = parseNumber(args[1], 0)
     local hum = myHumanoid()
     if hum then hum.HipHeight = val end
@@ -42,7 +42,7 @@ addcmd("gravity", {"grav"}, "Set workspace gravity (default 196.2)", function(ar
     notify("Gravity", "Set to " .. workspace.Gravity)
 end)
 
-addcmd("goto", {"tp"}, "Teleport to player", function(args)
+addcmd("goto", {"tp", "to"}, "Teleport to player", function(args)
     local targets = getPlayers(args[1])
     for _, t in ipairs(targets) do
         local tRoot = getRoot(t.Character)
@@ -54,7 +54,7 @@ addcmd("goto", {"tp"}, "Teleport to player", function(args)
     end
 end)
 
-addcmd("tweengoto", {"tweento", "tgoto"}, "Tween to player smoothly", function(args)
+addcmd("tweengoto", {"tweento", "tgoto", "tto"}, "Tween to player smoothly", function(args)
     local targets = getPlayers(args[1])
     local duration = parseNumber(args[2], 2)
     for _, t in ipairs(targets) do
@@ -164,7 +164,7 @@ addcmd("fly", {"flygui"}, "Toggle fly with BodyGyro rotation (IY method, WASD + 
     end)
 end)
 
-addcmd("unfly", {"nofly"}, "Disable fly", function(args)
+addcmd("unfly", {"nofly", "novfly", "unvehiclefly", "novehiclefly", "unvfly"}, "Disable fly", function(args)
     flyActive = false
     if flyBody then pcall(function() flyBody:Destroy() end); flyBody = nil end
     if flyGyro then pcall(function() flyGyro:Destroy() end); flyGyro = nil end
@@ -332,7 +332,7 @@ end)
 
 
 
-addcmd("emote", {"e"}, "Play emote by name or /e command", function(args)
+addcmd("emote", {"e", "em"}, "Play emote by name or /e command", function(args)
     local name = getstring(1, args)
     if name == "" then return end
     sendChat("/e " .. name)
@@ -449,7 +449,7 @@ addcmd("unxray", {"noxray", "unx"}, "Restore part transparency", function(args)
     notify("X-Ray", "Disabled")
 end)
 
-addcmd("fullbright", {"fb", "bright"}, "Remove all darkness/fog", function(args)
+addcmd("fullbright", {"fb", "bright", "fullbrightness"}, "Remove all darkness/fog", function(args)
     Lighting.Brightness = 2
     Lighting.ClockTime = 14
     Lighting.FogEnd = 100000
@@ -512,13 +512,13 @@ addcmd("serverhop", {"shp", "shop"}, "Join a different server", function(args)
     end)
 end)
 
-addcmd("copyplaceid", {"cpid"}, "Copy PlaceId to clipboard", function(args)
+addcmd("copyplaceid", {"cpid", "placeid"}, "Copy PlaceId to clipboard", function(args)
     local id = tostring(game.PlaceId)
     pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
     notify("Copied", "PlaceId: " .. id)
 end)
 
-addcmd("copygameid", {"cgid"}, "Copy GameId to clipboard", function(args)
+addcmd("copygameid", {"cgid", "gameid"}, "Copy GameId to clipboard", function(args)
     local id = tostring(game.GameId)
     pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
     notify("Copied", "GameId: " .. id)

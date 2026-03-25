@@ -386,6 +386,31 @@ local TAG_COLORS = {
     combat = Color3.fromRGB(255, 60, 60),
 }
 
+-- Auto-tag inference from command name/description
+local function inferTag(cmd)
+    if cmd.TAG and cmd.TAG ~= "" then return cmd.TAG end
+    local n = cmd.NAME:lower()
+    local d = (cmd.DESC or ""):lower()
+    local nd = n .. " " .. d
+    if nd:find("teleport") or nd:find("goto") or nd:find("waypoint") or nd:find("tween") or n:find("^tp") then return "teleport"
+    elseif nd:find("speed") or nd:find("walk") or nd:find("fly") or nd:find("noclip") or nd:find("clip") or nd:find("jump") or nd:find("gravity") or nd:find("hipheight") or nd:find("swim") or nd:find("float") or nd:find("obby") then return "movement"
+    elseif nd:find("esp") or nd:find("xray") or nd:find("fullbright") or nd:find("chams") or nd:find("nametag") or nd:find("tracer") or nd:find("highlight") or nd:find("fov") or nd:find("crosshair") then return "visual"
+    elseif nd:find("camera") or nd:find("freecam") or nd:find("view") or nd:find("spectate") or nd:find("lookat") or nd:find("zoom") or nd:find("firstperson") or nd:find("thirdperson") then return "camera"
+    elseif nd:find("anti") or nd:find("nosit") or nd:find("nofall") or nd:find("infjump") then return "anti"
+    elseif nd:find("fling") or nd:find("spin") or nd:find("seizure") or nd:find("annoy") or nd:find("bang") or nd:find("piggy") or nd:find("plague") or nd:find("trip") or nd:find("scare") or nd:find("stare") or nd:find("cartwheel") or nd:find("disco") or nd:find("chaos") or nd:find("8ball") or nd:find("countdown") or nd:find("emote") or nd:find("dance") or nd:find("afk") then return "fun"
+    elseif nd:find("chat") or nd:find("spam") or nd:find("whisper") or nd:find("compliment") or nd:find("roast") or nd:find("uwu") or nd:find("retard") or nd:find("bypass") or nd:find("smart") or nd:find("shout") or nd:find("mock") then return "chat"
+    elseif nd:find("rejoin") or nd:find("server") or nd:find("placeid") or nd:find("gameid") or nd:find("jobid") or nd:find("team") or nd:find("age") then return "server"
+    elseif nd:find("reach") or nd:find("aura") or nd:find("remote") or nd:find("fire") or nd:find("touch") or nd:find("hitbox") or nd:find("exploit") or nd:find("bypass") or nd:find("detector") or nd:find("prompt") then return "exploit"
+    elseif nd:find("tool") or nd:find("equip") or nd:find("btools") or nd:find("anchor") or nd:find("delete") or nd:find("platform") or nd:find("part") or nd:find("workspace") then return "tools"
+    elseif nd:find("light") or nd:find("fog") or nd:find("sky") or nd:find("day") or nd:find("night") or nd:find("atmosphere") or nd:find("terrain") or nd:find("effect") or nd:find("shadow") or nd:find("ambient") then return "environment"
+    elseif nd:find("sound") or nd:find("audio") or nd:find("music") or nd:find("mute") or nd:find("volume") then return "audio"
+    elseif nd:find("prefix") or nd:find("alias") or nd:find("setting") or nd:find("command") or nd:find("break") or nd:find("exit") or nd:find("version") or nd:find("fps") or nd:find("graphic") then return "settings"
+    elseif nd:find("copy") or nd:find("user") or nd:find("ping") or nd:find("player") or nd:find("info") or nd:find("log") or nd:find("inspect") or nd:find("badge") or nd:find("memory") or nd:find("output") then return "info"
+    elseif nd:find("refresh") or nd:find("reset") or nd:find("respawn") or nd:find("anim") or nd:find("ragdoll") or nd:find("stun") or nd:find("freeze") or nd:find("strengthen") or nd:find("weaken") then return "character"
+    end
+    return ""
+end
+
 local function populateCommands(filter)
     local page = tabPages["Commands"]
     for _, child in ipairs(page:GetChildren()) do
@@ -402,15 +427,17 @@ local function populateCommands(filter)
     local order = 0
 
     for _, cmd in ipairs(cmds) do
+        local tag = inferTag(cmd)
+
         -- tag filter
         if tagFilter and tagFilter ~= "" then
-            if not cmd.TAG:lower():find(tagFilter, 1, true) then continue end
+            if not tag:find(tagFilter, 1, true) then continue end
         end
 
         -- text filter
         if filter ~= "" then
             local aliases = table.concat(cmd.ALIAS, ", ")
-            local searchStr = cmd.NAME .. " " .. aliases .. " " .. (cmd.DESC or "") .. " " .. cmd.TAG
+            local searchStr = cmd.NAME .. " " .. aliases .. " " .. (cmd.DESC or "") .. " " .. tag
             if not searchStr:lower():find(filter, 1, true) then continue end
         end
 
@@ -438,17 +465,17 @@ local function populateCommands(filter)
         btn.Text = displayText
 
         -- tag badge
-        if cmd.TAG ~= "" then
+        if tag ~= "" then
             local tagLbl = Instance.new("TextLabel")
             tagLbl.Size = UDim2.new(0, 0, 0, 16)
             tagLbl.AutomaticSize = Enum.AutomaticSize.X
             tagLbl.Position = UDim2.new(1, -8, 0, 5)
             tagLbl.AnchorPoint = Vector2.new(1, 0)
-            tagLbl.BackgroundColor3 = TAG_COLORS[cmd.TAG] or THEME.muted
+            tagLbl.BackgroundColor3 = TAG_COLORS[tag] or THEME.muted
             tagLbl.BackgroundTransparency = 0.7
             tagLbl.BorderSizePixel = 0
-            tagLbl.Text = " " .. cmd.TAG .. " "
-            tagLbl.TextColor3 = TAG_COLORS[cmd.TAG] or THEME.muted
+            tagLbl.Text = " " .. tag .. " "
+            tagLbl.TextColor3 = TAG_COLORS[tag] or THEME.muted
             tagLbl.TextSize = 9
             tagLbl.Font = Enum.Font.GothamBold
             tagLbl.Parent = btn
@@ -463,7 +490,7 @@ local function populateCommands(filter)
         btn.MouseEnter:Connect(function()
             btn.BackgroundTransparency = 0
             local hover = cmd.NAME
-            if cmd.TAG ~= "" then hover = hover .. "  #" .. cmd.TAG end
+            if tag ~= "" then hover = hover .. "  #" .. tag end
             hover = hover .. "\n" .. (cmd.DESC ~= "" and cmd.DESC or "No description")
             if #cmd.ALIAS > 0 then hover = hover .. "\nAliases: " .. aliases end
             hoverLabel.Text = hover
