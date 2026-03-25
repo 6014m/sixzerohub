@@ -10,7 +10,7 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local connections = {}
 local active = true
-local tweenSpeed = 0.3
+local tweenSpeed = -1
 local killBind = Enum.KeyCode.P
 local lockedTarget = nil
 
@@ -33,9 +33,12 @@ local keybindConn = UserInputService.InputBegan:Connect(function(input, processe
 end)
 table.insert(connections, keybindConn)
 
----------- LOCK-ON SHIFTLOCK ----------
+---------- LOCK-ON ----------
 
-local lockConn = RunService.RenderStepped:Connect(function()
+local lockAlign = nil
+local lockAttachment = nil
+
+local function updateLock()
     if not active or not lockedTarget then return end
     local char = player.Character
     if not char then return end
@@ -47,15 +50,56 @@ local lockConn = RunService.RenderStepped:Connect(function()
     UserInputService.MouseIconEnabled = false
     hum.AutoRotate = false
 
-    local targetRoot = lockedTarget.Character and lockedTarget.Character:FindFirstChild("HumanoidRootPart")
+    local targetChar = lockedTarget.Character
+    if not targetChar then return end
+    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
     if not targetRoot then return end
 
-    local look = (targetRoot.Position - root.Position)
-    local flatLook = Vector3.new(look.X, 0, look.Z)
-    if flatLook.Magnitude > 0 then
-        root.CFrame = CFrame.lookAt(root.Position, root.Position + flatLook)
+    -- face target: character CFrame
+    local toTarget = targetRoot.Position - root.Position
+    local flat = Vector3.new(toTarget.X, 0, toTarget.Z)
+    if flat.Magnitude > 0.1 then
+        root.CFrame = CFrame.lookAt(root.Position, root.Position + flat)
     end
-end)
+
+    -- face target: camera
+    local cam = workspace.CurrentCamera
+    if cam then
+        local camPos = cam.CFrame.Position
+        local lookAt = targetRoot.Position
+        local dir = lookAt - camPos
+        if dir.Magnitude > 0.5 then
+            cam.CFrame = CFrame.new(camPos, camPos + dir)
+        end
+    end
+
+    -- AlignOrientation constraint (survives physics/dashes)
+    if not lockAttachment or not lockAttachment.Parent then
+        lockAttachment = Instance.new("Attachment")
+        lockAttachment.Name = "ArrestLockAttach"
+        lockAttachment.Parent = root
+    end
+    if not lockAlign or not lockAlign.Parent then
+        lockAlign = Instance.new("AlignOrientation")
+        lockAlign.Name = "ArrestLockAlign"
+        lockAlign.Mode = Enum.OrientationAlignmentMode.OneAttachment
+        lockAlign.Attachment0 = lockAttachment
+        lockAlign.RigidityEnabled = true
+        lockAlign.Responsiveness = 200
+        lockAlign.MaxTorque = math.huge
+        lockAlign.Parent = root
+    end
+    lockAlign.Enabled = true
+    lockAlign.CFrame = CFrame.lookAt(Vector3.zero, flat)
+end
+
+-- bind at multiple priorities so nothing overrides the rotation
+local LOCK_BIND_1 = "AutoArrestLock1"
+local LOCK_BIND_2 = "AutoArrestLock2"
+RunService:BindToRenderStep(LOCK_BIND_1, Enum.RenderPriority.Camera.Value + 1, updateLock)
+RunService:BindToRenderStep(LOCK_BIND_2, Enum.RenderPriority.Camera.Value + 200, updateLock)
+
+local lockConn = RunService.Heartbeat:Connect(updateLock)
 table.insert(connections, lockConn)
 
 local function lockOn(plr)
@@ -83,6 +127,7 @@ local function lockOff()
             UserSettings():GetService("UserGameSettings").ControlMode = Enum.ControlMode.MouseLockSwitch
         end)
     end)
+    if lockAlign then pcall(function() lockAlign.Enabled = false end) end
 end
 
 ---------- NOCLIP DURING TWEEN ----------
@@ -308,6 +353,10 @@ local function cleanup()
     active = false
     lockOff()
     setNoclip(player.Character, false)
+    pcall(function() RunService:UnbindFromRenderStep(LOCK_BIND_1) end)
+    pcall(function() RunService:UnbindFromRenderStep(LOCK_BIND_2) end)
+    pcall(function() if lockAlign then lockAlign:Destroy(); lockAlign = nil end end)
+    pcall(function() if lockAttachment then lockAttachment:Destroy(); lockAttachment = nil end end)
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     connections = {}
 end
@@ -320,16 +369,6 @@ task.delay(2, function()
     if _G.SixZeroHubRegisterSettings then
         _G.SixZeroHubRegisterSettings("[Spec]auto_arrest", {
             _title = "Auto Arrest",
-            {
-                name = "tween_speed",
-                label = "Tween Speed",
-                type = "slider",
-                default = 3,
-                min = 1,
-                max = 10,
-                step = 1,
-                onChange = function(val) tweenSpeed = val / 10 end,
-            },
             {
                 name = "kill_bind",
                 label = "Stop Keybind",
