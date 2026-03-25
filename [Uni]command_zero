@@ -1158,11 +1158,15 @@ addcmd("clip", {"unnoclip"}, "Disable noclip", function(args), "movement")
     notify("Noclip", "Disabled")
 end)
 
-addcmd("fly", {"flygui"}, "Toggle fly (WASD + QE for up/down)", function(args, "movement")
+-- Fly system (IY method: BodyVelocity + BodyGyro for proper rotation)
+local flyGyro = nil
+
+addcmd("fly", {"flygui"}, "Toggle fly with BodyGyro rotation (IY method, WASD + QE)", function(args), "movement")
     flySpeed = parseNumber(args[1], 50)
     if flyActive then
         flyActive = false
         if flyBody then pcall(function() flyBody:Destroy() end); flyBody = nil end
+        if flyGyro then pcall(function() flyGyro:Destroy() end); flyGyro = nil end
         local hum = myHumanoid()
         if hum then hum.PlatformStand = false end
         notify("Fly", "Disabled")
@@ -1182,7 +1186,16 @@ addcmd("fly", {"flygui"}, "Toggle fly (WASD + QE for up/down)", function(args, "
                 flyBody = Instance.new("BodyVelocity")
                 flyBody.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                 flyBody.Velocity = Vector3.zero
+                flyBody.P = 9000
                 flyBody.Parent = root
+            end
+
+            if not flyGyro or not flyGyro.Parent then
+                flyGyro = Instance.new("BodyGyro")
+                flyGyro.D = 200
+                flyGyro.P = 9000
+                flyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                flyGyro.Parent = root
             end
 
             local cam = workspace.CurrentCamera
@@ -1191,11 +1204,12 @@ addcmd("fly", {"flygui"}, "Toggle fly (WASD + QE for up/down)", function(args, "
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - cam.CFrame.LookVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - cam.CFrame.RightVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + cam.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.E) then moveDir = moveDir + Vector3.new(0, 1, 0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.E) then moveDir = moveDir + Vector3.yAxis end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveDir = moveDir - Vector3.yAxis end
 
             if moveDir.Magnitude > 0 then
                 flyBody.Velocity = moveDir.Unit * flySpeed
+                flyGyro.CFrame = CFrame.new(root.Position, root.Position + moveDir.Unit)
             else
                 flyBody.Velocity = Vector3.zero
             end
@@ -1209,6 +1223,7 @@ end)
 addcmd("unfly", {"nofly"}, "Disable fly", function(args), "movement")
     flyActive = false
     if flyBody then pcall(function() flyBody:Destroy() end); flyBody = nil end
+    if flyGyro then pcall(function() flyGyro:Destroy() end); flyGyro = nil end
     local hum = myHumanoid()
     if hum then hum.PlatformStand = false end
     notify("Fly", "Disabled")
@@ -1747,35 +1762,58 @@ addcmd("unspin", {}, "Stop spinning", function(args), "fun")
     notify("Spin", "Stopped")
 end)
 
-addcmd("fling", {"fl"}, "Fling a player", function(args, "fun")
+addcmd("fling", {"fl"}, "Fling a player (IY method — spin into them to launch)", function(args), "fun")
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
+    local char = getChar()
     local root = myRoot()
     local hum = myHumanoid()
-    if not root or not hum then return end
-
+    if not root or not hum or not char then return end
     local tRoot = getRoot(target.Character)
     if not tRoot then return end
 
+    -- make self massless so we push them not ourselves
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") then
+            p.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+            p.CanCollide = true
+        end
+    end
+
     local oldPos = root.CFrame
-    root.CFrame = tRoot.CFrame
 
-    local bv = Instance.new("BodyAngularVelocity")
-    bv.AngularVelocity = Vector3.new(0, 9999, 0)
-    bv.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    bv.P = 1000000
-    bv.Parent = root
+    -- create angular velocity to spin rapidly
+    local bav = Instance.new("BodyAngularVelocity")
+    bav.AngularVelocity = Vector3.new(0, 9999, 0)
+    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    bav.P = 1000000
+    bav.Parent = root
 
-    hum:ChangeState(Enum.HumanoidStateType.Physics)
+    -- teleport onto target and stay there briefly
+    notify("Fling", "Flinging " .. target.Name .. "...")
+    local startTime = tick()
+    while tick() - startTime < 1.5 and flyActive ~= "fling_cancel" do
+        local tr = getRoot(target.Character)
+        if tr and root.Parent then
+            root.CFrame = tr.CFrame
+        else
+            break
+        end
+        RunService.Heartbeat:Wait()
+    end
 
-    task.delay(1, function()
-        pcall(function() bv:Destroy() end)
-        root.CFrame = oldPos
-        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end)
-
-    notify("Fling", "Flung " .. target.Name)
+    -- cleanup
+    pcall(function() bav:Destroy() end)
+    -- restore physics
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") then
+            p.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5)
+        end
+    end
+    root.CFrame = oldPos
+    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+    notify("Fling", "Done")
 end)
 
 addcmd("trip", {}, "Trip a nearby player", function(args, "fun")
@@ -4271,35 +4309,42 @@ addcmd("badges", {}, "List your badges for this game", function()
     end)
 end)
 
-addcmd("autoobby", {"aobby"}, "Auto-complete obby — jumps at block edges when walking", function(args), "movement")
-    local autoObbyActive = true
+-- autoobby with proper connection management (no leaks)
+local autoObbyConns = {}
+
+addcmd("autoobby", {"aobby"}, "Auto-complete obby — jumps at block edges when walking (CmdX method)", function(args), "movement")
+    -- clean old connections first
+    for _, c in ipairs(autoObbyConns) do pcall(function() c:Disconnect() end) end
+    autoObbyConns = {}
+
     loopStates["autoobby"] = true
-    local char = getChar()
-    if not char then return end
+
+    local function hookHumanoid(hum)
+        local c = hum.Running:Connect(function(speed)
+            if not loopStates["autoobby"] then return end
+            if speed > 0 and hum.FloorMaterial == Enum.Material.Air then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+        table.insert(autoObbyConns, c)
+    end
+
     local hum = myHumanoid()
-    if not hum then return end
-    local conn = connect(hum.Running, function(speed)
-        if speed > 0 and autoObbyActive and hum.FloorMaterial == Enum.Material.Air then
-            hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end)
-    -- reconnect on respawn
-    local charConn
-    charConn = connect(player.CharacterAdded, function(newChar)
-        if not autoObbyActive then return end
+    if hum then hookHumanoid(hum) end
+
+    local charConn = player.CharacterAdded:Connect(function(newChar)
+        if not loopStates["autoobby"] then return end
         local newHum = newChar:WaitForChild("Humanoid", 10)
-        if newHum then
-            connect(newHum.Running, function(speed)
-                if speed > 0 and autoObbyActive and newHum.FloorMaterial == Enum.Material.Air then
-                    newHum:ChangeState(Enum.HumanoidStateType.Jumping)
-                end
-            end)
-        end
+        if newHum then hookHumanoid(newHum) end
     end)
+    table.insert(autoObbyConns, charConn)
+
     notify("AutoObby", "Enabled — jumps at block edges while walking")
 end)
 
 addcmd("unautoobby", {}, "Stop auto obby", function(args), "movement")
+    for _, c in ipairs(autoObbyConns) do pcall(function() c:Disconnect() end) end
+    autoObbyConns = {}
     loopStates["autoobby"] = nil
 end)
 
