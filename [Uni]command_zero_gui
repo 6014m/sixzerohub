@@ -565,9 +565,265 @@ pcall(function()
 end)
 
 
+--================================================================
+-- POPULATE PLAYERS TAB
+--================================================================
+
+local function populatePlayers()
+    local page = tabPages["Players"]
+    if not page then return end
+    for _, child in ipairs(page:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    for _, p in ipairs(Players:GetPlayers()) do
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, -4, 0, 28)
+        row.BackgroundColor3 = THEME.hover
+        row.BackgroundTransparency = 0.5
+        row.BorderSizePixel = 0
+        row.Parent = page
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+        local nameL = Instance.new("TextLabel")
+        nameL.Size = UDim2.new(0.7, 0, 1, 0)
+        nameL.Position = UDim2.new(0, 8, 0, 0)
+        nameL.BackgroundTransparency = 1
+        nameL.Text = p.DisplayName .. " (@" .. p.Name .. ")"
+        nameL.TextColor3 = (p == player) and THEME.accent or THEME.text
+        nameL.TextSize = 12
+        nameL.Font = Enum.Font.Gotham
+        nameL.TextXAlignment = Enum.TextXAlignment.Left
+        nameL.TextTruncate = Enum.TextTruncate.AtEnd
+        nameL.Parent = row
+        local tpBtn = Instance.new("TextButton")
+        tpBtn.Size = UDim2.new(0, 30, 0, 20)
+        tpBtn.Position = UDim2.new(1, -38, 0, 4)
+        tpBtn.BackgroundColor3 = THEME.accent
+        tpBtn.BorderSizePixel = 0
+        tpBtn.Text = "TP"
+        tpBtn.TextColor3 = Color3.new(1, 1, 1)
+        tpBtn.TextSize = 10
+        tpBtn.Font = Enum.Font.GothamBold
+        tpBtn.Parent = row
+        Instance.new("UICorner", tpBtn).CornerRadius = UDim.new(0, 4)
+        tpBtn.MouseButton1Click:Connect(function()
+            execCmd("goto " .. p.Name, player, false)
+        end)
+    end
+end
+
+local Players = game:GetService("Players")
+populatePlayers()
+connect(Players.PlayerAdded, function() task.wait(1); populatePlayers() end)
+connect(Players.PlayerRemoving, function() task.wait(0.5); populatePlayers() end)
+
+--================================================================
+-- POPULATE ALIASES TAB
+--================================================================
+
+do
+    local page = tabPages["Aliases"]
+    if page then
+        local titleL = Instance.new("TextLabel")
+        titleL.Size = UDim2.new(1, -8, 0, 22)
+        titleL.BackgroundTransparency = 1
+        titleL.Text = "  Custom Aliases — use ;alias name command"
+        titleL.TextColor3 = THEME.accent
+        titleL.TextSize = 12
+        titleL.Font = Enum.Font.GothamBold
+        titleL.TextXAlignment = Enum.TextXAlignment.Left
+        titleL.Parent = page
+
+        local infoL = Instance.new("TextLabel")
+        infoL.Size = UDim2.new(1, -8, 0, 18)
+        infoL.BackgroundTransparency = 1
+        infoL.Text = "  ;removealias name | ;clraliases"
+        infoL.TextColor3 = THEME.muted
+        infoL.TextSize = 11
+        infoL.Font = Enum.Font.Gotham
+        infoL.TextXAlignment = Enum.TextXAlignment.Left
+        infoL.Parent = page
+
+        local aliasListFrame = Instance.new("Frame")
+        aliasListFrame.Size = UDim2.new(1, -8, 0, 0)
+        aliasListFrame.AutomaticSize = Enum.AutomaticSize.Y
+        aliasListFrame.BackgroundTransparency = 1
+        aliasListFrame.Parent = page
+        Instance.new("UIListLayout", aliasListFrame).Padding = UDim.new(0, 2)
+
+        local function refreshAliases()
+            for _, c in ipairs(aliasListFrame:GetChildren()) do
+                if c:IsA("Frame") then c:Destroy() end
+            end
+            for name, cmd in pairs(customAliases) do
+                local row = Instance.new("Frame")
+                row.Size = UDim2.new(1, 0, 0, 22)
+                row.BackgroundColor3 = THEME.hover
+                row.BackgroundTransparency = 0.5
+                row.BorderSizePixel = 0
+                row.Parent = aliasListFrame
+                Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+                local lbl = Instance.new("TextLabel")
+                lbl.Size = UDim2.new(1, -8, 1, 0)
+                lbl.Position = UDim2.new(0, 8, 0, 0)
+                lbl.BackgroundTransparency = 1
+                lbl.Text = name .. "  ->  " .. cmd
+                lbl.TextColor3 = THEME.text
+                lbl.TextSize = 11
+                lbl.Font = Enum.Font.Gotham
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                lbl.Parent = row
+            end
+        end
+        refreshAliases()
+    end
+end
+
+--================================================================
+-- POPULATE INFO TAB
+--================================================================
+
+do
+    local page = tabPages["Info"]
+    if page then
+        local infoText = "  COMMAND ZERO  -  Quick Reference\n\n"
+            .. "  PREFIX\n"
+            .. "  Default prefix is ; (semicolon)\n"
+            .. "  Type ;command or use the command bar\n\n"
+            .. "  PLAYER TARGETS\n"
+            .. "  me / all / others / random / nearest\n"
+            .. "  friends / nonfriends / %teamname\n"
+            .. "  playername (partial match)\n\n"
+            .. "  LOOPS & REPEATS\n"
+            .. "  inf^command  (loop forever, 1s delay)\n"
+            .. "  inf^0.5^command  (loop, 0.5s delay)\n"
+            .. "  5^command  (repeat 5 times)\n"
+            .. "  breakloops  (stop all loops)\n\n"
+            .. "  CHAINING\n"
+            .. "  cmd1\\cmd2\\cmd3  (run multiple)\n\n"
+            .. "  LAST COMMAND\n"
+            .. "  !cmdname  (re-run last version)\n"
+            .. "  lastcmd  (re-run last command)\n\n"
+            .. "  GUI CONTROLS\n"
+            .. "  ;  (semicolon) = open & focus cmd bar\n"
+            .. "  Right Ctrl = toggle GUI\n"
+            .. "  Tab = autocomplete command\n"
+            .. "  Up/Down = command history\n\n"
+            .. "  COMMANDS: " .. tostring(#cmds) .. " loaded"
+
+        local infoLbl = Instance.new("TextLabel")
+        infoLbl.Size = UDim2.new(1, -8, 0, 0)
+        infoLbl.AutomaticSize = Enum.AutomaticSize.Y
+        infoLbl.BackgroundTransparency = 1
+        infoLbl.Text = infoText
+        infoLbl.TextColor3 = THEME.text
+        infoLbl.TextSize = 11
+        infoLbl.Font = Enum.Font.Gotham
+        infoLbl.TextXAlignment = Enum.TextXAlignment.Left
+        infoLbl.TextWrapped = true
+        infoLbl.Parent = page
+    end
+end
+
+--================================================================
+-- POPULATE SETTINGS TAB
+--================================================================
+
+do
+    local page = tabPages["Settings"]
+    if page then
+        local prefixRow = Instance.new("Frame")
+        prefixRow.Size = UDim2.new(1, -4, 0, 30)
+        prefixRow.BackgroundTransparency = 1
+        prefixRow.Parent = page
+
+        local prefixLabel = Instance.new("TextLabel")
+        prefixLabel.Size = UDim2.new(0.5, 0, 1, 0)
+        prefixLabel.BackgroundTransparency = 1
+        prefixLabel.Text = "  Prefix"
+        prefixLabel.TextColor3 = THEME.text
+        prefixLabel.TextSize = 13
+        prefixLabel.Font = Enum.Font.Gotham
+        prefixLabel.TextXAlignment = Enum.TextXAlignment.Left
+        prefixLabel.Parent = prefixRow
+
+        local prefixBox = Instance.new("TextBox")
+        prefixBox.Size = UDim2.new(0, 60, 0, 24)
+        prefixBox.Position = UDim2.new(1, -68, 0, 3)
+        prefixBox.BackgroundColor3 = THEME.input
+        prefixBox.BorderSizePixel = 0
+        prefixBox.Text = prefix
+        prefixBox.TextColor3 = THEME.text
+        prefixBox.TextSize = 13
+        prefixBox.Font = Enum.Font.GothamBold
+        prefixBox.Parent = prefixRow
+        Instance.new("UICorner", prefixBox).CornerRadius = UDim.new(0, 4)
+
+        prefixBox.FocusLost:Connect(function()
+            if prefixBox.Text ~= "" then
+                -- can't update upvalue prefix from here, use execCmd
+                execCmd("prefix " .. prefixBox.Text, player, false)
+            else
+                prefixBox.Text = prefix
+            end
+        end)
+
+        local infoLbl = Instance.new("TextLabel")
+        infoLbl.Size = UDim2.new(1, -8, 0, 50)
+        infoLbl.BackgroundTransparency = 1
+        infoLbl.Text = "Command Zero v1.0\n" .. #cmds .. " commands loaded\nToggle: Right Ctrl | Chat: " .. prefix .. "command"
+        infoLbl.TextColor3 = THEME.muted
+        infoLbl.TextSize = 11
+        infoLbl.Font = Enum.Font.Gotham
+        infoLbl.TextXAlignment = Enum.TextXAlignment.Left
+        infoLbl.TextWrapped = true
+        infoLbl.Parent = page
+    end
+end
+
+--================================================================
+-- POPULATE SERVER TAB
+--================================================================
+
+do
+    local page = tabPages["Server"]
+    if page then
+        local function refreshServer()
+            for _, child in ipairs(page:GetChildren()) do
+                if child:IsA("TextLabel") then child:Destroy() end
+            end
+            local info = {
+                "Players: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers,
+                "PlaceId: " .. game.PlaceId,
+                "GameId: " .. game.GameId,
+                "JobId: " .. game.JobId:sub(1, 24) .. "...",
+                "Gravity: " .. workspace.Gravity,
+                "Place Version: " .. game.PlaceVersion,
+            }
+            for i, text in ipairs(info) do
+                local lbl = Instance.new("TextLabel")
+                lbl.Size = UDim2.new(1, -8, 0, 22)
+                lbl.BackgroundTransparency = 1
+                lbl.Text = "  " .. text
+                lbl.TextColor3 = THEME.text
+                lbl.TextSize = 12
+                lbl.Font = Enum.Font.Gotham
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                lbl.LayoutOrder = i
+                lbl.Parent = page
+            end
+        end
+        refreshServer()
+        task.spawn(function()
+            while gui and gui.Parent do
+                task.wait(5)
+                pcall(refreshServer)
+            end
+        end)
+    end
+end
+
 return {
     gui = gui,
-    notifGui = notifGui,
     main = main,
     cmdBar = cmdBar,
     populateCommands = populateCommands,
