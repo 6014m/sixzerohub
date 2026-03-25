@@ -1412,13 +1412,13 @@ end)
 local levitateActive = false
 local levitateOldWS = 16
 local walkflinging = false
-addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [speed])", function(args)
+addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspeed] [movespeed])", function(args)
     execCmd("unlevitate")
     local max = parseNumber(args[1], 2)
     local bobSpeed = parseNumber(args[2], 0.8)
+    local moveSpeed = 0.075 + parseNumber(args[3], 0) * 0.01
     local min = max - 0.4
     local tiltAngle = 18
-    local moveSpeed = 0.075
     local hum = myHumanoid()
     if not hum then return end
     levitateOldWS = hum.WalkSpeed
