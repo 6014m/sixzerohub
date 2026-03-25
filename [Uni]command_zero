@@ -1411,11 +1411,12 @@ end)
 
 local levitateActive = false
 local levitateOldWS = 16
-addcmd("levitate", {"lev", "hover"}, "Hover and tilt toward move direction", function(args)
+addcmd("levitate", {"lev", "hover"}, "Hover and tilt toward move direction (speed optional)", function(args)
     execCmd("unlevitate")
-    local max = parseNumber(args[1], 2)
+    local bobSpeed = parseNumber(args[1], 0.8)
+    local max = 2
     local min = max - 0.4
-    local tiltAngle = 15
+    local tiltAngle = 12
     local moveSpeed = 0.075
     local hum = myHumanoid()
     if not hum then return end
@@ -1428,20 +1429,23 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt toward move direction", fun
             local root = myRoot()
             if not h or not root then RunService.Heartbeat:Wait() continue end
             h.WalkSpeed = 0
-            local t = tick() * 0.8
+            local t = tick() * bobSpeed
             h.HipHeight = min + (max - min) * (math.sin(t) * 0.5 + 0.5)
             local moveDir = h.MoveDirection
             if moveDir.Magnitude > 0 then
                 local pos = root.CFrame.Position + moveDir * moveSpeed
                 local forward = moveDir:Dot(root.CFrame.LookVector)
                 local sideways = moveDir:Dot(root.CFrame.RightVector)
+                local yaw = root.CFrame - root.CFrame.Position
                 local tilt = CFrame.Angles(math.rad(-forward * tiltAngle), 0, math.rad(-sideways * tiltAngle))
-                root.CFrame = CFrame.new(pos) * (root.CFrame - root.CFrame.Position) * tilt
+                root.CFrame = CFrame.new(pos) * yaw * tilt
             end
+            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            root.AssemblyAngularVelocity = Vector3.zero
             RunService.Heartbeat:Wait()
         end
     end)
-    notify("Levitate", "Hovering — tilts toward movement")
+    notify("Levitate", "Hovering (bob speed " .. bobSpeed .. ")")
 end)
 
 addcmd("unlevitate", {"unlev", "unhover"}, "Stop levitating", function(args)
