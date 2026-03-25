@@ -549,25 +549,33 @@ local CZ_ENV = {
 
 local MB = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
 local function loadMod(name)
-    pcall(function()
-        local fn = loadstring(game:HttpGet(MB..name))()
+    local ok, err = pcall(function()
+        local src = game:HttpGet(MB..name)
+        local fn = loadstring(src)()
         if type(fn) == "function" then fn(CZ_ENV) end
     end)
+    if not ok then
+        warn("[CZ] Module error (" .. name .. "): " .. tostring(err))
+    end
 end
 
 -- GUI
 local guiResult = nil
-pcall(function()
-    local fn = loadstring(game:HttpGet(MB.."%5BUni%5Dcommand_zero_gui"))()
+local guiOk, guiErr = pcall(function()
+    local src = game:HttpGet(MB.."%5BUni%5Dcommand_zero_gui")
+    local fn = loadstring(src)()
     if type(fn) == "function" then guiResult = fn(CZ_ENV) end
 end)
+if not guiOk then
+    warn("[CZ] GUI module error: " .. tostring(guiErr))
+    notify("CZ Error", "GUI failed: " .. tostring(guiErr):sub(1, 80))
+end
 
 local gui = guiResult and guiResult.gui
-local notifGui = guiResult and guiResult.notifGui  
 local populateCommands = guiResult and guiResult.populateCommands
 local switchTab = guiResult and guiResult.switchTab
 local tabPages = guiResult and guiResult.tabPages
-genv[CZ_KEY].Gui = gui
+if gui then genv[CZ_KEY].Gui = gui end
 
 -- Commands
 loadMod("%5BUni%5Dcommand_zero_cmds_core")

@@ -30,7 +30,7 @@ gui.DisplayOrder = 2147483647
 gui.IgnoreGuiInset = true
 pcall(function() gui.Parent = game:GetService("CoreGui") end)
 if not gui.Parent then gui.Parent = playerGui end
-genv[CZ_KEY].Gui = gui
+pcall(function() genv["COMMAND_ZERO_INSTANCE"].Gui = gui end)
 
 local THEME = {
     bg = Color3.fromRGB(15, 15, 20),
@@ -537,8 +537,14 @@ end)
 -- CHAT HOOK
 --================================================================
 
+local TextChatService = game:GetService("TextChatService")
+local RBXGeneral = nil
+pcall(function()
+    RBXGeneral = TextChatService:WaitForChild("TextChannels", 2)
+        and TextChatService.TextChannels:WaitForChild("RBXGeneral", 2)
+end)
+
 local function onChat(msg)
-    if not chatCmdEnabled then return end
     msg = msg:gsub("^/e ", "")
     if msg:sub(1, #prefix) == prefix then
         execCmd(msg:sub(#prefix + 1), player, true)
@@ -550,7 +556,7 @@ connect(player.Chatted, onChat)
 -- TextChatService hook
 pcall(function()
     if TextChatService and RBXGeneral then
-        connect(RBXGeneral.ShouldDeliverCallback and RBXGeneral.MessageReceived or RBXGeneral.MessageReceived, function(msg)
+        connect(RBXGeneral.MessageReceived, function(msg)
             if msg.TextSource and msg.TextSource.UserId == player.UserId then
                 task.defer(function() onChat(msg.Text) end)
             end
