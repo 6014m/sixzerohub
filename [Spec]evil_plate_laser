@@ -146,6 +146,7 @@ local conn = RunService.Heartbeat:Connect(function(dt)
     local target = farPt + dir * PASS_BEYOND
     local newPos = Vector3.new(target.X, pPos.Y, target.Z)
 
+    _G.SixZeroHubDensityPause = now + 0.2
     rootPart.CFrame = CFrame.new(newPos) * (rootPart.CFrame - rootPart.CFrame.Position)
     lastTP = now
 

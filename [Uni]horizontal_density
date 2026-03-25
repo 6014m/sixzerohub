@@ -61,6 +61,14 @@ local function onCharacterAdded(character)
     connections[#connections + 1] = RunService.Heartbeat:Connect(function()
         if not hrp or not hrp.Parent or not humanoid or not humanoid.Parent then return end
 
+        -- skip everything if another SixZeroHub script is teleporting
+        local pauseUntil = _G.SixZeroHubDensityPause
+        if pauseUntil and tick() < pauseUntil then
+            lastCFrame = hrp.CFrame
+            lastTick = tick()
+            return
+        end
+
         local moveDir = humanoid.MoveDirection
         local walkSpeed = humanoid.WalkSpeed
 
@@ -94,7 +102,6 @@ local function onCharacterAdded(character)
         end
 
         if dt > 0.5 then
-            -- lag spike or loading, reset tracking
             lastCFrame = hrp.CFrame
             lastTick = now
             return
