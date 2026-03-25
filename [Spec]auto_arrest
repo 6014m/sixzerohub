@@ -347,15 +347,14 @@ task.spawn(function()
 
             lockOff()
 
-            if arrested then
-                local myRoot = getRoot(player.Character)
-                if myRoot then
-                    tweenTo(CFrame.new(myRoot.Position.X, myRoot.Position.Y - 200, myRoot.Position.Z))
-                end
-                task.wait(0.3)
-                resetCharacter()
-                equipHandcuffs()
+            -- always reset after each target so we respawn clean
+            local myRoot = getRoot(player.Character)
+            if myRoot then
+                tweenTo(CFrame.new(myRoot.Position.X, myRoot.Position.Y - 200, myRoot.Position.Z))
             end
+            task.wait(0.3)
+            resetCharacter()
+            equipHandcuffs()
         end
 
         task.wait(0.3)
