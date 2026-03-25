@@ -1409,30 +1409,47 @@ addcmd("hipheight", {"hh", "hheight"}, "Set hip height", function(args)
     if hum then hum.HipHeight = val end
 end)
 
+local levitateActive = false
+local levitateOldWS = 16
 addcmd("levitate", {"lev", "hover"}, "Hover and tilt toward move direction", function(args)
+    execCmd("unlevitate")
     local max = parseNumber(args[1], 2)
     local min = max - 0.4
     local tiltAngle = 15
-    startLoop("levitate", 0, function()
-        local hum = myHumanoid()
-        local root = myRoot()
-        if not hum or not root then return end
-        local t = tick() * 0.8
-        hum.HipHeight = min + (max - min) * (math.sin(t) * 0.5 + 0.5)
-        local moveDir = hum.MoveDirection
-        if moveDir.Magnitude > 0 then
-            local forward = moveDir:Dot(root.CFrame.LookVector)
-            local sideways = moveDir:Dot(root.CFrame.RightVector)
-            root.CFrame = root.CFrame * CFrame.Angles(math.rad(-forward * tiltAngle), 0, math.rad(-sideways * tiltAngle))
+    local moveSpeed = 0.7
+    local hum = myHumanoid()
+    if not hum then return end
+    levitateOldWS = hum.WalkSpeed
+    hum.WalkSpeed = 0
+    levitateActive = true
+    task.spawn(function()
+        while levitateActive do
+            local h = myHumanoid()
+            local root = myRoot()
+            if not h or not root then RunService.Heartbeat:Wait() continue end
+            h.WalkSpeed = 0
+            local t = tick() * 0.8
+            h.HipHeight = min + (max - min) * (math.sin(t) * 0.5 + 0.5)
+            local moveDir = h.MoveDirection
+            if moveDir.Magnitude > 0 then
+                root.CFrame = root.CFrame + moveDir * moveSpeed
+                local forward = moveDir:Dot(root.CFrame.LookVector)
+                local sideways = moveDir:Dot(root.CFrame.RightVector)
+                root.CFrame = root.CFrame * CFrame.Angles(math.rad(-forward * tiltAngle), 0, math.rad(-sideways * tiltAngle))
+            end
+            RunService.Heartbeat:Wait()
         end
     end)
     notify("Levitate", "Hovering — tilts toward movement")
 end)
 
 addcmd("unlevitate", {"unlev", "unhover"}, "Stop levitating", function(args)
-    stopLoop("levitate")
+    levitateActive = false
     local hum = myHumanoid()
-    if hum then hum.HipHeight = 0 end
+    if hum then
+        hum.HipHeight = 0
+        hum.WalkSpeed = levitateOldWS
+    end
     notify("Levitate", "Disabled")
 end)
 
