@@ -602,15 +602,15 @@ local function loadMod(name)
     return s and r or nil
 end
 
-local guiResult = loadMod("CZ3_gui")
+local guiResult = loadMod("CZ4_gui")
 local gui = guiResult and guiResult.gui
 local populateCommands = guiResult and guiResult.populateCommands
 if gui then genv[CZ_KEY].Gui = gui end
 
-loadMod("CZ3_core")
-loadMod("CZ3_cmds0")
-loadMod("CZ3_cmds1")
-loadMod("CZ3_cmds2")
+loadMod("CZ4_core")
+loadMod("CZ4_cmds0")
+loadMod("CZ4_cmds1")
+loadMod("CZ4_cmds2")
 
 if populateCommands then populateCommands() end
 
