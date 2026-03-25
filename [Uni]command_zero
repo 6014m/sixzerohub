@@ -1411,6 +1411,7 @@ end)
 
 local levitateActive = false
 local levitateOldWS = 16
+local walkflinging = false
 addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [speed])", function(args)
     execCmd("unlevitate")
     local max = parseNumber(args[1], 2)
@@ -1450,8 +1451,10 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [speed])
             else
                 root.CFrame = CFrame.new(pos) * yaw
             end
-            root.AssemblyLinearVelocity = Vector3.zero
-            root.AssemblyAngularVelocity = Vector3.zero
+            if not walkflinging then
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.AssemblyAngularVelocity = Vector3.zero
+            end
             RunService.Heartbeat:Wait()
         end
     end)
@@ -4004,7 +4007,6 @@ end)
 -- COMMANDS: TROLLING EXTENDED (CmdX)
 --================================================================
 
-local walkflinging = false
 addcmd("walkfling", {"wfling"}, "Fling by walking into people (IY method, no spinning)", function(args)
     execCmd("unwalkfling")
     local hum = myHumanoid()
