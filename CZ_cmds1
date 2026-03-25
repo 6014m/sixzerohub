@@ -47,7 +47,7 @@ local THEME = {
 }
 
 local function isKeyDown(key)
-    local ok, r = pcall(function() return isKeyDown(key) end)
+    local ok, r = pcall(function() return UserInputService:IsKeyDown(key) end)
     return ok and r
 end
 

@@ -2789,43 +2789,14 @@ end)
 
 
 
-addcmd("speedhack", {}, "Speed + noclip combo", function(args)
-    local val = args[1] or "100"
-    execCmd("speed " .. val)
-    execCmd("noclip")
-    notify("SpeedHack", "Speed " .. val .. " + Noclip")
-end)
 
 
 
-addcmd("rage", {}, "Rage combo: speed + fling + spin", function(args)
-    execCmd("speed 200")
-    execCmd("spin 50")
-    notify("Rage", "RAGE MODE")
-end)
-
-addcmd("unrage", {}, "Stop rage", function(args)
-    execCmd("speed 16")
-    execCmd("unspin")
-end)
 
 
 
-addcmd("admin", {}, "Give yourself admin-like abilities", function(args)
-    execCmd("fly")
-    execCmd("noclip")
-    execCmd("esp")
-    execCmd("infjump")
-    notify("Admin", "Admin powers enabled")
-end)
 
-addcmd("unadmin", {}, "Remove admin abilities", function(args)
-    execCmd("unfly")
-    execCmd("clip")
-    execCmd("unesp")
-    execCmd("uninfjump")
-    notify("Admin", "Removed")
-end)
+
 
 --================================================================
 -- COMMANDS: FINAL BATCH
@@ -3027,31 +2998,9 @@ addcmd("unautosit", {}, "Disable auto sit", function(args)
     stopLoop("autosit")
 end)
 
-addcmd("wallhack", {}, "See and walk through all walls", function(args)
-    execCmd("xray")
-    execCmd("noclip")
-    notify("WallHack", "X-ray + Noclip")
-end)
 
-addcmd("unwallhack", {}, "Disable wallhack", function(args)
-    execCmd("unxray")
-    execCmd("clip")
-end)
 
-addcmd("survival", {}, "Survival kit: god + fly + esp + fullbright", function(args)
-    execCmd("fly")
-    execCmd("esp")
-    execCmd("fullbright")
-    execCmd("antiafk")
-    notify("Survival", "Full survival kit enabled")
-end)
 
-addcmd("unsurvival", {}, "Disable survival kit", function(args)
-    execCmd("unfly")
-    execCmd("unesp")
-    execCmd("unfullbright")
-    execCmd("unantiafk")
-end)
 
 addcmd("copyusername", {}, "Copy target username", function(args)
     local targets = getPlayers(args[1] or "me")
@@ -3581,43 +3530,12 @@ addcmd("normalgravity", {"earthgravity"}, "Normal earth gravity", function(args)
     workspace.Gravity = 196.2
 end)
 
-addcmd("superjump", {}, "Super jump power", function(args)
-    local power = parseNumber(args[1], 200)
-    local hum = myHumanoid()
-    if hum then hum.JumpPower = power; hum.UseJumpPower = true end
-    notify("SuperJump", "Jump power: " .. power)
-end)
 
-addcmd("superspeed", {}, "Super walkspeed", function(args)
-    local speed = parseNumber(args[1], 100)
-    local hum = myHumanoid()
-    if hum then hum.WalkSpeed = speed end
-    notify("SuperSpeed", "Speed: " .. speed)
-end)
 
-addcmd("defaultspeed", {}, "Reset to default walkspeed", function(args)
-    local hum = myHumanoid()
-    if hum then hum.WalkSpeed = 16 end
-end)
 
-addcmd("defaultjump", {}, "Reset to default jump power", function(args)
-    local hum = myHumanoid()
-    if hum then hum.JumpPower = 50; hum.UseJumpPower = true end
-end)
 
-addcmd("defaulthipheight", {}, "Reset hip height", function(args)
-    local hum = myHumanoid()
-    if hum then hum.HipHeight = 0 end
-end)
 
-addcmd("defaultgravity", {}, "Reset gravity to default", function(args)
-    workspace.Gravity = 196.2
-end)
 
-addcmd("defaultmaxslope", {}, "Reset max slope angle", function(args)
-    local hum = myHumanoid()
-    if hum then hum.MaxSlopeAngle = 89 end
-end)
 
 
 end
