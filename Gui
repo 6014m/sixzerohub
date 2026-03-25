@@ -3282,7 +3282,7 @@ _G.SixZeroHubNotify = showNotification
 ---------- UPDATE CHECKER ----------
 
 local scriptSHAs = {} -- [fileKey] = last known git SHA
-local UPDATE_CHECK_INTERVAL = 5
+local UPDATE_CHECK_INTERVAL = 1
 
 -- map fileKey to its GitHub API path for SHA checking
 local function getGitApiUrl(info)
