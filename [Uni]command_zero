@@ -580,15 +580,15 @@ local function loadModule(url)
     return s and r or nil
 end
 
-local guiResult = loadModule(MB .. "CZ_gui")
+local guiResult = loadModule(MB .. "CZ2_gui")
 local gui = guiResult and guiResult.gui
 local populateCommands = guiResult and guiResult.populateCommands
 if gui then genv[CZ_KEY].Gui = gui end
 
-loadModule(MB .. "CZ_cmds_core")
-loadModule(MB .. "CZ_cmds0")
-loadModule(MB .. "CZ_cmds1")
-loadModule(MB .. "CZ_cmds2")
+loadModule(MB .. "CZ2_core")
+loadModule(MB .. "CZ2_cmds0")
+loadModule(MB .. "CZ2_cmds1")
+loadModule(MB .. "CZ2_cmds2")
 
 if populateCommands then populateCommands() end
 
