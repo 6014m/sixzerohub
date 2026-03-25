@@ -1409,6 +1409,30 @@ addcmd("hipheight", {"hh", "hheight"}, "Set hip height", function(args)
     if hum then hum.HipHeight = val end
 end)
 
+addcmd("levitate", {"lev", "hover"}, "Bob up and down by oscillating hip height", function(args)
+    local max = parseNumber(args[1], 2)
+    local step = 0.1
+    local val = max
+    local dir = -1
+    local min = max - 0.4
+    startLoop("levitate", 0.05, function()
+        local hum = myHumanoid()
+        if not hum then return end
+        hum.HipHeight = val
+        val = val + step * dir
+        if val <= min then dir = 1
+        elseif val >= max then dir = -1 end
+    end)
+    notify("Levitate", "Hovering between " .. min .. " and " .. max)
+end)
+
+addcmd("unlevitate", {"unlev", "unhover"}, "Stop levitating", function(args)
+    stopLoop("levitate")
+    local hum = myHumanoid()
+    if hum then hum.HipHeight = 0 end
+    notify("Levitate", "Disabled")
+end)
+
 addcmd("gravity", {"grav"}, "Set workspace gravity (default 196.2)", function(args)
     workspace.Gravity = parseNumber(args[1], 196.2)
     notify("Gravity", "Set to " .. workspace.Gravity)
