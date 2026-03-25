@@ -66,12 +66,12 @@ addcmd("tweengoto", {"tweento", "tgoto"}, "Tween to player smoothly", function(a
     end
 end)
 
-addcmd("sit", {"s"}, "Make your character sit", function(args), "movement")
+addcmd("sit", {"s"}, "Make your character sit", function(args))
     local hum = myHumanoid()
     if hum then hum.Sit = true end
 end)
 
-addcmd("sitwalk", {"sitw"}, "Walk while sitting", function(args), "movement")
+addcmd("sitwalk", {"sitw"}, "Walk while sitting", function(args))
     local hum = myHumanoid()
     if hum then
         hum.Sit = true
@@ -80,12 +80,12 @@ addcmd("sitwalk", {"sitw"}, "Walk while sitting", function(args), "movement")
     end
 end)
 
-addcmd("jump", {"j"}, "Make character jump", function(args), "movement")
+addcmd("jump", {"j"}, "Make character jump", function(args))
     local hum = myHumanoid()
     if hum then hum.Jump = true end
 end)
 
-addcmd("noclip", {"nc", "nocl"}, "Toggle noclip", function(args), "movement")
+addcmd("noclip", {"nc", "nocl"}, "Toggle noclip", function(args))
     local on = toggleLoop("noclip", 0, function()
         local char = getChar()
         if char then
@@ -97,7 +97,7 @@ addcmd("noclip", {"nc", "nocl"}, "Toggle noclip", function(args), "movement")
     notify("Noclip", on and "Enabled" or "Disabled")
 end)
 
-addcmd("clip", {"unnoclip"}, "Disable noclip", function(args), "movement")
+addcmd("clip", {"unnoclip"}, "Disable noclip", function(args))
     stopLoop("noclip")
     notify("Noclip", "Disabled")
 end)
@@ -105,7 +105,7 @@ end)
 -- Fly system (IY method: BodyVelocity + BodyGyro for proper rotation)
 local flyGyro = nil
 
-addcmd("fly", {"flygui"}, "Toggle fly with BodyGyro rotation (IY method, WASD + QE)", function(args), "movement")
+addcmd("fly", {"flygui"}, "Toggle fly with BodyGyro rotation (IY method, WASD + QE)", function(args))
     flySpeed = parseNumber(args[1], 50)
     if flyActive then
         flyActive = false
@@ -164,7 +164,7 @@ addcmd("fly", {"flygui"}, "Toggle fly with BodyGyro rotation (IY method, WASD + 
     end)
 end)
 
-addcmd("unfly", {"nofly"}, "Disable fly", function(args), "movement")
+addcmd("unfly", {"nofly"}, "Disable fly", function(args))
     flyActive = false
     if flyBody then pcall(function() flyBody:Destroy() end); flyBody = nil end
     if flyGyro then pcall(function() flyGyro:Destroy() end); flyGyro = nil end
@@ -184,12 +184,12 @@ addcmd("teleportwalk", {"tpwalk"}, "Teleport in walk direction", function(args)
     notify("TeleportWalk", on and ("Enabled (" .. dist .. " studs)") or "Disabled")
 end)
 
-addcmd("unteleportwalk", {"untpwalk"}, "Disable teleport walk", function(args), "movement")
+addcmd("unteleportwalk", {"untpwalk"}, "Disable teleport walk", function(args))
     stopLoop("tpwalk")
     notify("TeleportWalk", "Disabled")
 end)
 
-addcmd("clickteleport", {"clicktp", "ctp"}, "Click to teleport (handles seated, proper height, IY method)", function(args), "teleport")
+addcmd("clickteleport", {"clicktp", "ctp"}, "Click to teleport (handles seated, proper height, IY method)", function(args))
     local on = toggleLoop("clicktp", 0.05, function() end)
     if on then
         notify("ClickTP", "Enabled — click anywhere to teleport")
@@ -230,7 +230,7 @@ addcmd("clickteleport", {"clicktp", "ctp"}, "Click to teleport (handles seated, 
     end
 end)
 
-addcmd("unclicktp", {"unctp"}, "Disable click teleport", function(args), "teleport")
+addcmd("unclicktp", {"unctp"}, "Disable click teleport", function(args))
     stopLoop("clicktp")
     notify("ClickTP", "Disabled")
 end)
@@ -256,7 +256,7 @@ addcmd("orbit", {"orb"}, "Orbit a player", function(args)
     notify("Orbit", "Orbiting " .. target.Name)
 end)
 
-addcmd("unorbit", {"unorb"}, "Stop orbiting", function(args), "movement")
+addcmd("unorbit", {"unorb"}, "Stop orbiting", function(args))
     stopLoop("orbit")
     notify("Orbit", "Stopped")
 end)
@@ -284,7 +284,7 @@ addcmd("offset", {}, "Offset from player", function(args)
     end)
 end)
 
-addcmd("unoffset", {}, "Stop offset", function(args), "movement")
+addcmd("unoffset", {}, "Stop offset", function(args))
     stopLoop("offset")
 end)
 
@@ -292,7 +292,7 @@ end)
 -- COMMANDS: CHARACTER
 --================================================================
 
-addcmd("refresh", {"re"}, "Refresh character (respawn at same position)", function(args), "character")
+addcmd("refresh", {"re"}, "Refresh character (respawn at same position)", function(args))
     local root = myRoot()
     if not root then return end
     local cf = root.CFrame
@@ -304,12 +304,12 @@ addcmd("refresh", {"re"}, "Refresh character (respawn at same position)", functi
     if newRoot then newRoot.CFrame = cf end
 end)
 
-addcmd("reset", {"die"}, "Reset character", function(args), "character")
+addcmd("reset", {"die"}, "Reset character", function(args))
     local hum = myHumanoid()
     if hum then hum.Health = 0 end
 end)
 
-addcmd("respawn", {"rspawn"}, "Force respawn", function(args), "character")
+addcmd("respawn", {"rspawn"}, "Force respawn", function(args))
     player:LoadCharacter()
 end)
 
@@ -347,7 +347,7 @@ end)
 -- COMMANDS: VISUAL / ESP
 --================================================================
 
-addcmd("esp", {"playeresp"}, "Toggle player ESP boxes", function(args), "visual")
+addcmd("esp", {"playeresp"}, "Toggle player ESP boxes", function(args))
     if #espObjects > 0 then
         clearESP()
         notify("ESP", "Disabled")
@@ -420,13 +420,13 @@ addcmd("esp", {"playeresp"}, "Toggle player ESP boxes", function(args), "visual"
     notify("ESP", "Enabled")
 end)
 
-addcmd("unesp", {"noesp"}, "Disable ESP", function(args), "visual")
+addcmd("unesp", {"noesp"}, "Disable ESP", function(args))
     clearESP()
     stopLoop("esp")
     notify("ESP", "Disabled")
 end)
 
-addcmd("xray", {"x"}, "Make all parts transparent", function(args), "visual")
+addcmd("xray", {"x"}, "Make all parts transparent", function(args))
     for _, p in ipairs(workspace:GetDescendants()) do
         if p:IsA("BasePart") and p.Transparency < 1 then
             p:SetAttribute("CZ_OrigTransparency", p.Transparency)
@@ -436,7 +436,7 @@ addcmd("xray", {"x"}, "Make all parts transparent", function(args), "visual")
     notify("X-Ray", "Enabled")
 end)
 
-addcmd("unxray", {"noxray", "unx"}, "Restore part transparency", function(args), "visual")
+addcmd("unxray", {"noxray", "unx"}, "Restore part transparency", function(args))
     for _, p in ipairs(workspace:GetDescendants()) do
         if p:IsA("BasePart") then
             local orig = p:GetAttribute("CZ_OrigTransparency")
@@ -449,7 +449,7 @@ addcmd("unxray", {"noxray", "unx"}, "Restore part transparency", function(args),
     notify("X-Ray", "Disabled")
 end)
 
-addcmd("fullbright", {"fb", "bright"}, "Remove all darkness/fog", function(args), "visual")
+addcmd("fullbright", {"fb", "bright"}, "Remove all darkness/fog", function(args))
     Lighting.Brightness = 2
     Lighting.ClockTime = 14
     Lighting.FogEnd = 100000
@@ -464,7 +464,7 @@ addcmd("fullbright", {"fb", "bright"}, "Remove all darkness/fog", function(args)
     notify("Fullbright", "Enabled")
 end)
 
-addcmd("unfullbright", {"unfb"}, "Restore lighting", function(args), "visual")
+addcmd("unfullbright", {"unfb"}, "Restore lighting", function(args))
     -- Can't perfectly restore, just set defaults
     Lighting.Brightness = 1
     Lighting.GlobalShadows = true
@@ -488,11 +488,11 @@ end)
 -- COMMANDS: SERVER / GAME INFO
 --================================================================
 
-addcmd("rejoin", {"rj", "rjn"}, "Rejoin current server", function(args), "server")
+addcmd("rejoin", {"rj", "rjn"}, "Rejoin current server", function(args))
     TeleportService:Teleport(game.PlaceId, player)
 end)
 
-addcmd("serverhop", {"shp", "shop"}, "Join a different server", function(args), "server")
+addcmd("serverhop", {"shp", "shop"}, "Join a different server", function(args))
     notify("ServerHop", "Finding server...")
     task.spawn(function()
         local ok, servers = pcall(function()
@@ -512,25 +512,25 @@ addcmd("serverhop", {"shp", "shop"}, "Join a different server", function(args), 
     end)
 end)
 
-addcmd("copyplaceid", {"cpid"}, "Copy PlaceId to clipboard", function(args), "server")
+addcmd("copyplaceid", {"cpid"}, "Copy PlaceId to clipboard", function(args))
     local id = tostring(game.PlaceId)
     pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
     notify("Copied", "PlaceId: " .. id)
 end)
 
-addcmd("copygameid", {"cgid"}, "Copy GameId to clipboard", function(args), "server")
+addcmd("copygameid", {"cgid"}, "Copy GameId to clipboard", function(args))
     local id = tostring(game.GameId)
     pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
     notify("Copied", "GameId: " .. id)
 end)
 
-addcmd("jobid", {"jid"}, "Copy JobId to clipboard", function(args), "server")
+addcmd("jobid", {"jid"}, "Copy JobId to clipboard", function(args))
     local id = game.JobId
     pcall(function() if setclipboard then setclipboard(id) elseif toclipboard then toclipboard(id) end end)
     notify("Copied", "JobId copied")
 end)
 
-addcmd("serverinfo", {"sinfo", "info"}, "Show server information", function(args), "server")
+addcmd("serverinfo", {"sinfo", "info"}, "Show server information", function(args))
     notify("Server Info",
         "Players: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers ..
         "\nPlaceId: " .. game.PlaceId ..
