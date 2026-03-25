@@ -2359,14 +2359,21 @@ do
     end
 
     local function applyBypass(msg)
-        local words = msg:split(" ")
-        local c = "\219\166\219\138"
-        local out = ""
-        for i = 1, #words do
-            words[i] = words[i]:sub(1, 1) .. c .. words[i]:sub(2)
-            out = out .. words[i] .. "  "
+        local map = {
+            a = "\208\176", e = "\208\181", o = "\208\190",
+            c = "\209\129", p = "\209\128", x = "\209\133",
+            y = "\209\131", s = "\209\149", i = "\209\150",
+            A = "\208\144", E = "\208\149", O = "\208\158",
+            C = "\208\161", P = "\208\160", X = "\208\165",
+            B = "\208\146", H = "\208\157", K = "\208\154",
+            M = "\208\156", T = "\208\162",
+        }
+        local out = {}
+        for i = 1, #msg do
+            local ch = msg:sub(i, i)
+            out[i] = map[ch] or ch
         end
-        return out
+        return table.concat(out)
     end
 
     local function applySmartChat(msg)
