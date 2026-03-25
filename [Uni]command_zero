@@ -1746,19 +1746,35 @@ end)
 -- COMMANDS: FUN / TROLL
 --================================================================
 
-addcmd("spin", {"beyblade"}, "Spin your character", function(args, "fun")
+addcmd("spin", {"beyblade"}, "Spin character with BodyAngularVelocity (replicates to others)", function(args), "fun")
     local speed = parseNumber(args[1], 20)
-    startLoop("spin", 0, function()
+    -- remove old
+    pcall(function()
         local root = myRoot()
         if root then
-            root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(speed), 0)
+            local old = root:FindFirstChild("CZ_Spin")
+            if old then old:Destroy() end
         end
     end)
+    local root = myRoot()
+    if not root then return end
+    local bav = Instance.new("BodyAngularVelocity")
+    bav.Name = "CZ_Spin"
+    bav.AngularVelocity = Vector3.new(0, speed, 0)
+    bav.MaxTorque = Vector3.new(0, math.huge, 0)
+    bav.P = 1000000
+    bav.Parent = root
+    loopStates["spin"] = true
     notify("Spin", "Spinning at speed " .. speed)
 end)
 
 addcmd("unspin", {}, "Stop spinning", function(args), "fun")
-    stopLoop("spin")
+    loopStates["spin"] = nil
+    local root = myRoot()
+    if root then
+        local s = root:FindFirstChild("CZ_Spin")
+        if s then s:Destroy() end
+    end
     notify("Spin", "Stopped")
 end)
 
@@ -2395,11 +2411,20 @@ end)
 -- COMMANDS: CmdX EXCLUSIVES (chat, fun, misc)
 --================================================================
 
-addcmd("seizure", {"juicewrld"}, "Make character have a seizure", function(args), "fun")
-    startLoop("seizure", 0.05, function()
-        local root = myRoot()
-        if root then
-            root.CFrame = root.CFrame * CFrame.Angles(math.random() * 2, math.random() * 2, math.random() * 2)
+addcmd("seizure", {"juicewrld"}, "Make character have a seizure (BodyAngularVelocity, replicates)", function(args), "fun")
+    local root = myRoot()
+    if not root then return end
+    pcall(function() root:FindFirstChild("CZ_Seizure") and root.CZ_Seizure:Destroy() end)
+    local bav = Instance.new("BodyAngularVelocity")
+    bav.Name = "CZ_Seizure"
+    bav.AngularVelocity = Vector3.new(math.random(-50, 50), math.random(-50, 50), math.random(-50, 50))
+    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    bav.P = 1000000
+    bav.Parent = root
+    -- randomize direction rapidly
+    startLoop("seizure", 0.08, function()
+        if bav.Parent then
+            bav.AngularVelocity = Vector3.new(math.random(-80, 80), math.random(-80, 80), math.random(-80, 80))
         end
     end)
     notify("Seizure", "Started")
@@ -2407,19 +2432,35 @@ end)
 
 addcmd("unseizure", {}, "Stop seizure", function(args), "fun")
     stopLoop("seizure")
+    local root = myRoot()
+    if root then
+        local s = root:FindFirstChild("CZ_Seizure")
+        if s then s:Destroy() end
+    end
+    local hum = myHumanoid()
+    if hum then hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
 end)
 
-addcmd("cartwheel", {}, "Make character cartwheel", function(args), "fun")
-    startLoop("cartwheel", 0, function()
-        local root = myRoot()
-        if root then
-            root.CFrame = root.CFrame * CFrame.Angles(0, 0, math.rad(15))
-        end
-    end)
+addcmd("cartwheel", {}, "Cartwheel via BodyAngularVelocity (replicates)", function(args), "fun")
+    local root = myRoot()
+    if not root then return end
+    pcall(function() root:FindFirstChild("CZ_Cartwheel") and root.CZ_Cartwheel:Destroy() end)
+    local bav = Instance.new("BodyAngularVelocity")
+    bav.Name = "CZ_Cartwheel"
+    bav.AngularVelocity = Vector3.new(0, 0, 20)
+    bav.MaxTorque = Vector3.new(0, 0, math.huge)
+    bav.P = 1000000
+    bav.Parent = root
+    loopStates["cartwheel"] = true
 end)
 
 addcmd("uncartwheel", {}, "Stop cartwheel", function(args), "fun")
-    stopLoop("cartwheel")
+    loopStates["cartwheel"] = nil
+    local root = myRoot()
+    if root then
+        local s = root:FindFirstChild("CZ_Cartwheel")
+        if s then s:Destroy() end
+    end
 end)
 
 
@@ -2936,31 +2977,62 @@ end)
 -- COMMANDS: CAMERA (IY + CmdX)
 --================================================================
 
-addcmd("freecam", {"fc"}, "Enter freecam mode", function(args), "camera")
+-- Freecam with mouse look (proper implementation)
+local freecamRotX, freecamRotY = 0, 0
+local freecamMouseConn = nil
+
+addcmd("freecam", {"fc"}, "Enter freecam with mouse look (WASD move, mouse rotate, Shift=fast)", function(args), "camera")
     local cam = workspace.CurrentCamera
     cam.CameraType = Enum.CameraType.Scriptable
-    notify("Freecam", "WASD to move, Right-click drag to look. Use unfreecam to exit.")
+    UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 
-    startLoop("freecam", 0, function()
-        local cam = workspace.CurrentCamera
-        if cam.CameraType ~= Enum.CameraType.Scriptable then return end
-        local speed = 1
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then speed = 3 end
-        local move = Vector3.zero
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.E) then move = move + Vector3.yAxis end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then move = move - Vector3.yAxis end
-        if move.Magnitude > 0 then
-            cam.CFrame = cam.CFrame + move.Unit * speed
+    -- init rotation from current camera
+    local look = cam.CFrame.LookVector
+    freecamRotY = math.atan2(-look.X, -look.Z)
+    freecamRotX = math.asin(look.Y)
+
+    -- mouse delta for rotation
+    if freecamMouseConn then freecamMouseConn:Disconnect() end
+    freecamMouseConn = connect(UserInputService.InputChanged, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            local sens = 0.003
+            freecamRotY = freecamRotY - input.Delta.X * sens
+            freecamRotX = math.clamp(freecamRotX - input.Delta.Y * sens, -math.pi / 2 + 0.1, math.pi / 2 - 0.1)
         end
     end)
+
+    local fcSpeed = parseNumber(args[1], 2)
+
+    startLoop("freecam", 0, function()
+        local c = workspace.CurrentCamera
+        if c.CameraType ~= Enum.CameraType.Scriptable then return end
+        local speed = fcSpeed
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then speed = speed * 3 end
+
+        local rot = CFrame.fromEulerAnglesYXZ(freecamRotX, freecamRotY, 0)
+        local move = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + rot.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - rot.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - rot.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + rot.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.E) then move = move + Vector3.yAxis end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then move = move - Vector3.yAxis end
+
+        local pos = c.CFrame.Position
+        if move.Magnitude > 0 then
+            pos = pos + move.Unit * speed
+        end
+        c.CFrame = CFrame.new(pos) * rot
+    end)
+
+    notify("Freecam", "WASD move, mouse look, Shift=fast, E/Q up/down")
 end)
 
 addcmd("unfreecam", {"unfc", "nofreecam"}, "Exit freecam", function(args), "camera")
     stopLoop("freecam")
+    if freecamMouseConn then freecamMouseConn:Disconnect(); freecamMouseConn = nil end
+    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    UserInputService.MouseIconEnabled = true
     local cam = workspace.CurrentCamera
     cam.CameraType = Enum.CameraType.Custom
     cam.CameraSubject = myHumanoid()
@@ -3841,20 +3913,28 @@ end)
 -- COMMANDS: TROLLING EXTENDED (CmdX)
 --================================================================
 
-addcmd("walkfling", {"wfling"}, "Fling by walking into people", function(args), "fun")
-    startLoop("walkfling", 0, function()
-        local root = myRoot()
-        if root then
-            root.AssemblyAngularVelocity = Vector3.new(0, 50, 0)
-        end
-    end)
+addcmd("walkfling", {"wfling"}, "Fling by walking into people (BodyAngularVelocity, replicates)", function(args), "fun")
+    local root = myRoot()
+    if not root then return end
+    pcall(function() root:FindFirstChild("CZ_WalkFling") and root.CZ_WalkFling:Destroy() end)
+    local bav = Instance.new("BodyAngularVelocity")
+    bav.Name = "CZ_WalkFling"
+    bav.AngularVelocity = Vector3.new(0, 80, 0)
+    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    bav.P = 1000000
+    bav.Parent = root
+    loopStates["walkfling"] = true
     notify("WalkFling", "Enabled — walk into people to fling them")
 end)
 
 addcmd("unwalkfling", {"unwfling"}, "Stop walk fling", function(args), "fun")
-    stopLoop("walkfling")
+    loopStates["walkfling"] = nil
     local root = myRoot()
-    if root then root.AssemblyAngularVelocity = Vector3.zero end
+    if root then
+        local s = root:FindFirstChild("CZ_WalkFling")
+        if s then s:Destroy() end
+        root.AssemblyAngularVelocity = Vector3.zero
+    end
 end)
 
 addcmd("flyfling", {}, "Fly into people to fling them", function(args, "fun")
@@ -3876,25 +3956,27 @@ addcmd("unflyfling", {}, "Stop fly fling", function(args), "fun")
     if root then root.AssemblyAngularVelocity = Vector3.zero end
 end)
 
-addcmd("bang", {}, "Dance animation near player", function(args, "fun")
+addcmd("bang", {}, "Animation on player (IY method: animation + Stepped positioning)", function(args), "fun")
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
-    local animId = "rbxassetid://148840371"
     local hum = myHumanoid()
     if not hum then return end
-    local anim = Instance.new("Animation")
-    anim.AnimationId = animId
-    local animator = hum:FindFirstChildOfClass("Animator")
-    local track = animator and animator:LoadAnimation(anim) or hum:LoadAnimation(anim)
-    track:Play()
-    track:AdjustSpeed(3)
-
+    -- play animation
+    pcall(function()
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://148840371"
+        local animator = hum:FindFirstChildOfClass("Animator")
+        local track = animator and animator:LoadAnimation(anim) or hum:LoadAnimation(anim)
+        track:Play()
+        track:AdjustSpeed(3)
+    end)
+    -- use Stepped for tighter positioning (IY uses RunService.Stepped)
     startLoop("bang", 0, function()
         local tRoot = getRoot(target.Character)
         local mRoot = myRoot()
         if tRoot and mRoot then
-            mRoot.CFrame = tRoot.CFrame * CFrame.new(0, 0, 1.5)
+            mRoot.CFrame = tRoot.CFrame * CFrame.new(0, 0, 1.1)
         end
     end)
     notify("Bang", "Targeting " .. target.Name)
@@ -3964,50 +4046,56 @@ addcmd("unplague", {}, "Stop plague", function(args), "fun")
     stopLoop("plague")
 end)
 
-addcmd("glue", {"stick"}, "Stick to a player", function(args, "fun")
+
+addcmd("facefuck", {"facerape"}, "Face animation on player (CmdX method: sit + animation + position)", function(args), "fun")
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
-    startLoop("glue", 0, function()
+    local hum = myHumanoid()
+    if hum then hum.Sit = true end
+    -- play thrust animation
+    pcall(function()
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://148840371"
+        local animator = hum:FindFirstChildOfClass("Animator")
+        local track = animator and animator:LoadAnimation(anim) or hum:LoadAnimation(anim)
+        track:Play()
+        track:AdjustSpeed(3)
+    end)
+    startLoop("facefuck", 0, function()
         local tRoot = getRoot(target.Character)
         local mRoot = myRoot()
         if tRoot and mRoot then
-            mRoot.CFrame = tRoot.CFrame * CFrame.new(0, 0, -2.5)
-        end
-    end)
-    notify("Glue", "Stuck to " .. target.Name)
-end)
-
-addcmd("unglue", {"unstick"}, "Unstick from player", function(args), "fun")
-    stopLoop("glue")
-end)
-
-addcmd("facefuck", {}, "Position face animation on player", function(args, "fun")
-    local targets = getPlayers(args[1])
-    if #targets == 0 then return end
-    local target = targets[1]
-    startLoop("facefuck", 0, function()
-        local tHead = target.Character and target.Character:FindFirstChild("Head")
-        local mRoot = myRoot()
-        if tHead and mRoot then
-            mRoot.CFrame = tHead.CFrame * CFrame.new(0, 0, -1.5)
+            mRoot.CFrame = tRoot.CFrame * CFrame.Angles(0, math.rad(180), 0) * CFrame.new(0, 1.6, 0.4)
+            mRoot.AssemblyLinearVelocity = Vector3.zero
         end
     end)
 end)
 
-addcmd("unfacefuck", {}, "Stop facefuck", function(args), "fun")
+addcmd("unfacefuck", {"unfacerape"}, "Stop facefuck", function(args), "fun")
     stopLoop("facefuck")
+    local hum = myHumanoid()
+    if hum then
+        hum.Sit = false
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, t in ipairs(animator:GetPlayingAnimationTracks()) do t:Stop() end
+        end
+    end
 end)
 
-addcmd("piggyback", {"ride", "headsit"}, "Ride on top of a player", function(args, "fun")
+addcmd("piggyback", {"ride", "headsit"}, "Ride on top of player (CmdX method: sit + position + zero vel)", function(args), "fun")
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
+    local hum = myHumanoid()
+    if hum then hum.Sit = true end
     startLoop("piggyback", 0, function()
         local tRoot = getRoot(target.Character)
         local mRoot = myRoot()
         if tRoot and mRoot then
-            mRoot.CFrame = tRoot.CFrame * CFrame.new(0, 3, 0)
+            mRoot.CFrame = tRoot.CFrame * CFrame.new(0, 1.6, 0.4)
+            mRoot.AssemblyLinearVelocity = Vector3.zero
         end
     end)
     notify("Piggyback", "Riding " .. target.Name)
@@ -4015,6 +4103,8 @@ end)
 
 addcmd("unpiggyback", {"unride"}, "Stop piggyback", function(args), "fun")
     stopLoop("piggyback")
+    local hum = myHumanoid()
+    if hum then hum.Sit = false end
 end)
 
 --================================================================
