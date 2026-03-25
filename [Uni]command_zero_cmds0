@@ -15,7 +15,7 @@ local ReplicatedStorage=game:GetService("ReplicatedStorage")
 -- COMMANDS: ANTI / PROTECTION
 --================================================================
 
-addcmd("antiafk", {"antiidle", "aafk"}, "Prevent AFK kick", function(args))
+addcmd("antiafk", {"antiidle", "aafk"}, "Prevent AFK kick", function(args)
     local vu = game:GetService("VirtualUser")
     startLoop("antiafk", 60, function()
         vu:CaptureController()
@@ -24,7 +24,7 @@ addcmd("antiafk", {"antiidle", "aafk"}, "Prevent AFK kick", function(args))
     notify("Anti-AFK", "Enabled")
 end)
 
-addcmd("unantiafk", {}, "Disable anti-AFK", function(args))
+addcmd("unantiafk", {}, "Disable anti-AFK", function(args)
     stopLoop("antiafk")
     notify("Anti-AFK", "Disabled")
 end)
@@ -50,7 +50,7 @@ addcmd("unantifling", {}, "Disable anti-fling", function(args)
     notify("Anti-Fling", "Disabled")
 end)
 
-addcmd("antilag", {"boostfps", "lowgraphics"}, "Full lag reduction: effects, shadows, fog, quality, materials (IY method)", function(args))
+addcmd("antilag", {"boostfps", "lowgraphics"}, "Full lag reduction: effects, shadows, fog, quality, materials (IY method)", function(args)
     local Terrain = workspace:FindFirstChildWhichIsA("Terrain")
     if Terrain then
         Terrain.WaterWaveSize = 0
@@ -87,7 +87,7 @@ addcmd("antilag", {"boostfps", "lowgraphics"}, "Full lag reduction: effects, sha
     notify("Anti-Lag", "Full lag reduction applied")
 end)
 
-addcmd("antivoid", {}, "Teleport back up if you fall into the void", function(args))
+addcmd("antivoid", {}, "Teleport back up if you fall into the void", function(args)
     local lastSafe = myRoot() and myRoot().CFrame or CFrame.new(0, 50, 0)
     startLoop("antivoid", 0.1, function()
         local root = myRoot()
@@ -102,12 +102,12 @@ addcmd("antivoid", {}, "Teleport back up if you fall into the void", function(ar
     notify("Anti-Void", "Enabled")
 end)
 
-addcmd("unantivoid", {}, "Disable anti-void", function(args))
+addcmd("unantivoid", {}, "Disable anti-void", function(args)
     stopLoop("antivoid")
     notify("Anti-Void", "Disabled")
 end)
 
-addcmd("infjump", {"infinitejump", "ij"}, "Infinite jump", function(args))
+addcmd("infjump", {"infinitejump", "ij"}, "Infinite jump", function(args)
     startLoop("infjump", 0, function() end)
     local conn = connect(UserInputService.JumpRequest, function()
         if loopStates["infjump"] then
@@ -118,12 +118,12 @@ addcmd("infjump", {"infinitejump", "ij"}, "Infinite jump", function(args))
     notify("Infinite Jump", "Enabled")
 end)
 
-addcmd("uninfjump", {"unij"}, "Disable infinite jump", function(args))
+addcmd("uninfjump", {"unij"}, "Disable infinite jump", function(args)
     stopLoop("infjump")
     notify("Infinite Jump", "Disabled")
 end)
 
-addcmd("nosit", {"antisit", "uns"}, "Prevent sitting", function(args))
+addcmd("nosit", {"antisit", "uns"}, "Prevent sitting", function(args)
     startLoop("nosit", 0, function()
         local hum = myHumanoid()
         if hum and hum.Sit then hum.Sit = false end
@@ -131,7 +131,7 @@ addcmd("nosit", {"antisit", "uns"}, "Prevent sitting", function(args))
     notify("No Sit", "Enabled")
 end)
 
-addcmd("unnosit", {}, "Disable no sit", function(args))
+addcmd("unnosit", {}, "Disable no sit", function(args)
     stopLoop("nosit")
     notify("No Sit", "Disabled")
 end)
@@ -140,7 +140,7 @@ end)
 -- COMMANDS: FUN / TROLL
 --================================================================
 
-addcmd("spin", {"beyblade"}, "Spin character with BodyAngularVelocity (replicates to others)", function(args))
+addcmd("spin", {"beyblade"}, "Spin character with BodyAngularVelocity (replicates to others)", function(args)
     local speed = parseNumber(args[1], 20)
     -- remove old
     pcall(function()
@@ -162,7 +162,7 @@ addcmd("spin", {"beyblade"}, "Spin character with BodyAngularVelocity (replicate
     notify("Spin", "Spinning at speed " .. speed)
 end)
 
-addcmd("unspin", {}, "Stop spinning", function(args))
+addcmd("unspin", {}, "Stop spinning", function(args)
     loopStates["spin"] = nil
     local root = myRoot()
     if root then
@@ -172,7 +172,7 @@ addcmd("unspin", {}, "Stop spinning", function(args))
     notify("Spin", "Stopped")
 end)
 
-addcmd("fling", {"fl"}, "Fling a player (IY method — spin into them to launch)", function(args))
+addcmd("fling", {"fl"}, "Fling a player (IY method — spin into them to launch)", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -236,7 +236,7 @@ addcmd("trip", {}, "Trip a nearby player", function(args)
     end
 end)
 
-addcmd("strengthen", {"strong"}, "Increase character density [num] (default 100, IY method)", function(args))
+addcmd("strengthen", {"strong"}, "Increase character density [num] (default 100, IY method)", function(args)
     local density = parseNumber(args[1], 100)
     local char = getChar()
     if not char then return end
@@ -248,7 +248,7 @@ addcmd("strengthen", {"strong"}, "Increase character density [num] (default 100,
     notify("Strengthen", "Density set to " .. density)
 end)
 
-addcmd("weaken", {"weak"}, "Decrease character density [num] (default 0, IY method)", function(args))
+addcmd("weaken", {"weak"}, "Decrease character density [num] (default 0, IY method)", function(args)
     local density = parseNumber(args[1], 0)
     local char = getChar()
     if not char then return end
@@ -260,7 +260,7 @@ addcmd("weaken", {"weak"}, "Decrease character density [num] (default 0, IY meth
     notify("Weaken", "Density set to " .. density)
 end)
 
-addcmd("unweaken", {"unstrengthen"}, "Reset character density", function(args))
+addcmd("unweaken", {"unstrengthen"}, "Reset character density", function(args)
     local char = getChar()
     if not char then return end
     for _, p in ipairs(char:GetDescendants()) do
@@ -288,7 +288,7 @@ addcmd("spam", {"chatspam"}, "Spam a message in chat", function(args)
     notify("Spam", "Spamming: " .. msg)
 end)
 
-addcmd("unspam", {"unchatspam"}, "Stop chat spam", function(args))
+addcmd("unspam", {"unchatspam"}, "Stop chat spam", function(args)
     stopLoop("chatspam")
     notify("Spam", "Stopped")
 end)
