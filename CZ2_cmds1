@@ -544,61 +544,14 @@ end)
 local freecamRotX, freecamRotY = 0, 0
 local freecamMouseConn = nil
 
-addcmd("freecam", {"fc"}, "Enter freecam with mouse look (WASD move, mouse rotate, Shift=fast)", function(args)
-    local cam = workspace.CurrentCamera
-    cam.CameraType = Enum.CameraType.Scriptable
-    UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-
-    -- init rotation from current camera
-    local look = cam.CFrame.LookVector
-    freecamRotY = math.atan2(-look.X, -look.Z)
-    freecamRotX = math.asin(look.Y)
-
-    -- mouse delta for rotation
-    if freecamMouseConn then freecamMouseConn:Disconnect() end
-    freecamMouseConn = connect(UserInputService.InputChanged, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            local sens = 0.003
-            freecamRotY = freecamRotY - input.Delta.X * sens
-            freecamRotX = math.clamp(freecamRotX - input.Delta.Y * sens, -math.pi / 2 + 0.1, math.pi / 2 - 0.1)
-        end
-    end)
-
-    local fcSpeed = parseNumber(args[1], 2)
-
-    startLoop("freecam", 0, function()
-        local c = workspace.CurrentCamera
-        if c.CameraType ~= Enum.CameraType.Scriptable then return end
-        local speed = fcSpeed
-        if isKeyDown(Enum.KeyCode.LeftShift) then speed = speed * 3 end
-
-        local rot = CFrame.fromEulerAnglesYXZ(freecamRotX, freecamRotY, 0)
-        local move = Vector3.zero
-        if isKeyDown(Enum.KeyCode.W) then move = move + rot.LookVector end
-        if isKeyDown(Enum.KeyCode.S) then move = move - rot.LookVector end
-        if isKeyDown(Enum.KeyCode.A) then move = move - rot.RightVector end
-        if isKeyDown(Enum.KeyCode.D) then move = move + rot.RightVector end
-        if isKeyDown(Enum.KeyCode.E) then move = move + Vector3.yAxis end
-        if isKeyDown(Enum.KeyCode.Q) then move = move - Vector3.yAxis end
-
-        local pos = c.CFrame.Position
-        if move.Magnitude > 0 then
-            pos = pos + move.Unit * speed
-        end
-        c.CFrame = CFrame.new(pos) * rot
-    end)
-
-    notify("Freecam", "WASD move, mouse look, Shift=fast, E/Q up/down")
+addcmd("freecam", {"fc"}, "Scriptable camera — WASD to move, mouse to look", function(args)
+    workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+    notify("Freecam", "Camera is now scriptable. Use unfreecam to exit.")
 end)
 
 addcmd("unfreecam", {"unfc", "nofreecam", "nofc"}, "Exit freecam", function(args)
-    stopLoop("freecam")
-    if freecamMouseConn then freecamMouseConn:Disconnect(); freecamMouseConn = nil end
-    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-    UserInputService.MouseIconEnabled = true
-    local cam = workspace.CurrentCamera
-    cam.CameraType = Enum.CameraType.Custom
-    cam.CameraSubject = myHumanoid()
+    workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+    workspace.CurrentCamera.CameraSubject = myHumanoid()
     notify("Freecam", "Disabled")
 end)
 
