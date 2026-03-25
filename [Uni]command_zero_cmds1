@@ -54,7 +54,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 -- COMMANDS: SETTINGS & UTILITY
 --================================================================
 
-addcmd("prefix", {"setprefix"}, "Change the command prefix", function(args, "settings")
+addcmd("prefix", {"setprefix"}, "Change the command prefix", function(args)
     if args[1] then
         prefix = args[1]
         saveSettings()
@@ -70,11 +70,11 @@ addcmd("commands", {"cmds", "help"}, "Show the command list", function(args), "s
     switchTab("Commands")
 end)
 
-addcmd("print", {"echo"}, "Print text to console", function(args, "settings")
+addcmd("print", {"echo"}, "Print text to console", function(args)
     print("[CZ]", getstring(1, args))
 end)
 
-addcmd("notify", {"notification"}, "Show a notification", function(args, "settings")
+addcmd("notify", {"notification"}, "Show a notification", function(args)
     notify("Notification", getstring(1, args))
 end)
 
@@ -98,7 +98,7 @@ addcmd("exit", {"leave"}, "Leave the game", function(args), "settings")
     player:Kick("Left via Command Zero")
 end)
 
-addcmd("alias", {"addalias"}, "Create a custom alias (alias name command)", function(args, "settings")
+addcmd("alias", {"addalias"}, "Create a custom alias (alias name command)", function(args)
     if #args < 2 then notify("Alias", "Usage: alias <name> <command>"); return end
     local name = args[1]:lower()
     local cmd = getstring(2, args)
@@ -107,7 +107,7 @@ addcmd("alias", {"addalias"}, "Create a custom alias (alias name command)", func
     notify("Alias", name .. " -> " .. cmd)
 end)
 
-addcmd("removealias", {"delalias"}, "Remove a custom alias", function(args, "settings")
+addcmd("removealias", {"delalias"}, "Remove a custom alias", function(args)
     if args[1] then
         customAliases[args[1]:lower()] = nil
         saveSettings()
@@ -158,7 +158,7 @@ addcmd("unanchor", {"unanch"}, "Unanchor your character", function(args), "chara
     notify("Anchor", "Unanchored")
 end)
 
-addcmd("maxslopeangle", {"msa", "maxsl"}, "Set max walkable slope angle", function(args, "movement")
+addcmd("maxslopeangle", {"msa", "maxsl"}, "Set max walkable slope angle", function(args)
     local val = parseNumber(args[1], 89)
     local hum = myHumanoid()
     if hum then hum.MaxSlopeAngle = val end
@@ -182,7 +182,7 @@ addcmd("enableshiftlock", {"shiftlock"}, "Force enable shift lock", function(arg
     notify("Shift Lock", "Enabled")
 end)
 
-addcmd("boxreach", {"reach"}, "Extend reach for tools", function(args, "exploit")
+addcmd("boxreach", {"reach"}, "Extend reach for tools", function(args)
     local range = parseNumber(args[1], 50)
     startLoop("boxreach", 0, function()
         local char = getChar()
@@ -205,7 +205,7 @@ addcmd("unboxreach", {"unreach"}, "Disable reach", function(args), "exploit")
     notify("BoxReach", "Disabled")
 end)
 
-addcmd("setfpscap", {"fpscap"}, "Set FPS cap", function(args, "settings")
+addcmd("setfpscap", {"fpscap"}, "Set FPS cap", function(args)
     local val = parseNumber(args[1], 60)
     pcall(function() setfpscap(val) end)
     notify("FPS", "Cap set to " .. val)
@@ -322,7 +322,7 @@ addcmd("uncartwheel", {}, "Stop cartwheel", function(args), "fun")
 end)
 
 
-addcmd("annoy", {"mimic"}, "Follow and mimic a player annoyingly", function(args, "fun")
+addcmd("annoy", {"mimic"}, "Follow and mimic a player annoyingly", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -399,7 +399,7 @@ addcmd("unclickdelete", {"uncdel"}, "Disable click delete", function(args), "too
     stopLoop("clickdel")
 end)
 
-addcmd("platform", {"plat"}, "Create a platform under your feet", function(args, "tools")
+addcmd("platform", {"plat"}, "Create a platform under your feet", function(args)
     local size = parseNumber(args[1], 20)
     local root = myRoot()
     if not root then return end
@@ -798,7 +798,7 @@ end
 
 local waypoints = {}
 
-addcmd("setwaypoint", {"swp", "savepos", "spos"}, "Save current position as a waypoint", function(args, "teleport")
+addcmd("setwaypoint", {"swp", "savepos", "spos"}, "Save current position as a waypoint", function(args)
     local name = getstring(1, args)
     if name == "" then notify("Waypoint", "Usage: setwaypoint <name>"); return end
     local root = myRoot()
@@ -808,7 +808,7 @@ addcmd("setwaypoint", {"swp", "savepos", "spos"}, "Save current position as a wa
     end
 end)
 
-addcmd("waypoint", {"wp", "loadpos", "lpos"}, "Teleport to a saved waypoint", function(args, "teleport")
+addcmd("waypoint", {"wp", "loadpos", "lpos"}, "Teleport to a saved waypoint", function(args)
     local name = getstring(1, args):lower()
     if waypoints[name] then
         local root = myRoot()
@@ -818,7 +818,7 @@ addcmd("waypoint", {"wp", "loadpos", "lpos"}, "Teleport to a saved waypoint", fu
     end
 end)
 
-addcmd("deletewaypoint", {"dwp", "dpos"}, "Delete a saved waypoint", function(args, "teleport")
+addcmd("deletewaypoint", {"dwp", "dpos"}, "Delete a saved waypoint", function(args)
     local name = getstring(1, args):lower()
     if waypoints[name] then
         waypoints[name] = nil
@@ -902,7 +902,7 @@ addcmd("gotocamera", {"gotocam"}, "Teleport to camera position", function(args),
     if root then root.CFrame = workspace.CurrentCamera.CFrame end
 end)
 
-addcmd("lookat", {}, "Force camera to look at a player", function(args, "camera")
+addcmd("lookat", {}, "Force camera to look at a player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -920,7 +920,7 @@ addcmd("unlookat", {}, "Stop looking at player", function(args), "camera")
     stopLoop("lookat")
 end)
 
-addcmd("view", {"spectate"}, "Spectate a player", function(args, "camera")
+addcmd("view", {"spectate"}, "Spectate a player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -938,7 +938,7 @@ addcmd("unview", {"unspectate"}, "Stop spectating", function(args), "camera")
     notify("View", "Stopped spectating")
 end)
 
-addcmd("cameraspin", {"camspin"}, "Spin the camera around player", function(args, "camera")
+addcmd("cameraspin", {"camspin"}, "Spin the camera around player", function(args)
     local speed = parseNumber(args[1], 2)
     startLoop("camspin", 0, function()
         local cam = workspace.CurrentCamera
@@ -1000,7 +1000,7 @@ addcmd("dropgears", {"droptools"}, "Drop all tools on ground", function(args), "
     end)
 end)
 
-addcmd("copytools", {"copyt"}, "Copy another player's tools", function(args, "tools")
+addcmd("copytools", {"copyt"}, "Copy another player's tools", function(args)
     local targets = getPlayers(args[1])
     for _, t in ipairs(targets) do
         local bp = t:FindFirstChild("Backpack")
@@ -1030,11 +1030,11 @@ addcmd("night", {"time0"}, "Set time to night", function(args), "environment")
     Lighting.ClockTime = 0
 end)
 
-addcmd("time", {"settime"}, "Set time of day (0-24)", function(args, "environment")
+addcmd("time", {"settime"}, "Set time of day (0-24)", function(args)
     Lighting.ClockTime = parseNumber(args[1], 14)
 end)
 
-addcmd("fog", {"setfog"}, "Set fog distance", function(args, "environment")
+addcmd("fog", {"setfog"}, "Set fog distance", function(args)
     Lighting.FogEnd = parseNumber(args[1], 100000)
 end)
 
@@ -1077,7 +1077,7 @@ end)
 -- COMMANDS: PLAYER INFO (CmdX + IY)
 --================================================================
 
-addcmd("userid", {"uid"}, "Get player's UserId", function(args, "info")
+addcmd("userid", {"uid"}, "Get player's UserId", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         local id = tostring(t.UserId)
@@ -1110,7 +1110,7 @@ addcmd("players", {"plist"}, "List all players in server", function(args), "info
     notify("Players (" .. #list .. ")", table.concat(list, "\n"), 10)
 end)
 
-addcmd("inspect", {"examine"}, "Open player inspect menu", function(args, "info")
+addcmd("inspect", {"examine"}, "Open player inspect menu", function(args)
     local targets = getPlayers(args[1])
     for _, t in ipairs(targets) do
         pcall(function()
@@ -1162,7 +1162,7 @@ addcmd("unbunnyhop", {"unbhop"}, "Disable bunny hop", function(args), "movement"
     notify("BunnyHop", "Disabled")
 end)
 
-addcmd("follow", {"stalk"}, "Follow a player", function(args, "movement")
+addcmd("follow", {"stalk"}, "Follow a player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -1180,7 +1180,7 @@ addcmd("unfollow", {"unstalk"}, "Stop following", function(args), "movement")
     stopLoop("follow")
 end)
 
-addcmd("walkto", {}, "Walk to a player", function(args, "movement")
+addcmd("walkto", {}, "Walk to a player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -1234,7 +1234,7 @@ addcmd("unswim", {"noswim"}, "Stop swimming", function(args), "movement")
     notify("Swim", "Disabled")
 end)
 
-addcmd("bodypositionwalkspeed", {"bpws", "bpwalkspeed"}, "BodyPosition-based walkspeed", function(args, "movement")
+addcmd("bodypositionwalkspeed", {"bpws", "bpwalkspeed"}, "BodyPosition-based walkspeed", function(args)
     local speed = parseNumber(args[1], 50)
     startLoop("bpws", 0, function()
         local root = myRoot()
@@ -1260,7 +1260,7 @@ end)
 
 
 
-addcmd("stare", {"faceto"}, "Stare at a player (face them)", function(args, "fun")
+addcmd("stare", {"faceto"}, "Stare at a player (face them)", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -1284,7 +1284,7 @@ end)
 
 
 
-addcmd("eightball", {"8ball"}, "Ask the magic 8-ball a question", function(args, "fun")
+addcmd("eightball", {"8ball"}, "Ask the magic 8-ball a question", function(args)
     local answers = {
         "It is certain.", "Without a doubt.", "Yes definitely.", "You may rely on it.",
         "As I see it, yes.", "Most likely.", "Outlook good.", "Yes.",
@@ -1296,7 +1296,7 @@ addcmd("eightball", {"8ball"}, "Ask the magic 8-ball a question", function(args,
     notify("8-Ball", answers[math.random(#answers)])
 end)
 
-addcmd("math", {"calc", "calculate"}, "Calculator (math 2+2)", function(args, "fun")
+addcmd("math", {"calc", "calculate"}, "Calculator (math 2+2)", function(args)
     local expr = getstring(1, args)
     local ok, result = pcall(function()
         -- safe math eval using only math functions
@@ -1314,7 +1314,7 @@ addcmd("math", {"calc", "calculate"}, "Calculator (math 2+2)", function(args, "f
     end
 end)
 
-addcmd("countdown", {"cd"}, "Countdown from N in chat", function(args, "fun")
+addcmd("countdown", {"cd"}, "Countdown from N in chat", function(args)
     local n = parseNumber(args[1], 5)
     task.spawn(function()
         for i = n, 1, -1 do
@@ -1325,7 +1325,7 @@ addcmd("countdown", {"cd"}, "Countdown from N in chat", function(args, "fun")
     end)
 end)
 
-addcmd("tpwalk", {"teleportwalkspeed"}, "TP-based walkspeed (bypasses speed caps)", function(args, "movement")
+addcmd("tpwalk", {"teleportwalkspeed"}, "TP-based walkspeed (bypasses speed caps)", function(args)
     local speed = parseNumber(args[1], 2)
     startLoop("tpwalkspeed", 0, function()
         local root = myRoot()
@@ -1409,7 +1409,7 @@ addcmd("clientantikick", {"antikick"}, "Try to prevent client-side kicks", funct
     notify("Anti-Kick", "Client anti-kick enabled")
 end)
 
-addcmd("autoclick", {"aclick"}, "Auto-click at interval", function(args, "exploit")
+addcmd("autoclick", {"aclick"}, "Auto-click at interval", function(args)
     local interval = parseNumber(args[1], 0.1)
     local mouse = player:GetMouse()
     startLoop("autoclick", interval, function()
@@ -1431,7 +1431,7 @@ addcmd("unautoclick", {"unaclick"}, "Stop auto-clicking", function(args), "explo
     notify("AutoClick", "Disabled")
 end)
 
-addcmd("graphics", {"gfx"}, "Set graphics quality (1-10)", function(args, "settings")
+addcmd("graphics", {"gfx"}, "Set graphics quality (1-10)", function(args)
     local level = parseNumber(args[1], 5)
     pcall(function()
         settings().Rendering.QualityLevel = Enum.QualityLevel["Level0" .. math.clamp(math.floor(level), 1, 10)]
@@ -1439,7 +1439,7 @@ addcmd("graphics", {"gfx"}, "Set graphics quality (1-10)", function(args, "setti
     notify("Graphics", "Set to level " .. level)
 end)
 
-addcmd("mousesensitivity", {"msens"}, "Set mouse sensitivity", function(args, "settings")
+addcmd("mousesensitivity", {"msens"}, "Set mouse sensitivity", function(args)
     local val = parseNumber(args[1], 1)
     pcall(function()
         UserSettings():GetService("UserGameSettings").MouseSensitivity = val
@@ -1447,7 +1447,7 @@ addcmd("mousesensitivity", {"msens"}, "Set mouse sensitivity", function(args, "s
     notify("Sensitivity", "Set to " .. val)
 end)
 
-addcmd("gametp", {"gameteleport"}, "Teleport to another game by PlaceId", function(args, "server")
+addcmd("gametp", {"gameteleport"}, "Teleport to another game by PlaceId", function(args)
     if args[1] then
         TeleportService:Teleport(tonumber(args[1]))
     end
@@ -1558,7 +1558,7 @@ end)
 -- COMMANDS: TELEPORTATION EXTENDED (CmdX)
 --================================================================
 
-addcmd("gotopos", {"tppos", "tpcoords"}, "Teleport to XYZ coordinates", function(args, "teleport")
+addcmd("gotopos", {"tppos", "tpcoords"}, "Teleport to XYZ coordinates", function(args)
     local x = parseNumber(args[1], 0)
     local y = parseNumber(args[2], 50)
     local z = parseNumber(args[3], 0)
@@ -1567,7 +1567,7 @@ addcmd("gotopos", {"tppos", "tpcoords"}, "Teleport to XYZ coordinates", function
     notify("Teleport", string.format("%.0f, %.0f, %.0f", x, y, z))
 end)
 
-addcmd("tweenpos", {"tweencoords"}, "Tween to XYZ coordinates", function(args, "teleport")
+addcmd("tweenpos", {"tweencoords"}, "Tween to XYZ coordinates", function(args)
     local x = parseNumber(args[1], 0)
     local y = parseNumber(args[2], 50)
     local z = parseNumber(args[3], 0)
@@ -1576,7 +1576,7 @@ addcmd("tweenpos", {"tweencoords"}, "Tween to XYZ coordinates", function(args, "
     if root then tweenMove(root, CFrame.new(x, y, z), spd) end
 end)
 
-addcmd("tweenoffset", {"toffset"}, "Tween by offset from current position", function(args, "teleport")
+addcmd("tweenoffset", {"toffset"}, "Tween by offset from current position", function(args)
     local x = parseNumber(args[1], 0)
     local y = parseNumber(args[2], 0)
     local z = parseNumber(args[3], 0)
@@ -1584,43 +1584,43 @@ addcmd("tweenoffset", {"toffset"}, "Tween by offset from current position", func
     if root then tweenMove(root, root.CFrame + Vector3.new(x, y, z), 1) end
 end)
 
-addcmd("up", {}, "Teleport up N studs", function(args, "teleport")
+addcmd("up", {}, "Teleport up N studs", function(args)
     local dist = parseNumber(args[1], 10)
     local root = myRoot()
     if root then root.CFrame = root.CFrame + Vector3.new(0, dist, 0) end
 end)
 
-addcmd("down", {}, "Teleport down N studs", function(args, "teleport")
+addcmd("down", {}, "Teleport down N studs", function(args)
     local dist = parseNumber(args[1], 10)
     local root = myRoot()
     if root then root.CFrame = root.CFrame - Vector3.new(0, dist, 0) end
 end)
 
-addcmd("forward", {"fwd"}, "Teleport forward N studs", function(args, "teleport")
+addcmd("forward", {"fwd"}, "Teleport forward N studs", function(args)
     local dist = parseNumber(args[1], 10)
     local root = myRoot()
     if root then root.CFrame = root.CFrame + root.CFrame.LookVector * dist end
 end)
 
-addcmd("backward", {"back"}, "Teleport backward N studs", function(args, "teleport")
+addcmd("backward", {"back"}, "Teleport backward N studs", function(args)
     local dist = parseNumber(args[1], 10)
     local root = myRoot()
     if root then root.CFrame = root.CFrame - root.CFrame.LookVector * dist end
 end)
 
-addcmd("left", {}, "Teleport left N studs", function(args, "teleport")
+addcmd("left", {}, "Teleport left N studs", function(args)
     local dist = parseNumber(args[1], 10)
     local root = myRoot()
     if root then root.CFrame = root.CFrame - root.CFrame.RightVector * dist end
 end)
 
-addcmd("right", {}, "Teleport right N studs", function(args, "teleport")
+addcmd("right", {}, "Teleport right N studs", function(args)
     local dist = parseNumber(args[1], 10)
     local root = myRoot()
     if root then root.CFrame = root.CFrame + root.CFrame.RightVector * dist end
 end)
 
-addcmd("bring", {}, "Bring a player to you (client-side with firetouchinterest)", function(args, "teleport")
+addcmd("bring", {}, "Bring a player to you (client-side with firetouchinterest)", function(args)
     local targets = getPlayers(args[1])
     for _, t in ipairs(targets) do
         local tRoot = getRoot(t.Character)
@@ -1633,7 +1633,7 @@ addcmd("bring", {}, "Bring a player to you (client-side with firetouchinterest)"
     end
 end)
 
-addcmd("gotopart", {"tppart"}, "Teleport to a part by name", function(args, "teleport")
+addcmd("gotopart", {"tppart"}, "Teleport to a part by name", function(args)
     local name = getstring(1, args)
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") and v.Name:lower() == name:lower() then
@@ -1646,7 +1646,7 @@ addcmd("gotopart", {"tppart"}, "Teleport to a part by name", function(args, "tel
     notify("Teleport", "Part not found: " .. name)
 end)
 
-addcmd("gotoclass", {"tpclass"}, "Teleport to first instance of ClassName", function(args, "teleport")
+addcmd("gotoclass", {"tpclass"}, "Teleport to first instance of ClassName", function(args)
     local cls = args[1]
     if not cls then return end
     for _, v in ipairs(workspace:GetDescendants()) do
@@ -1659,7 +1659,7 @@ addcmd("gotoclass", {"tpclass"}, "Teleport to first instance of ClassName", func
     end
 end)
 
-addcmd("loopgoto", {"looptp"}, "Continuously teleport to player", function(args, "teleport")
+addcmd("loopgoto", {"looptp"}, "Continuously teleport to player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -1720,7 +1720,7 @@ addcmd("restoreanim", {"reanim"}, "Restore default animations", function(args), 
     end
 end)
 
-addcmd("animspeed", {"animationspeed"}, "Set animation speed", function(args, "character")
+addcmd("animspeed", {"animationspeed"}, "Set animation speed", function(args)
     local speed = parseNumber(args[1], 1)
     local hum = myHumanoid()
     if not hum then return end
@@ -1795,7 +1795,7 @@ addcmd("unwalkfling", {"unwfling"}, "Stop walk fling", function(args), "fun")
     end
 end)
 
-addcmd("flyfling", {}, "Fly into people to fling them", function(args, "fun")
+addcmd("flyfling", {}, "Fly into people to fling them", function(args)
     execCmd("fly " .. (args[1] or "100"))
     task.wait(0.2)
     startLoop("flyfling", 0, function()
@@ -1853,7 +1853,7 @@ addcmd("unbang", {}, "Stop bang", function(args), "fun")
     end
 end)
 
-addcmd("scare", {}, "Teleport right behind a player and stare", function(args, "fun")
+addcmd("scare", {}, "Teleport right behind a player and stare", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -1865,7 +1865,7 @@ addcmd("scare", {}, "Teleport right behind a player and stare", function(args, "
     end
 end)
 
-addcmd("jerk", {}, "Inappropriate animation near player", function(args, "fun")
+addcmd("jerk", {}, "Inappropriate animation near player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]

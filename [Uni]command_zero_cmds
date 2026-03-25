@@ -52,14 +52,14 @@ local MarketplaceService = game:GetService("MarketplaceService")
 -- COMMANDS: CHAT EXTENDED (CmdX)
 --================================================================
 
-addcmd("whisper", {"w", "pm"}, "Whisper to a player", function(args, "chat")
+addcmd("whisper", {"w", "pm"}, "Whisper to a player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local msg = getstring(2, args)
     sendChat("/w " .. targets[1].Name .. " " .. msg)
 end)
 
-addcmd("teamchat", {"tc"}, "Send team chat message", function(args, "chat")
+addcmd("teamchat", {"tc"}, "Send team chat message", function(args)
     sendChat("/team " .. getstring(1, args))
 end)
 
@@ -167,7 +167,7 @@ end)
 -- COMMANDS: AUDIO (CmdX)
 --================================================================
 
-addcmd("audiotp", {"playaudio", "playsound", "atp"}, "Play an audio ID", function(args, "audio")
+addcmd("audiotp", {"playaudio", "playsound", "atp"}, "Play an audio ID", function(args)
     local id = args[1]
     if not id then return end
     local sound = Instance.new("Sound")
@@ -201,19 +201,19 @@ end)
 -- COMMANDS: ADMIN INTEGRATION (CmdX)
 --================================================================
 
-addcmd("hd", {"hdadmin"}, "Execute HD Admin command (if server has it)", function(args, "chat")
+addcmd("hd", {"hdadmin"}, "Execute HD Admin command (if server has it)", function(args)
     local cmd = getstring(1, args)
     if cmd == "" then return end
     sendChat(":" .. cmd)
 end)
 
-addcmd("kohls", {"kadmin"}, "Execute Kohl's Admin command", function(args, "chat")
+addcmd("kohls", {"kadmin"}, "Execute Kohl's Admin command", function(args)
     local cmd = getstring(1, args)
     if cmd == "" then return end
     sendChat(":" .. cmd)
 end)
 
-addcmd("bsadmin", {"basicadmin"}, "Execute Basic Admin command", function(args, "chat")
+addcmd("bsadmin", {"basicadmin"}, "Execute Basic Admin command", function(args)
     sendChat(":" .. getstring(1, args))
 end)
 
@@ -221,12 +221,12 @@ end)
 -- COMMANDS: SPOOFING (CmdX)
 --================================================================
 
-addcmd("spoofgrouprole", {"fakerank"}, "Spoof your group role display (client-side)", function(args, "exploit")
+addcmd("spoofgrouprole", {"fakerank"}, "Spoof your group role display (client-side)", function(args)
     local role = getstring(1, args)
     notify("Spoof", "Group role spoofing is client-visual only: " .. role)
 end)
 
-addcmd("fakelag", {"simulatelag"}, "Simulate laggy movement", function(args, "fun")
+addcmd("fakelag", {"simulatelag"}, "Simulate laggy movement", function(args)
     local intensity = parseNumber(args[1], 3)
     startLoop("fakelag", 0.05, function()
         local root = myRoot()
@@ -271,7 +271,7 @@ addcmd("rejoinexecute", {"rjexec"}, "Re-execute Command Zero after rejoin", func
     end
 end)
 
-addcmd("clickdetectors", {"cdets"}, "Fire all click detectors in range", function(args, "exploit")
+addcmd("clickdetectors", {"cdets"}, "Fire all click detectors in range", function(args)
     local range = parseNumber(args[1], 50)
     local root = myRoot()
     if not root then return end
@@ -287,7 +287,7 @@ addcmd("clickdetectors", {"cdets"}, "Fire all click detectors in range", functio
     notify("ClickDetectors", "Fired " .. count)
 end)
 
-addcmd("proximityprompts", {"pprox"}, "Fire all proximity prompts in range", function(args, "exploit")
+addcmd("proximityprompts", {"pprox"}, "Fire all proximity prompts in range", function(args)
     local range = parseNumber(args[1], 50)
     local root = myRoot()
     if not root then return end
@@ -303,7 +303,7 @@ addcmd("proximityprompts", {"pprox"}, "Fire all proximity prompts in range", fun
     notify("ProxPrompts", "Fired " .. count)
 end)
 
-addcmd("billboardmaxdistance", {"bbdist"}, "Set billboard max distance", function(args, "exploit")
+addcmd("billboardmaxdistance", {"bbdist"}, "Set billboard max distance", function(args)
     local dist = parseNumber(args[1], math.huge)
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BillboardGui") then
@@ -312,7 +312,7 @@ addcmd("billboardmaxdistance", {"bbdist"}, "Set billboard max distance", functio
     end
 end)
 
-addcmd("clickdetectormaxdistance", {"cddist"}, "Set click detector max distance", function(args, "exploit")
+addcmd("clickdetectormaxdistance", {"cddist"}, "Set click detector max distance", function(args)
     local dist = parseNumber(args[1], math.huge)
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ClickDetector") then
@@ -321,7 +321,7 @@ addcmd("clickdetectormaxdistance", {"cddist"}, "Set click detector max distance"
     end
 end)
 
-addcmd("proximitypromptdistance", {"ppdist"}, "Set proximity prompt max distance", function(args, "exploit")
+addcmd("proximitypromptdistance", {"ppdist"}, "Set proximity prompt max distance", function(args)
     local dist = parseNumber(args[1], 100)
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ProximityPrompt") then
@@ -379,7 +379,7 @@ addcmd("unautoobby", {}, "Stop auto obby", function(args), "movement")
     loopStates["autoobby"] = nil
 end)
 
-addcmd("chatframe", {"chatpos"}, "Move chat frame position", function(args, "chat")
+addcmd("chatframe", {"chatpos"}, "Move chat frame position", function(args)
     local x = parseNumber(args[1], 0)
     local y = parseNumber(args[2], 0)
     pcall(function()
@@ -526,7 +526,7 @@ addcmd("unantiwindowafk", {"unantiwafk", "unwafk"}, "Disable anti window AFK", f
     notify("AntiWindowAFK", "Disabled")
 end)
 
-addcmd("clicktphotkey", {"ctpkey"}, "Set click TP to a keybind (hold key + click)", function(args, "teleport")
+addcmd("clicktphotkey", {"ctpkey"}, "Set click TP to a keybind (hold key + click)", function(args)
     local keyName = args[1] or "E"
     local ok, key = pcall(function() return Enum.KeyCode[keyName] end)
     if not ok then notify("ClickTP", "Invalid key: " .. keyName); return end
@@ -689,7 +689,7 @@ local animPacks = {
     elder = {845386501, 845384683, 845385432, 845384466, 845384308, 845383327, 845383544},
 }
 
-addcmd("animpack", {"apack"}, "Load animation pack (old/toy/pirate/knight/astronaut/robot/zombie/vampire/werewolf/ninja/levitation/bubbly/stylish/superhero/elder)", function(args, "character")
+addcmd("animpack", {"apack"}, "Load animation pack (old/toy/pirate/knight/astronaut/robot/zombie/vampire/werewolf/ninja/levitation/bubbly/stylish/superhero/elder)", function(args)
     local pack = args[1] and args[1]:lower()
     if not pack or not animPacks[pack] then
         local names = {}
@@ -716,7 +716,7 @@ end)
 -- COMMANDS: REACH & COMBAT (CmdX)
 --================================================================
 
-addcmd("freereach", {"longreach"}, "Extended reach via touch interest", function(args, "exploit")
+addcmd("freereach", {"longreach"}, "Extended reach via touch interest", function(args)
     local range = parseNumber(args[1], 50)
     startLoop("freereach", 0.1, function()
         local char = getChar()
@@ -747,7 +747,7 @@ addcmd("unfreereach", {"unlongreach"}, "Disable free reach", function(args), "ex
     stopLoop("freereach")
 end)
 
-addcmd("killaura", {"aura"}, "Damage nearby players with tool", function(args, "exploit")
+addcmd("killaura", {"aura"}, "Damage nearby players with tool", function(args)
     local range = parseNumber(args[1], 15)
     startLoop("killaura", 0.1, function()
         local char = getChar()
@@ -778,7 +778,7 @@ addcmd("unkillaura", {"unaura"}, "Disable kill aura", function(args), "exploit")
     stopLoop("killaura")
 end)
 
-addcmd("autoclicker", {"ac"}, "Auto-click rapidly", function(args, "exploit")
+addcmd("autoclicker", {"ac"}, "Auto-click rapidly", function(args)
     local delay = parseNumber(args[1], 0.05)
     startLoop("autoclicker", delay, function()
         pcall(function()
@@ -800,28 +800,28 @@ end)
 -- COMMANDS: PRIVACY & PLAYER INFO EXTENDED (CmdX)
 --================================================================
 
-addcmd("agepublic", {"agep"}, "Show player age in chat", function(args, "info")
+addcmd("agepublic", {"agep"}, "Show player age in chat", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         sendChat(t.Name .. "'s account age: " .. t.AccountAge .. " days")
     end
 end)
 
-addcmd("ageprivate", {"agepr"}, "Show player age (private)", function(args, "info")
+addcmd("ageprivate", {"agepr"}, "Show player age (private)", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         notify("Age", t.Name .. ": " .. t.AccountAge .. " days")
     end
 end)
 
-addcmd("avatar", {}, "Open player avatar inspection", function(args, "info")
+addcmd("avatar", {}, "Open player avatar inspection", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         pcall(function() game:GetService("GuiService"):InspectPlayerFromUserId(t.UserId) end)
     end
 end)
 
-addcmd("friendjoin", {"fj"}, "Join a friend's server", function(args, "server")
+addcmd("friendjoin", {"fj"}, "Join a friend's server", function(args)
     local name = args[1]
     if not name then notify("FriendJoin", "Specify friend name"); return end
     task.spawn(function()
@@ -873,7 +873,7 @@ end)
 -- COMMANDS: GAME SETTINGS (CmdX)
 --================================================================
 
-addcmd("changestyle", {"style"}, "Change chat style", function(args, "chat")
+addcmd("changestyle", {"style"}, "Change chat style", function(args)
     local style = args[1] or "Classic"
     pcall(function()
         if style:lower() == "bubble" then
@@ -885,25 +885,25 @@ addcmd("changestyle", {"style"}, "Change chat style", function(args, "chat")
     notify("Style", "Chat style: " .. style)
 end)
 
-addcmd("ambient", {"setambient"}, "Set lighting ambient (R G B)", function(args, "environment")
+addcmd("ambient", {"setambient"}, "Set lighting ambient (R G B)", function(args)
     local r = parseNumber(args[1], 128) / 255
     local g = parseNumber(args[2], 128) / 255
     local b = parseNumber(args[3], 128) / 255
     Lighting.Ambient = Color3.new(r, g, b)
 end)
 
-addcmd("outdoorambient", {"setoutdoor"}, "Set outdoor ambient (R G B)", function(args, "environment")
+addcmd("outdoorambient", {"setoutdoor"}, "Set outdoor ambient (R G B)", function(args)
     local r = parseNumber(args[1], 128) / 255
     local g = parseNumber(args[2], 128) / 255
     local b = parseNumber(args[3], 128) / 255
     Lighting.OutdoorAmbient = Color3.new(r, g, b)
 end)
 
-addcmd("brightness", {}, "Set lighting brightness", function(args, "environment")
+addcmd("brightness", {}, "Set lighting brightness", function(args)
     Lighting.Brightness = parseNumber(args[1], 2)
 end)
 
-addcmd("fogcolor", {}, "Set fog color (R G B)", function(args, "environment")
+addcmd("fogcolor", {}, "Set fog color (R G B)", function(args)
     local r = parseNumber(args[1], 128) / 255
     local g = parseNumber(args[2], 128) / 255
     local b = parseNumber(args[3], 128) / 255
@@ -940,7 +940,7 @@ end)
 -- COMMANDS: LOOP VARIANTS (IY style)
 --================================================================
 
-addcmd("loopspeed", {}, "Continuously enforce walkspeed", function(args, "movement")
+addcmd("loopspeed", {}, "Continuously enforce walkspeed", function(args)
     local val = parseNumber(args[1], 16)
     startLoop("loopspeed", 0.1, function()
         local hum = myHumanoid()
@@ -953,7 +953,7 @@ addcmd("unloopspeed", {}, "Stop loop speed", function(args), "movement")
     stopLoop("loopspeed")
 end)
 
-addcmd("loopjp", {}, "Continuously enforce jump power", function(args, "movement")
+addcmd("loopjp", {}, "Continuously enforce jump power", function(args)
     local val = parseNumber(args[1], 50)
     startLoop("loopjp", 0.1, function()
         local hum = myHumanoid()
@@ -968,7 +968,7 @@ end)
 
 
 
-addcmd("loopfov", {}, "Continuously enforce FOV", function(args, "visual")
+addcmd("loopfov", {}, "Continuously enforce FOV", function(args)
     local val = parseNumber(args[1], 70)
     startLoop("loopfov", 0.1, function()
         workspace.CurrentCamera.FieldOfView = val
@@ -1011,7 +1011,7 @@ addcmd("joinlogs", {}, "Show when players join/leave", function(args), "info")
     notify("JoinLogs", "Enabled")
 end)
 
-addcmd("listento", {"listen"}, "Listen to another player's audio", function(args, "audio")
+addcmd("listento", {"listen"}, "Listen to another player's audio", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -1043,7 +1043,7 @@ addcmd("togglefs", {"fullscreen"}, "Toggle fullscreen", function(args), "info")
     pcall(function() game:GetService("GuiService"):ToggleFullscreen() end)
 end)
 
-addcmd("enable", {}, "Enable a CoreGui element (chat, playerlist, etc)", function(args, "settings")
+addcmd("enable", {}, "Enable a CoreGui element (chat, playerlist, etc)", function(args)
     local name = args[1]
     if not name then return end
     if name:lower() == "reset" then
@@ -1062,7 +1062,7 @@ addcmd("enable", {}, "Enable a CoreGui element (chat, playerlist, etc)", functio
     notify("Enable", "Enabled: " .. name)
 end)
 
-addcmd("disable", {}, "Disable a CoreGui element", function(args, "settings")
+addcmd("disable", {}, "Disable a CoreGui element", function(args)
     local name = args[1]
     if not name then return end
     if name:lower() == "reset" then
@@ -1103,7 +1103,7 @@ addcmd("hideguis", {}, "Hide all visible GUI frames", function(args), "exploit")
     notify("HideGuis", "Hid " .. count .. " elements")
 end)
 
-addcmd("replicationlag", {"replag"}, "Set data send rate (simulates lag)", function(args, "exploit")
+addcmd("replicationlag", {"replag"}, "Set data send rate (simulates lag)", function(args)
     local val = parseNumber(args[1], 30)
     pcall(function()
         settings():GetService("NetworkSettings").IncomingReplicationLag = val / 1000
@@ -1111,14 +1111,14 @@ addcmd("replicationlag", {"replag"}, "Set data send rate (simulates lag)", funct
     notify("RepLag", val .. "ms")
 end)
 
-addcmd("guiscale", {}, "Scale all GUIs", function(args, "exploit")
+addcmd("guiscale", {}, "Scale all GUIs", function(args)
     local scale = parseNumber(args[1], 1)
     for _, v in ipairs(playerGui:GetDescendants()) do
         if v:IsA("UIScale") then v.Scale = scale end
     end
 end)
 
-addcmd("datalimit", {}, "Set incoming data limit", function(args, "exploit")
+addcmd("datalimit", {}, "Set incoming data limit", function(args)
     local val = parseNumber(args[1], 50)
     pcall(function()
         game:GetService("NetworkClient"):SetOutgoingKBPSLimit(val)
@@ -1136,7 +1136,7 @@ addcmd("removelocalscripts", {"nolocalscripts", "rls"}, "Disable all LocalScript
     notify("Scripts", "Disabled " .. count .. " LocalScripts")
 end)
 
-addcmd("autokey", {}, "Auto-press a key repeatedly", function(args, "exploit")
+addcmd("autokey", {}, "Auto-press a key repeatedly", function(args)
     local keyName = args[1] or "E"
     local interval = parseNumber(args[2], 0.5)
     local ok, key = pcall(function() return Enum.KeyCode[keyName] end)
@@ -1156,7 +1156,7 @@ addcmd("unautokey", {}, "Stop auto key", function(args), "exploit")
     stopLoop("autokey")
 end)
 
-addcmd("savelocation", {"saveloc"}, "Save location to file", function(args, "settings")
+addcmd("savelocation", {"saveloc"}, "Save location to file", function(args)
     local name = getstring(1, args)
     if name == "" then name = "default" end
     local root = myRoot()
@@ -1170,7 +1170,7 @@ addcmd("savelocation", {"saveloc"}, "Save location to file", function(args, "set
     end)
 end)
 
-addcmd("loadlocation", {"loadloc"}, "Load location from file", function(args, "settings")
+addcmd("loadlocation", {"loadloc"}, "Load location from file", function(args)
     local name = getstring(1, args)
     if name == "" then name = "default" end
     pcall(function()
@@ -1190,7 +1190,7 @@ end)
 
 
 
-addcmd("camshake", {}, "Shake the camera", function(args, "camera")
+addcmd("camshake", {}, "Shake the camera", function(args)
     local intensity = parseNumber(args[1], 2)
     local duration = parseNumber(args[2], 3)
     task.spawn(function()
@@ -1207,14 +1207,14 @@ addcmd("camshake", {}, "Shake the camera", function(args, "camera")
     end)
 end)
 
-addcmd("roleid", {"getrole"}, "Get your role in a group", function(args, "info")
+addcmd("roleid", {"getrole"}, "Get your role in a group", function(args)
     local groupId = parseNumber(args[1])
     if not groupId then notify("Role", "Specify group ID"); return end
     local role = player:GetRoleInGroup(groupId)
     notify("Role", "Group " .. groupId .. ": " .. role)
 end)
 
-addcmd("isingroup", {"checkgroup"}, "Check if player is in a group", function(args, "info")
+addcmd("isingroup", {"checkgroup"}, "Check if player is in a group", function(args)
     local targets = getPlayers(args[1] or "me")
     local groupId = parseNumber(args[2])
     if not groupId then notify("Group", "Specify group ID"); return end
@@ -1282,11 +1282,11 @@ addcmd("unragdoll", {"unstun"}, "Get up from ragdoll", function(args), "characte
     end
 end)
 
-addcmd("maxzoom", {}, "Set max camera zoom", function(args, "camera")
+addcmd("maxzoom", {}, "Set max camera zoom", function(args)
     player.CameraMaxZoomDistance = parseNumber(args[1], 128)
 end)
 
-addcmd("minzoom", {}, "Set min camera zoom", function(args, "camera")
+addcmd("minzoom", {}, "Set min camera zoom", function(args)
     player.CameraMinZoomDistance = parseNumber(args[1], 0.5)
 end)
 
@@ -1305,7 +1305,7 @@ addcmd("defaultcam", {}, "Reset camera zoom limits", function(args), "camera")
     player.CameraMaxZoomDistance = 128
 end)
 
-addcmd("notify2", {"toast"}, "Show Roblox native notification", function(args, "info")
+addcmd("notify2", {"toast"}, "Show Roblox native notification", function(args)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
             Title = "Command Zero",
@@ -1359,15 +1359,15 @@ addcmd("rappu", {"rappublic"}, "Rap lyrics in public chat", function(args), "cha
     end)
 end)
 
-addcmd("confess", {}, "Confess something in chat", function(args, "chat")
+addcmd("confess", {}, "Confess something in chat", function(args)
     sendChat("I confess: " .. getstring(1, args))
 end)
 
-addcmd("shout", {"yell"}, "Shout in uppercase", function(args, "chat")
+addcmd("shout", {"yell"}, "Shout in uppercase", function(args)
     sendChat(getstring(1, args):upper())
 end)
 
-addcmd("mockingchat", {"mock"}, "Chat in mOcKiNg tExT", function(args, "chat")
+addcmd("mockingchat", {"mock"}, "Chat in mOcKiNg tExT", function(args)
     local text = getstring(1, args)
     local result = {}
     for i = 1, #text do
@@ -1377,11 +1377,11 @@ addcmd("mockingchat", {"mock"}, "Chat in mOcKiNg tExT", function(args, "chat")
     sendChat(table.concat(result))
 end)
 
-addcmd("reversechat", {"revchat"}, "Chat your message backwards", function(args, "chat")
+addcmd("reversechat", {"revchat"}, "Chat your message backwards", function(args)
     sendChat(getstring(1, args):reverse())
 end)
 
-addcmd("spacechat", {}, "Chat with spaces between every letter", function(args, "chat")
+addcmd("spacechat", {}, "Chat with spaces between every letter", function(args)
     local text = getstring(1, args)
     local result = {}
     for i = 1, #text do table.insert(result, text:sub(i, i)) end
@@ -1401,7 +1401,7 @@ addcmd("unemojispam", {}, "Stop emoji spam", function(args), "chat")
     stopLoop("emojispam")
 end)
 
-addcmd("copychat", {}, "Copy what a player says", function(args, "chat")
+addcmd("copychat", {}, "Copy what a player says", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -1449,7 +1449,7 @@ addcmd("bindableevents", {"bes"}, "List all BindableEvents", function(args), "ex
     notify("BindableEvents (" .. #list .. "+)", table.concat(list, "\n"), 12)
 end)
 
-addcmd("getconnections", {"gcons"}, "List connections on a remote (path)", function(args, "exploit")
+addcmd("getconnections", {"gcons"}, "List connections on a remote (path)", function(args)
     local path = getstring(1, args)
     notify("Connections", "Requires getconnections() — check F9 output")
     if getconnections then
@@ -1466,7 +1466,7 @@ addcmd("getconnections", {"gcons"}, "List connections on a remote (path)", funct
     end
 end)
 
-addcmd("fireevent", {"fireremote"}, "Fire a RemoteEvent by path with no args", function(args, "exploit")
+addcmd("fireevent", {"fireremote"}, "Fire a RemoteEvent by path with no args", function(args)
     local path = getstring(1, args)
     local obj = game
     for _, part in ipairs(path:split(".")) do
@@ -1481,7 +1481,7 @@ addcmd("fireevent", {"fireremote"}, "Fire a RemoteEvent by path with no args", f
     end
 end)
 
-addcmd("invokefunc", {"invokeremote"}, "Invoke a RemoteFunction by path", function(args, "exploit")
+addcmd("invokefunc", {"invokeremote"}, "Invoke a RemoteFunction by path", function(args)
     local path = getstring(1, args)
     local obj = game
     for _, part in ipairs(path:split(".")) do
@@ -1527,7 +1527,7 @@ addcmd("masscompliment", {}, "Compliment every player", function(args), "chat")
     end)
 end)
 
-addcmd("masswhisper", {}, "Whisper the same message to everyone", function(args, "chat")
+addcmd("masswhisper", {}, "Whisper the same message to everyone", function(args)
     local msg = getstring(1, args)
     task.spawn(function()
         for _, p in ipairs(Players:GetPlayers()) do
@@ -1691,7 +1691,7 @@ addcmd("unstaffwatch", {}, "Stop staff watch (can't unhook, just notifies)", fun
     notify("StaffWatch", "Note: existing hooks remain active until rejoin")
 end)
 
-addcmd("rolewatch", {}, "Alert when specific team/role players join", function(args, "info")
+addcmd("rolewatch", {}, "Alert when specific team/role players join", function(args)
     local roleName = getstring(1, args):lower()
     connect(Players.PlayerAdded, function(p)
         task.wait(2)
@@ -1822,7 +1822,7 @@ addcmd("lay", {}, "Lay down animation", function(args), "fun")
     end
 end)
 
-addcmd("cambobble", {"headbob"}, "Camera head bobble effect", function(args, "camera")
+addcmd("cambobble", {"headbob"}, "Camera head bobble effect", function(args)
     local intensity = parseNumber(args[1], 0.3)
     startLoop("cambobble", 0, function()
         local cam = workspace.CurrentCamera
@@ -1839,7 +1839,7 @@ addcmd("uncambobble", {}, "Stop camera bobble", function(args), "camera")
 end)
 
 
-addcmd("cameraoffset", {"camoff", "camoffset"}, "Offset camera from character", function(args, "camera")
+addcmd("cameraoffset", {"camoff", "camoffset"}, "Offset camera from character", function(args)
     local x = parseNumber(args[1], 0)
     local y = parseNumber(args[2], 0)
     local z = parseNumber(args[3], 0)
@@ -1852,7 +1852,7 @@ addcmd("nocameraoffset", {"uncamoff"}, "Reset camera offset", function(args), "c
     if hum then hum.CameraOffset = Vector3.zero end
 end)
 
-addcmd("atmosphere", {"atmos"}, "Set atmosphere density and color", function(args, "environment")
+addcmd("atmosphere", {"atmos"}, "Set atmosphere density and color", function(args)
     local density = parseNumber(args[1], 0.5)
     local atmos = Lighting:FindFirstChildOfClass("Atmosphere")
     if not atmos then
@@ -1901,7 +1901,7 @@ addcmd("unmatrix", {}, "Stop matrix", function(args), "fun")
     stopLoop("matrix")
 end)
 
-addcmd("tpbehind", {}, "Teleport behind a player", function(args, "teleport")
+addcmd("tpbehind", {}, "Teleport behind a player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -1912,7 +1912,7 @@ addcmd("tpbehind", {}, "Teleport behind a player", function(args, "teleport")
     end
 end)
 
-addcmd("tpabove", {}, "Teleport above a player", function(args, "teleport")
+addcmd("tpabove", {}, "Teleport above a player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -1944,7 +1944,7 @@ addcmd("unantifalldamage", {"unafd"}, "Disable anti fall damage", function(args)
     stopLoop("afd")
 end)
 
-addcmd("cframefly", {"cfly"}, "CFrame-based flight (smoother)", function(args, "movement")
+addcmd("cframefly", {"cfly"}, "CFrame-based flight (smoother)", function(args)
     local speed = parseNumber(args[1], 1)
     startLoop("cfly", 0, function()
         local root = myRoot()
@@ -1992,7 +1992,7 @@ addcmd("unvehicleclip", {"unvclip"}, "Disable vehicle clip", function(args), "mo
     stopLoop("vclip")
 end)
 
-addcmd("handlekill", {}, "Kill players using tool handle touch (requires firetouchinterest)", function(args, "exploit")
+addcmd("handlekill", {}, "Kill players using tool handle touch (requires firetouchinterest)", function(args)
     local targets = getPlayers(args[1])
     if not firetouchinterest then notify("HandleKill", "Requires firetouchinterest"); return end
     local char = getChar()
@@ -2011,7 +2011,7 @@ addcmd("handlekill", {}, "Kill players using tool handle touch (requires firetou
     end
 end)
 
-addcmd("replicationlag2", {"netlag"}, "Simulate network lag", function(args, "exploit")
+addcmd("replicationlag2", {"netlag"}, "Simulate network lag", function(args)
     local ms = parseNumber(args[1], 100)
     pcall(function()
         settings():GetService("NetworkSettings").IncomingReplicationLag = ms / 1000
@@ -2045,7 +2045,7 @@ addcmd("sword", {}, "Give yourself a classic sword", function(args), "tools")
     end)
 end)
 
-addcmd("leash", {}, "Attach a rope constraint to player", function(args, "tools")
+addcmd("leash", {}, "Attach a rope constraint to player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -2098,7 +2098,7 @@ addcmd("chatnotify", {}, "Show notification when someone chats", function(args),
     notify("ChatNotify", "Will notify when players chat")
 end)
 
-addcmd("notifyleave", {}, "Notify when specific player leaves", function(args, "info")
+addcmd("notifyleave", {}, "Notify when specific player leaves", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -2110,7 +2110,7 @@ addcmd("notifyleave", {}, "Notify when specific player leaves", function(args, "
     notify("NotifyLeave", "Will notify when " .. target.Name .. " leaves")
 end)
 
-addcmd("removeinworkspace", {"removews", "rinworkspace"}, "Remove all parts with a specific name", function(args, "tools")
+addcmd("removeinworkspace", {"removews", "rinworkspace"}, "Remove all parts with a specific name", function(args)
     local name = getstring(1, args)
     if name == "" then return end
     local count = 0
@@ -2149,7 +2149,7 @@ addcmd("cleareffects", {}, "Remove particles, fire, smoke from entire workspace"
     notify("ClearEffects", "Removed " .. count .. " effects")
 end)
 
-addcmd("touchinterest", {"ti"}, "Fire touch interest on target", function(args, "exploit")
+addcmd("touchinterest", {"ti"}, "Fire touch interest on target", function(args)
     if not firetouchinterest then notify("Touch", "Not available"); return end
     local targets = getPlayers(args[1])
     local root = myRoot()
@@ -2181,7 +2181,7 @@ addcmd("antiteleport", {"antitp"}, "Block game teleports", function(args), "anti
     end
 end)
 
-addcmd("flyspeed", {"flysp"}, "Set fly speed without restarting fly", function(args, "movement")
+addcmd("flyspeed", {"flysp"}, "Set fly speed without restarting fly", function(args)
     flySpeed = parseNumber(args[1], 50)
     notify("FlySpeed", tostring(flySpeed))
 end)
@@ -2190,7 +2190,7 @@ addcmd("qefly", {"flyqe"}, "Toggle Q/E for fly up/down (already built in)", func
     notify("QEFly", "Q/E up/down is always enabled in fly mode")
 end)
 
-addcmd("vfly", {"vehiclefly"}, "Fly while in a vehicle seat", function(args, "movement")
+addcmd("vfly", {"vehiclefly"}, "Fly while in a vehicle seat", function(args)
     local speed = parseNumber(args[1], 50)
     local hum = myHumanoid()
     if not hum or not hum.SeatPart then
@@ -2300,7 +2300,7 @@ addcmd("randomplayer", {"rplr"}, "Teleport to a random player", function(args), 
     end
 end)
 
-addcmd("countdown2", {}, "Visual countdown notification", function(args, "fun")
+addcmd("countdown2", {}, "Visual countdown notification", function(args)
     local n = parseNumber(args[1], 5)
     task.spawn(function()
         for i = n, 1, -1 do
@@ -2335,7 +2335,7 @@ addcmd("unkeep", {}, "Stop persisting through teleports", function(args), "setti
     notify("KeepCZ", "Disabled")
 end)
 
-addcmd("looprefresh", {}, "Continuously refresh character", function(args, "character")
+addcmd("looprefresh", {}, "Continuously refresh character", function(args)
     local interval = parseNumber(args[1], 5)
     startLoop("looprefresh", interval, function()
         execCmd("refresh")
@@ -2375,7 +2375,7 @@ addcmd("rotate", {"autorotate"}, "Enable auto rotation", function(args), "charac
     if hum then hum.AutoRotate = true end
 end)
 
-addcmd("loopjump", {}, "Continuously jump", function(args, "fun")
+addcmd("loopjump", {}, "Continuously jump", function(args)
     local interval = parseNumber(args[1], 0.5)
     startLoop("loopjump", interval, function()
         local hum = myHumanoid()
@@ -2391,7 +2391,7 @@ addcmd("danceall", {}, "Make all visible emotes play", function(args), "fun")
     for i = 1, 3 do sendChat("/e dance" .. i); task.wait(0.3) end
 end)
 
-addcmd("pointat", {}, "Point at a player", function(args, "fun")
+addcmd("pointat", {}, "Point at a player", function(args)
     local targets = getPlayers(args[1])
     if #targets > 0 then sendChat("/e point") end
 end)
@@ -2412,7 +2412,7 @@ addcmd("shrug", {}, "Shrug emote", function(args), "fun")
     sendChat("/e shrug")
 end)
 
-addcmd("tilt", {}, "Tilt your character", function(args, "character")
+addcmd("tilt", {}, "Tilt your character", function(args)
     local angle = parseNumber(args[1], 45)
     local root = myRoot()
     if root then
@@ -2435,7 +2435,7 @@ addcmd("flatchar", {"flat"}, "Flatten character horizontally", function(args), "
 end)
 
 
-addcmd("team2", {"changeteam"}, "Try to change team by name (game dependent)", function(args, "server")
+addcmd("team2", {"changeteam"}, "Try to change team by name (game dependent)", function(args)
     local teamName = getstring(1, args):lower()
     for _, t in ipairs(game:GetService("Teams"):GetTeams()) do
         if t.Name:lower():find(teamName) then
@@ -2484,7 +2484,7 @@ addcmd("youngest", {}, "Find youngest account in server", function(args), "serve
     end
 end)
 
-addcmd("partesp2", {}, "Highlight all parts with a specific name", function(args, "visual")
+addcmd("partesp2", {}, "Highlight all parts with a specific name", function(args)
     local name = getstring(1, args):lower()
     local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
@@ -2569,7 +2569,7 @@ addcmd("spawnpoint", {"setspawn"}, "Set spawn point to current position", functi
     notify("Spawn", "Spawn point set at current position")
 end)
 
-addcmd("clientkick", {}, "Kick yourself from game with message", function(args, "server")
+addcmd("clientkick", {}, "Kick yourself from game with message", function(args)
     local msg = getstring(1, args)
     player:Kick(msg ~= "" and msg or "Kicked via Command Zero")
 end)
@@ -2606,7 +2606,7 @@ addcmd("serverlag", {}, "Show server heartbeat rate", function(args), "server")
     notify("Server", "Heartbeat: " .. steps .. " Hz")
 end)
 
-addcmd("copyname", {}, "Copy player's username to clipboard", function(args, "info")
+addcmd("copyname", {}, "Copy player's username to clipboard", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         pcall(function() if setclipboard then setclipboard(t.Name) end end)
@@ -2614,7 +2614,7 @@ addcmd("copyname", {}, "Copy player's username to clipboard", function(args, "in
     end
 end)
 
-addcmd("copydisplayname", {"copydn"}, "Copy player's display name", function(args, "info")
+addcmd("copydisplayname", {"copydn"}, "Copy player's display name", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         pcall(function() if setclipboard then setclipboard(t.DisplayName) end end)
@@ -2622,7 +2622,7 @@ addcmd("copydisplayname", {"copydn"}, "Copy player's display name", function(arg
     end
 end)
 
-addcmd("getage", {}, "Get account creation date estimate", function(args, "info")
+addcmd("getage", {}, "Get account creation date estimate", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         local days = t.AccountAge
@@ -2632,7 +2632,7 @@ addcmd("getage", {}, "Get account creation date estimate", function(args, "info"
     end
 end)
 
-addcmd("isverified", {}, "Check if player has verified badge", function(args, "info")
+addcmd("isverified", {}, "Check if player has verified badge", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         notify("Verified", t.Name .. ": " .. (t.HasVerifiedBadge and "YES" or "NO"))
@@ -2672,7 +2672,7 @@ addcmd("fixchar", {}, "Fix broken character (refresh at same spot)", function(ar
     execCmd("refresh")
 end)
 
-addcmd("playanimid", {"animid"}, "Play animation by raw asset ID", function(args, "character")
+addcmd("playanimid", {"animid"}, "Play animation by raw asset ID", function(args)
     local id = args[1]
     if not id then return end
     if not id:find("rbxassetid") then id = "rbxassetid://" .. id end
@@ -2709,7 +2709,7 @@ addcmd("listanims", {}, "List currently playing animations", function(args), "ch
     notify("Animations", #list > 0 and table.concat(list, "\n") or "None playing", 8)
 end)
 
-addcmd("animsync", {}, "Sync your animation with another player", function(args, "character")
+addcmd("animsync", {}, "Sync your animation with another player", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     local target = targets[1]
@@ -2789,7 +2789,7 @@ end)
 
 
 
-addcmd("speedhack", {}, "Speed + noclip combo", function(args, "movement")
+addcmd("speedhack", {}, "Speed + noclip combo", function(args)
     local val = args[1] or "100"
     execCmd("speed " .. val)
     execCmd("noclip")
@@ -2837,18 +2837,18 @@ addcmd("gotofreecam", {"fcgoto"}, "Teleport to freecam position", function(args)
     if root and cam then root.CFrame = cam.CFrame end
 end)
 
-addcmd("freecampos2", {"fcpos"}, "Teleport freecam to XYZ", function(args, "teleport")
+addcmd("freecampos2", {"fcpos"}, "Teleport freecam to XYZ", function(args)
     local x = parseNumber(args[1], 0)
     local y = parseNumber(args[2], 50)
     local z = parseNumber(args[3], 0)
     workspace.CurrentCamera.CFrame = CFrame.new(x, y, z)
 end)
 
-addcmd("chat2", {"say2"}, "Chat with /e prefix (emote bypass)", function(args, "chat")
+addcmd("chat2", {"say2"}, "Chat with /e prefix (emote bypass)", function(args)
     sendChat("/e " .. getstring(1, args))
 end)
 
-addcmd("robloxnotify", {"rnotify"}, "Send Roblox native notification", function(args, "info")
+addcmd("robloxnotify", {"rnotify"}, "Send Roblox native notification", function(args)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
             Title = "Command Zero",
@@ -2879,7 +2879,7 @@ addcmd("unnofall2", {}, "Disable nofall2", function(args), "movement")
     stopLoop("nofall2")
 end)
 
-addcmd("clientbring", {}, "Bring player to you (client CFrame)", function(args, "teleport")
+addcmd("clientbring", {}, "Bring player to you (client CFrame)", function(args)
     local targets = getPlayers(args[1])
     local root = myRoot()
     if not root then return end
@@ -2910,7 +2910,7 @@ addcmd("unantiragdoll", {}, "Disable anti ragdoll", function(args), "anti")
     stopLoop("antiragdoll")
 end)
 
-addcmd("forceplace", {}, "Force teleport to a place ID", function(args, "teleport")
+addcmd("forceplace", {}, "Force teleport to a place ID", function(args)
     local id = parseNumber(args[1])
     if id then
         TeleportService:Teleport(id)
@@ -2990,7 +2990,7 @@ addcmd("clickinfo", {}, "Click parts to see their info", function(args), "info")
     end)
 end)
 
-addcmd("teleportspeed", {"tpspeed"}, "Teleport-based speed (even faster than tpwalk)", function(args, "movement")
+addcmd("teleportspeed", {"tpspeed"}, "Teleport-based speed (even faster than tpwalk)", function(args)
     local mult = parseNumber(args[1], 3)
     startLoop("tpspeed", 0, function()
         local root = myRoot()
@@ -3053,7 +3053,7 @@ addcmd("unsurvival", {}, "Disable survival kit", function(args), "settings")
     execCmd("unantiafk")
 end)
 
-addcmd("copyusername", {}, "Copy target username", function(args, "info")
+addcmd("copyusername", {}, "Copy target username", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         pcall(function() if setclipboard then setclipboard(t.Name) end end)
@@ -3093,7 +3093,7 @@ end)
 -- COMMANDS: REMAINING NICHE (CmdX exclusives)
 --================================================================
 
-addcmd("banlands", {}, "Teleport player to void using hat+tool (requires firetouchinterest)", function(args, "exploit")
+addcmd("banlands", {}, "Teleport player to void using hat+tool (requires firetouchinterest)", function(args)
     local targets = getPlayers(args[1])
     if not firetouchinterest then notify("Banlands", "Requires firetouchinterest"); return end
     local char = getChar()
@@ -3140,7 +3140,7 @@ addcmd("hatgear2", {"hatgear", "hg"}, "Convert all hats to holdable gears", func
     notify("HatGear", count .. " hats converted")
 end)
 
-addcmd("give2", {}, "Give tool to player via firetouchinterest", function(args, "tools")
+addcmd("give2", {}, "Give tool to player via firetouchinterest", function(args)
     local targets = getPlayers(args[1])
     if not firetouchinterest then return end
     local char = getChar()
@@ -3298,7 +3298,7 @@ addcmd("unautoplatform", {"unautopf"}, "Disable auto platform", function(args), 
     stopLoop("autoplatform")
 end)
 
-addcmd("sitfly", {}, "Fly using sit method", function(args, "movement")
+addcmd("sitfly", {}, "Fly using sit method", function(args)
     local speed = parseNumber(args[1], 50)
     local hum = myHumanoid()
     if hum then hum.Sit = true end
@@ -3328,7 +3328,7 @@ addcmd("unsitfly", {}, "Stop sit fly", function(args), "movement")
     if hum then hum.Sit = false end
 end)
 
-addcmd("platformfly", {}, "Fly on a visible platform", function(args, "movement")
+addcmd("platformfly", {}, "Fly on a visible platform", function(args)
     local speed = parseNumber(args[1], 30)
     local plat = Instance.new("Part")
     plat.Name = "CZ_FlyPlat"
@@ -3365,7 +3365,7 @@ addcmd("unplatformfly", {}, "Stop platform fly", function(args), "movement")
     end
 end)
 
-addcmd("noresult", {}, "Silently run a command (no notification)", function(args, "settings")
+addcmd("noresult", {}, "Silently run a command (no notification)", function(args)
     local old = notifications
     notifications = false
     execCmd(getstring(1, args), player, false)
@@ -3373,7 +3373,7 @@ addcmd("noresult", {}, "Silently run a command (no notification)", function(args
     notifications = old
 end)
 
-addcmd("loopcommand", {"loopcmd"}, "Loop any command at interval", function(args, "settings")
+addcmd("loopcommand", {"loopcmd"}, "Loop any command at interval", function(args)
     local interval = parseNumber(args[1], 1)
     local cmd = getstring(2, args)
     if cmd == "" then notify("LoopCmd", "Usage: loopcmd <seconds> <command>"); return end
@@ -3383,13 +3383,13 @@ addcmd("loopcommand", {"loopcmd"}, "Loop any command at interval", function(args
     notify("LoopCmd", "Looping '" .. cmd .. "' every " .. interval .. "s")
 end)
 
-addcmd("unloopcmd", {"unloopcommand"}, "Stop a looped command", function(args, "settings")
+addcmd("unloopcmd", {"unloopcommand"}, "Stop a looped command", function(args)
     local cmd = getstring(1, args)
     stopLoop("loopcmd_" .. cmd)
     notify("LoopCmd", "Stopped: " .. cmd)
 end)
 
-addcmd("masscmd", {}, "Run a command for every player", function(args, "settings")
+addcmd("masscmd", {}, "Run a command for every player", function(args)
     local cmd = getstring(1, args)
     if cmd == "" then return end
     for _, p in ipairs(Players:GetPlayers()) do
@@ -3439,7 +3439,7 @@ addcmd("unantiwindowafk2", {}, "Stop alternative anti-AFK", function(args), "ant
     stopLoop("antiwin2")
 end)
 
-addcmd("safechat", {}, "Send chat message with /e prefix to avoid filters", function(args, "chat")
+addcmd("safechat", {}, "Send chat message with /e prefix to avoid filters", function(args)
     sendChat("/e " .. getstring(1, args))
 end)
 
@@ -3455,7 +3455,7 @@ addcmd("hidecommands", {}, "Hide command list (minimize to bar only)", function(
     notify("Hidden", "GUI hidden. Right Ctrl to show.")
 end)
 
-addcmd("loopnotify", {}, "Loop a notification", function(args, "info")
+addcmd("loopnotify", {}, "Loop a notification", function(args)
     local msg = getstring(1, args)
     startLoop("loopnotify", 3, function()
         notify("Loop", msg)
@@ -3466,7 +3466,7 @@ addcmd("unloopnotify", {}, "Stop loop notify", function(args), "info")
     stopLoop("loopnotify")
 end)
 
-addcmd("countdown3", {}, "Countdown in system messages", function(args, "fun")
+addcmd("countdown3", {}, "Countdown in system messages", function(args)
     local n = parseNumber(args[1], 5)
     task.spawn(function()
         for i = n, 1, -1 do
@@ -3501,13 +3501,13 @@ addcmd("anticheat2", {}, "Alternative anti-cheat bypass (delete detection script
     notify("AntiCheat2", "Destroyed " .. count .. " suspicious scripts")
 end)
 
-addcmd("fov2", {}, "Smoothly tween FOV", function(args, "visual")
+addcmd("fov2", {}, "Smoothly tween FOV", function(args)
     local val = parseNumber(args[1], 70)
     local dur = parseNumber(args[2], 0.5)
     TweenService:Create(workspace.CurrentCamera, TweenInfo.new(dur), {FieldOfView = val}):Play()
 end)
 
-addcmd("earthquake", {}, "Shake the screen like an earthquake", function(args, "camera")
+addcmd("earthquake", {}, "Shake the screen like an earthquake", function(args)
     local intensity = parseNumber(args[1], 5)
     local duration = parseNumber(args[2], 5)
     task.spawn(function()
@@ -3530,7 +3530,7 @@ addcmd("earthquake", {}, "Shake the screen like an earthquake", function(args, "
     end)
 end)
 
-addcmd("slowmo", {}, "Slow motion effect", function(args, "movement")
+addcmd("slowmo", {}, "Slow motion effect", function(args)
     local factor = parseNumber(args[1], 0.3)
     workspace.Gravity = 196.2 * factor
     local hum = myHumanoid()
@@ -3547,7 +3547,7 @@ addcmd("unslowmo", {}, "Restore normal speed", function(args), "movement")
     if hum then hum.WalkSpeed = 16; hum.JumpPower = 50 end
 end)
 
-addcmd("fastmo", {}, "Fast motion effect", function(args, "movement")
+addcmd("fastmo", {}, "Fast motion effect", function(args)
     local factor = parseNumber(args[1], 2)
     workspace.Gravity = 196.2 * factor
     local hum = myHumanoid()
@@ -3581,14 +3581,14 @@ addcmd("normalgravity", {"earthgravity"}, "Normal earth gravity", function(args)
     workspace.Gravity = 196.2
 end)
 
-addcmd("superjump", {}, "Super jump power", function(args, "movement")
+addcmd("superjump", {}, "Super jump power", function(args)
     local power = parseNumber(args[1], 200)
     local hum = myHumanoid()
     if hum then hum.JumpPower = power; hum.UseJumpPower = true end
     notify("SuperJump", "Jump power: " .. power)
 end)
 
-addcmd("superspeed", {}, "Super walkspeed", function(args, "movement")
+addcmd("superspeed", {}, "Super walkspeed", function(args)
     local speed = parseNumber(args[1], 100)
     local hum = myHumanoid()
     if hum then hum.WalkSpeed = speed end

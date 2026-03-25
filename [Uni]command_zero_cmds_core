@@ -17,32 +17,32 @@ local SoundService=game:GetService("SoundService")
 -- COMMANDS: MOVEMENT & TELEPORT
 --================================================================
 
-addcmd("speed", {"walkspeed", "ws"}, "Set walk speed (default 16)", function(args, "movement")
+addcmd("speed", {"walkspeed", "ws"}, "Set walk speed (default 16)", function(args)
     local val = parseNumber(args[1], 16)
     local hum = myHumanoid()
     if hum then hum.WalkSpeed = val end
     notify("Speed", "WalkSpeed set to " .. val)
 end)
 
-addcmd("jumppower", {"jp"}, "Set jump power (default 50)", function(args, "movement")
+addcmd("jumppower", {"jp"}, "Set jump power (default 50)", function(args)
     local val = parseNumber(args[1], 50)
     local hum = myHumanoid()
     if hum then hum.JumpPower = val; hum.UseJumpPower = true end
     notify("Jump", "JumpPower set to " .. val)
 end)
 
-addcmd("hipheight", {"hh"}, "Set hip height", function(args, "movement")
+addcmd("hipheight", {"hh"}, "Set hip height", function(args)
     local val = parseNumber(args[1], 0)
     local hum = myHumanoid()
     if hum then hum.HipHeight = val end
 end)
 
-addcmd("gravity", {"grav"}, "Set workspace gravity (default 196.2)", function(args, "movement")
+addcmd("gravity", {"grav"}, "Set workspace gravity (default 196.2)", function(args)
     workspace.Gravity = parseNumber(args[1], 196.2)
     notify("Gravity", "Set to " .. workspace.Gravity)
 end)
 
-addcmd("goto", {"tp"}, "Teleport to player", function(args, "teleport")
+addcmd("goto", {"tp"}, "Teleport to player", function(args)
     local targets = getPlayers(args[1])
     for _, t in ipairs(targets) do
         local tRoot = getRoot(t.Character)
@@ -54,7 +54,7 @@ addcmd("goto", {"tp"}, "Teleport to player", function(args, "teleport")
     end
 end)
 
-addcmd("tweengoto", {"tweento", "tgoto"}, "Tween to player smoothly", function(args, "teleport")
+addcmd("tweengoto", {"tweento", "tgoto"}, "Tween to player smoothly", function(args)
     local targets = getPlayers(args[1])
     local duration = parseNumber(args[2], 2)
     for _, t in ipairs(targets) do
@@ -173,7 +173,7 @@ addcmd("unfly", {"nofly"}, "Disable fly", function(args), "movement")
     notify("Fly", "Disabled")
 end)
 
-addcmd("teleportwalk", {"tpwalk"}, "Teleport in walk direction", function(args, "movement")
+addcmd("teleportwalk", {"tpwalk"}, "Teleport in walk direction", function(args)
     local dist = parseNumber(args[1], 5)
     local on = toggleLoop("tpwalk", 0, function()
         local root, hum = myRoot(), myHumanoid()
@@ -235,7 +235,7 @@ addcmd("unclicktp", {"unctp"}, "Disable click teleport", function(args), "telepo
     notify("ClickTP", "Disabled")
 end)
 
-addcmd("orbit", {"orb"}, "Orbit a player", function(args, "movement")
+addcmd("orbit", {"orb"}, "Orbit a player", function(args)
     local targets = getPlayers(args[1])
     local radius = parseNumber(args[2], 10)
     local speed = parseNumber(args[3], 2)
@@ -261,7 +261,7 @@ addcmd("unorbit", {"unorb"}, "Stop orbiting", function(args), "movement")
     notify("Orbit", "Stopped")
 end)
 
-addcmd("thru", {"through"}, "Move forward through walls", function(args, "movement")
+addcmd("thru", {"through"}, "Move forward through walls", function(args)
     local dist = parseNumber(args[1], 20)
     local root = myRoot()
     if root then
@@ -269,7 +269,7 @@ addcmd("thru", {"through"}, "Move forward through walls", function(args, "moveme
     end
 end)
 
-addcmd("offset", {}, "Offset from player", function(args, "movement")
+addcmd("offset", {}, "Offset from player", function(args)
     local targets = getPlayers(args[1])
     local dist = parseNumber(args[2], 5)
     if #targets == 0 then return end
@@ -316,7 +316,7 @@ end)
 
 
 
-addcmd("animation", {"anim"}, "Play animation by ID", function(args, "character")
+addcmd("animation", {"anim"}, "Play animation by ID", function(args)
     local id = args[1]
     local speed = parseNumber(args[2], 1)
     if not id then return end
@@ -332,13 +332,13 @@ end)
 
 
 
-addcmd("emote", {"e"}, "Play emote by name or /e command", function(args, "character")
+addcmd("emote", {"e"}, "Play emote by name or /e command", function(args)
     local name = getstring(1, args)
     if name == "" then return end
     sendChat("/e " .. name)
 end)
 
-addcmd("dance", {"d"}, "Play dance emote", function(args, "character")
+addcmd("dance", {"d"}, "Play dance emote", function(args)
     local n = args[1] or "1"
     sendChat("/e dance" .. n)
 end)
@@ -478,7 +478,7 @@ addcmd("unfullbright", {"unfb"}, "Restore lighting", function(args), "visual")
     notify("Fullbright", "Disabled")
 end)
 
-addcmd("fov", {"fieldofview"}, "Set camera field of view", function(args, "visual")
+addcmd("fov", {"fieldofview"}, "Set camera field of view", function(args)
     local val = parseNumber(args[1], 70)
     workspace.CurrentCamera.FieldOfView = val
     notify("FOV", "Set to " .. val)
@@ -539,14 +539,14 @@ addcmd("serverinfo", {"sinfo", "info"}, "Show server information", function(args
     , 8)
 end)
 
-addcmd("age", {}, "Get player's account age", function(args, "info")
+addcmd("age", {}, "Get player's account age", function(args)
     local targets = getPlayers(args[1])
     for _, t in ipairs(targets) do
         notify("Age", t.Name .. " account age: " .. t.AccountAge .. " days")
     end
 end)
 
-addcmd("team", {}, "Show player's team", function(args, "server")
+addcmd("team", {}, "Show player's team", function(args)
     local targets = getPlayers(args[1] or "me")
     for _, t in ipairs(targets) do
         local teamName = t.Team and t.Team.Name or "No Team"
@@ -554,7 +554,7 @@ addcmd("team", {}, "Show player's team", function(args, "server")
     end
 end)
 
-addcmd("volume", {"vol"}, "Set game volume (0-10)", function(args, "settings")
+addcmd("volume", {"vol"}, "Set game volume (0-10)", function(args)
     local vol = parseNumber(args[1], 1)
     SoundService.AmbientReverb = Enum.ReverbType.NoReverb
     UserSettings():GetService("UserGameSettings").MasterVolume = math.clamp(vol / 10, 0, 1)

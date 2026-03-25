@@ -29,7 +29,7 @@ addcmd("unantiafk", {}, "Disable anti-AFK", function(args), "anti")
     notify("Anti-AFK", "Disabled")
 end)
 
-addcmd("antifling", {"antiflingg", "afling"}, "Disable collisions on other players to prevent flings (IY method)", function(args, "anti")
+addcmd("antifling", {"antiflingg", "afling"}, "Disable collisions on other players to prevent flings (IY method)", function(args)
     stopLoop("antifling")
     startLoop("antifling", 0, function()
         for _, p in ipairs(Players:GetPlayers()) do
@@ -45,7 +45,7 @@ addcmd("antifling", {"antiflingg", "afling"}, "Disable collisions on other playe
     notify("Anti-Fling", "Enabled — other player collisions disabled")
 end)
 
-addcmd("unantifling", {}, "Disable anti-fling", function(args, "anti")
+addcmd("unantifling", {}, "Disable anti-fling", function(args)
     stopLoop("antifling")
     notify("Anti-Fling", "Disabled")
 end)
@@ -226,7 +226,7 @@ addcmd("fling", {"fl"}, "Fling a player (IY method — spin into them to launch)
     notify("Fling", "Done")
 end)
 
-addcmd("trip", {}, "Trip a nearby player", function(args, "fun")
+addcmd("trip", {}, "Trip a nearby player", function(args)
     local targets = getPlayers(args[1])
     for _, t in ipairs(targets) do
         local tHum = getHumanoid(t.Character)
@@ -275,11 +275,11 @@ end)
 -- COMMANDS: CHAT
 --================================================================
 
-addcmd("chat", {"say"}, "Send a chat message", function(args, "chat")
+addcmd("chat", {"say"}, "Send a chat message", function(args)
     sendChat(getstring(1, args))
 end)
 
-addcmd("spam", {"chatspam"}, "Spam a message in chat", function(args, "chat")
+addcmd("spam", {"chatspam"}, "Spam a message in chat", function(args)
     local msg = getstring(1, args)
     if msg == "" then return end
     startLoop("chatspam", 0.5, function()
