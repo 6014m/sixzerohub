@@ -3883,34 +3883,44 @@ end)
 -- COMMANDS: TROLLING EXTENDED (CmdX)
 --================================================================
 
-addcmd("walkfling", {"wfling"}, "Walk into players to fling them (IY method)", function(args)
-    local char = getChar()
-    local root = myRoot()
-    if not root or not char then return end
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") then
-            p.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-        end
+local walkflinging = false
+addcmd("walkfling", {"wfling"}, "Fling by walking into people (IY method, no spinning)", function(args)
+    execCmd("unwalkfling")
+    local hum = myHumanoid()
+    if hum then
+        hum.Died:Connect(function() execCmd("unwalkfling") end)
     end
-    startLoop("walkfling", 0, function()
-        local r = myRoot()
-        if r then r.AssemblyAngularVelocity = Vector3.new(0, 200, 0) end
+    execCmd("noclip")
+    walkflinging = true
+    task.spawn(function()
+        repeat RunService.Heartbeat:Wait()
+            local character = getChar()
+            local root = myRoot()
+            local vel, movel = nil, 0.1
+            while not (character and character.Parent and root and root.Parent) do
+                RunService.Heartbeat:Wait()
+                character = getChar()
+                root = myRoot()
+            end
+            vel = root.Velocity
+            root.Velocity = vel * 10000 + Vector3.new(0, 10000, 0)
+            RunService.RenderStepped:Wait()
+            if character and character.Parent and root and root.Parent then
+                root.Velocity = vel
+            end
+            RunService.Stepped:Wait()
+            if character and character.Parent and root and root.Parent then
+                root.Velocity = vel + Vector3.new(0, movel, 0)
+                movel = movel * -1
+            end
+        until walkflinging == false
     end)
     notify("WalkFling", "Enabled — walk into people to fling them")
 end)
 
 addcmd("unwalkfling", {"unwfling", "nowalkfling"}, "Stop walk fling", function(args)
-    stopLoop("walkfling")
-    local char = getChar()
-    local root = myRoot()
-    if root then root.AssemblyAngularVelocity = Vector3.zero end
-    if char then
-        for _, p in ipairs(char:GetDescendants()) do
-            if p:IsA("BasePart") then
-                p.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5)
-            end
-        end
-    end
+    walkflinging = false
+    execCmd("unnoclip")
     notify("WalkFling", "Disabled")
 end)
 
