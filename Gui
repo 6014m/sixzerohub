@@ -1425,7 +1425,7 @@ local function createScriptButton(info, targetContent, source)
         task.spawn(function()
             local ok, err = pcall(function()
                 local scriptUrl = info.url or (REPO_BASE .. info.file)
-                loadstring(game:HttpGet(scriptUrl))()
+                loadstring(game:HttpGet(scriptUrl, true))()
             end)
 
             if ok then
