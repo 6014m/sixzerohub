@@ -573,22 +573,43 @@ _E.CZ_flySpeed = flySpeed
 -- LOAD MODULES (same method as lock-on script)
 --================================================================
 
+--================================================================
+-- SHARE STATE VIA _G (guaranteed same across all loadstrings)
+--================================================================
+
+_G.CZ = {
+    addcmd=addcmd, getPlayers=getPlayers, getstring=getstring, parseNumber=parseNumber,
+    notify=notify, sendChat=sendChat, systemMsg=systemMsg,
+    startLoop=startLoop, stopLoop=stopLoop, toggleLoop=toggleLoop, loopStates=loopStates,
+    execCmd=execCmd, connect=connect, myRoot=myRoot, myHumanoid=myHumanoid,
+    getChar=getChar, getRoot=getRoot, getHumanoid=getHumanoid, tweenMove=tweenMove,
+    clearESP=clearESP, espObjects=espObjects, waypoints=waypoints,
+    player=player, prefix=prefix, customAliases=customAliases, cmdHistory=cmdHistory,
+    allConnections=allConnections, saveSettings=saveSettings, cmds=cmds,
+    activeLoops=activeLoops, cmdDescriptions=cmdDescriptions,
+    flyActive=flyActive, flySpeed=flySpeed, genv=genv, CZ_KEY=CZ_KEY,
+}
+
+--================================================================
+-- LOAD MODULES
+--================================================================
+
 local MB = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
-local function loadModule(url)
-    local s, r = pcall(function() return loadstring(game:HttpGet(url))() end)
-    if not s then warn("[CZ] Module error: " .. tostring(r)) end
+local function loadMod(name)
+    local s, r = pcall(function() return loadstring(game:HttpGet(MB .. name))() end)
+    if not s then warn("[CZ] " .. name .. ": " .. tostring(r)) end
     return s and r or nil
 end
 
-local guiResult = loadModule(MB .. "CZ2_gui")
+local guiResult = loadMod("CZ2_gui")
 local gui = guiResult and guiResult.gui
 local populateCommands = guiResult and guiResult.populateCommands
 if gui then genv[CZ_KEY].Gui = gui end
 
-loadModule(MB .. "CZ2_core")
-loadModule(MB .. "CZ2_cmds0")
-loadModule(MB .. "CZ2_cmds1")
-loadModule(MB .. "CZ2_cmds2")
+loadMod("CZ2_core")
+loadMod("CZ2_cmds0")
+loadMod("CZ2_cmds1")
+loadMod("CZ2_cmds2")
 
 if populateCommands then populateCommands() end
 

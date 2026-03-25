@@ -1,19 +1,20 @@
--- Command Zero GUI Module (reads shared state from getgenv)
-local _E = getgenv and getgenv() or _G
-local player = _E.CZ_player
-local cmds = _E.CZ_cmds
-local cmdDescriptions = _E.CZ_cmdDescriptions
-local prefix = _E.CZ_prefix
-local execCmd = _E.CZ_execCmd
-local cmdHistory = _E.CZ_cmdHistory
-local connect = _E.CZ_connect
-local notify = _E.CZ_notify
-local customAliases = _E.CZ_customAliases
-local saveSettings = _E.CZ_saveSettings
-local allConnections = _E.CZ_allConnections
-local genv = _E
+-- Command Zero GUI Module (shared state via _G.CZ)
+local E = _G.CZ
+local player = E.player
+local cmds = E.cmds
+local cmdDescriptions = E.cmdDescriptions
+local prefix = E.prefix
+local execCmd = E.execCmd
+local cmdHistory = E.cmdHistory
+local connect = E.connect
+local notify = E.notify
+local customAliases = E.customAliases
+local saveSettings = E.saveSettings
+local allConnections = E.allConnections
+local genv = E.genv
 
 local playerGui = player:WaitForChild("PlayerGui")
+local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
