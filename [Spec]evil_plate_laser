@@ -151,7 +151,22 @@ local conn = RunService.Heartbeat:Connect(function(dt)
     rayParams.FilterType = Enum.RaycastFilterType.Exclude
     rayParams.FilterDescendantsInstances = {character}
     local ground = workspace:Raycast(newPos + Vector3.new(0, 2, 0), Vector3.new(0, -15, 0), rayParams)
-    if not ground then return end
+
+    if not ground then
+        -- no ground at horizontal teleport target — try going over the laser instead
+        -- max height: ~7.2 studs (standard roblox jump height)
+        local MAX_JUMP_HEIGHT = 7.2
+        local laserTop = bestPart.Position.Y + halfSize.Y
+        local clearance = laserTop - pPos.Y + 1 -- 1 stud above the laser top
+
+        if clearance > 0 and clearance <= MAX_JUMP_HEIGHT then
+            -- teleport straight up, just above the laser
+            newPos = Vector3.new(pPos.X, pPos.Y + clearance, pPos.Z)
+        else
+            -- laser too tall to jump over, skip
+            return
+        end
+    end
 
     _G.SixZeroHubDensityPause = now + 0.2
     rootPart.CFrame = CFrame.new(newPos) * (rootPart.CFrame - rootPart.CFrame.Position)
