@@ -1,13 +1,16 @@
--- CZ2_cmds1 v2
-if not _G.CZ then warn("[CZ2_cmds1] FATAL: _G.CZ is nil — main script did not load first") return end
-if not _G.CZ.addcmd then warn("[CZ2_cmds1] FATAL: _G.CZ.addcmd is nil") return end
+-- CZ2_cmds1 v3
+if not _G.CZ then warn("[CZ2_cmds1] FATAL: _G.CZ is nil") return end
+-- Dump every key to see what's nil
+for _, k in ipairs({"addcmd","notify","sendChat","startLoop","stopLoop","connect","execCmd","getPlayers","parseNumber","getstring","myRoot","myHumanoid","getChar","getRoot","getHumanoid","player","cmds"}) do
+    if not _G.CZ[k] then warn("[CZ2_cmds1] NIL: _G.CZ." .. k) end
+end
 -- Command Zero Module (shared state via _G.CZ)
 local E = _G.CZ
 local addcmd = E.addcmd
 local getPlayers = E.getPlayers
 local getstring = E.getstring
 local parseNumber = E.parseNumber
-local notify = E.notify
+local notify = E.notify or function() end
 local sendChat = E.sendChat
 local systemMsg = E.systemMsg
 local startLoop = E.startLoop
@@ -15,7 +18,7 @@ local stopLoop = E.stopLoop
 local toggleLoop = E.toggleLoop
 local loopStates = E.loopStates
 local execCmd = E.execCmd
-local connect = E.connect
+local connect = E.connect or function(s,c) return s:Connect(c) end
 local myRoot = E.myRoot
 local myHumanoid = E.myHumanoid
 local getChar = E.getChar
