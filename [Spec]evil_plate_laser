@@ -1,5 +1,6 @@
--- [Spec] Evil Plate Game - Laser Jumper
--- Detects laser parts and jumps over them
+-- [Spec] Evil Plate Game - Laser Dodger
+-- Teleports just past incoming lasers for minimal visibility
+-- Detects Lasers1, Lasers2, ... LasersN under ActiveEvents/Round
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,19 +8,25 @@ local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 local connections = {}
 local active = true
-local JUMP_RANGE = 14
-local JUMP_COOLDOWN = 0.6
-local lastJump = 0
 
-local function getRootPart()
-    local char = localPlayer.Character
-    return char and char:FindFirstChild("HumanoidRootPart")
+local TRIGGER_DIST = 2.5  -- OBB distance to trigger teleport (lower = stealthier)
+local PASS_BEYOND = 2     -- studs past the far edge of the laser
+local COOLDOWN = 0.5      -- seconds between teleports
+local HEIGHT_RANGE = 7
+
+local character, humanoid, rootPart
+local lastPos = {}
+local lastTP = 0
+
+local function bindCharacter(char)
+    character = char
+    humanoid = char:WaitForChild("Humanoid", 10)
+    rootPart = char:WaitForChild("HumanoidRootPart", 10)
 end
 
-local function getHumanoid()
-    local char = localPlayer.Character
-    return char and char:FindFirstChildOfClass("Humanoid")
-end
+if localPlayer.Character then task.spawn(bindCharacter, localPlayer.Character) end
+local charConn = localPlayer.CharacterAdded:Connect(bindCharacter)
+table.insert(connections, charConn)
 
 local function findActiveRound()
     local activeEvents = workspace:FindFirstChild("ActiveEvents")
@@ -32,88 +39,120 @@ local function findActiveRound()
     return nil
 end
 
-local function getLaserParts(round)
+-- Collect all BaseParts from children named Lasers1, Lasers2, etc.
+local function collectLasers(round)
     local parts = {}
     for _, child in ipairs(round:GetChildren()) do
-        local n = child.Name:lower()
-        if n:find("laser") then
+        if child.Name:match("^Lasers%d+$") then
             if child:IsA("BasePart") then
-                -- the laser IS the part
                 table.insert(parts, child)
             else
-                -- the laser is a model/folder, get all baseparts inside it
                 for _, desc in ipairs(child:GetDescendants()) do
                     if desc:IsA("BasePart") then
                         table.insert(parts, desc)
                     end
                 end
-                -- if model itself has no baseparts, try the model's PrimaryPart
-                if #parts == 0 and child:IsA("Model") and child.PrimaryPart then
-                    table.insert(parts, child.PrimaryPart)
-                end
-            end
-        end
-    end
-    -- also check descendants in case lasers are nested deeper
-    if #parts == 0 then
-        for _, desc in ipairs(round:GetDescendants()) do
-            if desc:IsA("BasePart") and desc.Name:lower():find("laser") then
-                table.insert(parts, desc)
             end
         end
     end
     return parts
 end
 
--- one-time debug dump
-local debugDone = false
-local function debugDump(round)
-    if debugDone then return end
-    debugDone = true
-    warn("[LaserJumper] Round found: " .. round:GetFullName())
-    warn("[LaserJumper] Direct children of round:")
-    for _, child in ipairs(round:GetChildren()) do
-        warn("  " .. child.Name .. " [" .. child.ClassName .. "]")
-        if not child:IsA("BasePart") then
-            for _, sub in ipairs(child:GetChildren()) do
-                warn("    " .. sub.Name .. " [" .. sub.ClassName .. "]")
-            end
-        end
-    end
-    local found = getLaserParts(round)
-    warn("[LaserJumper] Laser parts found: " .. #found)
-    for _, p in ipairs(found) do
-        warn("  -> " .. p:GetFullName() .. " [" .. p.ClassName .. "] pos=" .. tostring(p.Position))
-    end
+-- OBB closest-point distance
+local function closestDistOBB(cf, halfSize, point)
+    local lp = cf:PointToObjectSpace(point)
+    local dx = math.max(math.abs(lp.X) - halfSize.X, 0)
+    local dy = math.max(math.abs(lp.Y) - halfSize.Y, 0)
+    local dz = math.max(math.abs(lp.Z) - halfSize.Z, 0)
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
 end
 
-local conn = RunService.Heartbeat:Connect(function()
-    if not active then return end
-    local root = getRootPart()
-    local hum = getHumanoid()
-    if not root or not hum then return end
-    if hum:GetState() == Enum.HumanoidStateType.Dead then return end
+-- OBB closest point in world space
+local function closestPointOBB(cf, halfSize, point)
+    local lp = cf:PointToObjectSpace(point)
+    local cx = math.clamp(lp.X, -halfSize.X, halfSize.X)
+    local cy = math.clamp(lp.Y, -halfSize.Y, halfSize.Y)
+    local cz = math.clamp(lp.Z, -halfSize.Z, halfSize.Z)
+    return cf:PointToWorldSpace(Vector3.new(cx, cy, cz))
+end
 
-    local now = tick()
-    if now - lastJump < JUMP_COOLDOWN then return end
+local conn = RunService.Heartbeat:Connect(function(dt)
+    if not active then return end
+    if not rootPart or not rootPart.Parent then return end
+    if not humanoid or humanoid.Health <= 0 then return end
 
     local round = findActiveRound()
     if not round then return end
 
-    debugDump(round)
+    local now = tick()
+    if now - lastTP < COOLDOWN then return end
 
-    local rootPos = root.Position
-    for _, part in ipairs(getLaserParts(round)) do
-        local diff = part.Position - rootPos
-        local yDiff = diff.Y
-        if yDiff < -4 or yDiff > 6 then continue end
+    local pPos = rootPart.Position
+    local feetY = pPos.Y - 3
+    local lasers = collectLasers(round)
 
-        local horizDist = Vector2.new(diff.X, diff.Z).Magnitude
-        if horizDist <= JUMP_RANGE then
-            hum.Jump = true
-            pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
-            lastJump = now
-            break
+    -- find the closest laser that's within trigger range
+    local bestPart, bestDist, bestVel = nil, math.huge, Vector3.zero
+
+    for _, part in ipairs(lasers) do
+        local pos = part.Position
+
+        -- velocity tracking
+        local vel = Vector3.zero
+        if lastPos[part] and dt > 0 then
+            vel = (pos - lastPos[part]) / dt
+        end
+        lastPos[part] = pos
+
+        -- skip stationary (not moving yet or event ended)
+        if vel.Magnitude < 1 then continue end
+
+        -- height filter
+        if math.abs(pos.Y - feetY) > HEIGHT_RANGE then continue end
+
+        -- OBB distance
+        local halfSize = part.Size * 0.5
+        local dist = closestDistOBB(part.CFrame, halfSize, pPos)
+
+        if dist < TRIGGER_DIST and dist < bestDist then
+            bestPart = part
+            bestDist = dist
+            bestVel = vel
+        end
+    end
+
+    if not bestPart then return end
+
+    -- calculate teleport: move through the laser to the other side
+    local halfSize = bestPart.Size * 0.5
+
+    -- direction from player toward the nearest point on the laser
+    local nearPt = closestPointOBB(bestPart.CFrame, halfSize, pPos)
+    local towardLaser = nearPt - pPos
+    local horizDir = Vector3.new(towardLaser.X, 0, towardLaser.Z)
+
+    -- if player is inside the laser bounding box, use velocity direction instead
+    if horizDir.Magnitude < 0.1 then
+        horizDir = Vector3.new(bestVel.X, 0, bestVel.Z)
+    end
+    if horizDir.Magnitude < 0.1 then return end
+    local dir = horizDir.Unit
+
+    -- find the FAR edge of the laser in our teleport direction
+    local farProbe = pPos + dir * 200
+    local farPt = closestPointOBB(bestPart.CFrame, halfSize, farProbe)
+
+    -- teleport to just past the far edge
+    local target = farPt + dir * PASS_BEYOND
+    local newPos = Vector3.new(target.X, pPos.Y, target.Z)
+
+    rootPart.CFrame = CFrame.new(newPos) * (rootPart.CFrame - rootPart.CFrame.Position)
+    lastTP = now
+
+    -- periodic dead-ref cleanup
+    if math.floor(now) % 3 == 0 then
+        for p in pairs(lastPos) do
+            if not p or not p.Parent then lastPos[p] = nil end
         end
     end
 end)
@@ -127,8 +166,37 @@ local function cleanup()
         pcall(function() c:Disconnect() end)
     end
     connections = {}
+    lastPos = {}
 end
 
 if _G.SixZeroHubRegister then
     _G.SixZeroHubRegister("Laser Jumper", "[Spec]evil_plate_laser", cleanup, "spec")
+end
+
+if _G.SixZeroHubRegisterSettings then
+    task.delay(1, function()
+        _G.SixZeroHubRegisterSettings("[Spec]evil_plate_laser", {
+            _title = "Laser Jumper",
+            {
+                name = "triggerDist",
+                label = "Trigger Distance",
+                type = "slider",
+                default = 2.5,
+                min = 1,
+                max = 6,
+                step = 0.5,
+                onChange = function(val) TRIGGER_DIST = val end,
+            },
+            {
+                name = "passBeyond",
+                label = "Pass Distance",
+                type = "slider",
+                default = 2,
+                min = 1,
+                max = 5,
+                step = 0.5,
+                onChange = function(val) PASS_BEYOND = val end,
+            },
+        })
+    end)
 end

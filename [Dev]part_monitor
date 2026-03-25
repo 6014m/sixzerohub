@@ -208,10 +208,11 @@ local function isPlayerDescendant(inst)
         end
     end
     if inst:IsDescendantOf(playerGui) then return true end
+    local inCoreGui = false
     pcall(function()
-        if inst:IsDescendantOf(game:GetService("CoreGui")) then return true end
+        inCoreGui = inst:IsDescendantOf(game:GetService("CoreGui"))
     end)
-    return false
+    return inCoreGui
 end
 
 local entryCount = 0

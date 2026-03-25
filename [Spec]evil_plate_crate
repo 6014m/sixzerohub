@@ -1,5 +1,6 @@
 -- [Spec] Evil Plate Game - Auto Crate
--- Automatically clicks/prompts airdrop crates when in range
+-- Instantly fires airdrop prompts/click detectors
+-- Searches workspace + ActiveEvents, reacts to new prompts via DescendantAdded
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,40 +8,76 @@ local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 local connections = {}
 local active = true
-local clickRange = 32
+local clickRange = 60
 
-local conn = RunService.Heartbeat:Connect(function()
-    if not active then return end
+local function getRoot()
     local char = localPlayer.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function isAirdropDescendant(inst)
+    local current = inst.Parent
+    while current and current ~= workspace do
+        local name = current.Name:lower()
+        if name:find("airdrop") or name:find("crate") or name:find("supply") then
+            return true
+        end
+        current = current.Parent
+    end
+    return false
+end
+
+local function tryFire(inst)
+    if not active then return end
+    local root = getRoot()
     if not root then return end
 
-    local airdrop = workspace:FindFirstChild("Airdrop")
-    if not airdrop then return end
+    if inst:IsA("ProximityPrompt") and fireproximityprompt then
+        local adornee = inst.Parent
+        if adornee and adornee:IsA("BasePart") then
+            if (adornee.Position - root.Position).Magnitude > clickRange then return end
+        end
+        pcall(fireproximityprompt, inst, inst.HoldDuration + 0.1)
+        pcall(fireproximityprompt, inst, 0)
+    elseif inst:IsA("ClickDetector") and fireclickdetector then
+        local adornee = inst.Parent
+        if adornee and adornee:IsA("BasePart") then
+            if (adornee.Position - root.Position).Magnitude > clickRange then return end
+        end
+        pcall(fireclickdetector, inst)
+    end
+end
 
-    local inRange = false
-    local prompt, detector
-    for _, desc in ipairs(airdrop:GetDescendants()) do
-        if not inRange and desc:IsA("BasePart") then
-            if (desc.Position - root.Position).Magnitude <= clickRange then
-                inRange = true
+-- Instant reaction: fire any new prompt/detector that appears in an airdrop
+local addedConn = workspace.DescendantAdded:Connect(function(desc)
+    if not active then return end
+    if (desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector")) and isAirdropDescendant(desc) then
+        task.defer(function() tryFire(desc) end)
+    end
+end)
+table.insert(connections, addedConn)
+
+-- Heartbeat loop: continuously scan and retry firing
+local conn = RunService.Heartbeat:Connect(function()
+    if not active then return end
+    local root = getRoot()
+    if not root then return end
+
+    local containers = { workspace }
+    local ae = workspace:FindFirstChild("ActiveEvents")
+    if ae then table.insert(containers, ae) end
+
+    for _, container in ipairs(containers) do
+        for _, child in ipairs(container:GetChildren()) do
+            local name = child.Name:lower()
+            if name:find("airdrop") or name:find("crate") or name:find("supply") then
+                for _, desc in ipairs(child:GetDescendants()) do
+                    if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
+                        tryFire(desc)
+                    end
+                end
             end
         end
-        if not prompt and desc:IsA("ProximityPrompt") then
-            prompt = desc
-        end
-        if not detector and desc:IsA("ClickDetector") then
-            detector = desc
-        end
-    end
-
-    if not inRange then return end
-
-    if prompt and fireproximityprompt then
-        pcall(fireproximityprompt, prompt)
-    elseif detector and fireclickdetector then
-        pcall(fireclickdetector, detector)
     end
 end)
 table.insert(connections, conn)
@@ -67,7 +104,7 @@ task.delay(2, function()
                 name = "click_range",
                 label = "Click Distance",
                 type = "slider",
-                default = 32,
+                default = 60,
                 min = 5,
                 max = 100,
                 step = 1,

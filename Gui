@@ -68,12 +68,12 @@ do
     -- also destroy any lingering SixZeroHub GUIs
     pcall(function()
         for _, gui in ipairs(game:GetService("CoreGui"):GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name == "SixZeroHub" then gui:Destroy() end
+            if gui:IsA("ScreenGui") and (gui.Name == "SixZeroHub" or gui.Name == "SixZeroHubNotifs") then gui:Destroy() end
         end
     end)
     pcall(function()
         for _, gui in ipairs(player:WaitForChild("PlayerGui"):GetChildren()) do
-            if gui:IsA("ScreenGui") and (gui.Name == "SixZeroHub" or gui.Name == "SixZeroHubToggle") then gui:Destroy() end
+            if gui:IsA("ScreenGui") and (gui.Name == "SixZeroHub" or gui.Name == "SixZeroHubToggle" or gui.Name == "SixZeroHubNotifs") then gui:Destroy() end
         end
     end)
 end
@@ -93,6 +93,28 @@ local COLORS = {
     hover = Color3.fromRGB(64, 68, 75),
     border = Color3.fromRGB(40, 43, 48),
 }
+
+---------- HUB SETTINGS ----------
+
+local HUB_SETTINGS_FILE = "SixZeroHub_hub_settings.json"
+local hubSettings = { gotdEnabled = true }
+
+pcall(function()
+    if isfile and isfile(HUB_SETTINGS_FILE) then
+        local raw = HttpService:JSONDecode(readfile(HUB_SETTINGS_FILE))
+        if type(raw) == "table" then
+            if raw.gotdEnabled ~= nil then hubSettings.gotdEnabled = (raw.gotdEnabled == true) end
+        end
+    end
+end)
+
+local function saveHubSettings()
+    pcall(function()
+        if writefile then
+            writefile(HUB_SETTINGS_FILE, HttpService:JSONEncode(hubSettings))
+        end
+    end)
+end
 
 local SLANT_REACH = 140 -- how far the corner triangle extends
 local TWEEN_SPEED = 0.3
@@ -238,6 +260,127 @@ eyeBtn.MouseLeave:Connect(function()
     TweenService:Create(eyeBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
 end)
 
+
+---------- HUB SETTINGS BUTTON ----------
+
+local settingsGearBtn = Instance.new("TextButton")
+settingsGearBtn.Name = "HubSettings"
+settingsGearBtn.Size = UDim2.new(0, 32, 0, 26)
+settingsGearBtn.Position = UDim2.new(1, -114, 0, 5)
+settingsGearBtn.BackgroundColor3 = COLORS.hover
+settingsGearBtn.BackgroundTransparency = 0.5
+settingsGearBtn.BorderSizePixel = 0
+settingsGearBtn.AutoButtonColor = false
+settingsGearBtn.Font = Enum.Font.GothamBold
+settingsGearBtn.TextSize = 14
+settingsGearBtn.Text = "\xE2\x9A\x99"
+settingsGearBtn.TextColor3 = COLORS.text
+settingsGearBtn.Parent = toggleGui
+Instance.new("UICorner", settingsGearBtn).CornerRadius = UDim.new(0, 6)
+
+local settingsGearTooltip = Instance.new("TextLabel")
+settingsGearTooltip.Size = UDim2.new(0, 60, 0, 22)
+settingsGearTooltip.Position = UDim2.new(0.5, -30, 1, 4)
+settingsGearTooltip.BackgroundColor3 = COLORS.darker
+settingsGearTooltip.BorderSizePixel = 0
+settingsGearTooltip.Text = "Settings"
+settingsGearTooltip.TextColor3 = COLORS.text
+settingsGearTooltip.TextSize = 12
+settingsGearTooltip.Font = Enum.Font.GothamBold
+settingsGearTooltip.Visible = false
+settingsGearTooltip.Parent = settingsGearBtn
+Instance.new("UICorner", settingsGearTooltip).CornerRadius = UDim.new(0, 4)
+
+settingsGearBtn.MouseEnter:Connect(function()
+    settingsGearTooltip.Visible = true
+    TweenService:Create(settingsGearBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.2}):Play()
+end)
+settingsGearBtn.MouseLeave:Connect(function()
+    settingsGearTooltip.Visible = false
+    TweenService:Create(settingsGearBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
+end)
+
+local hubSettingsFrame = Instance.new("Frame")
+hubSettingsFrame.Name = "HubSettingsPopup"
+hubSettingsFrame.Size = UDim2.new(0, 220, 0, 90)
+hubSettingsFrame.Position = UDim2.new(1, -230, 0, 36)
+hubSettingsFrame.BackgroundColor3 = COLORS.darker
+hubSettingsFrame.BorderSizePixel = 0
+hubSettingsFrame.Visible = false
+hubSettingsFrame.Parent = toggleGui
+Instance.new("UICorner", hubSettingsFrame).CornerRadius = UDim.new(0, 8)
+
+local hsStroke = Instance.new("UIStroke", hubSettingsFrame)
+hsStroke.Color = COLORS.accent
+hsStroke.Thickness = 1
+hsStroke.Transparency = 0.5
+
+local hsTitle = Instance.new("TextLabel")
+hsTitle.Size = UDim2.new(1, -10, 0, 24)
+hsTitle.Position = UDim2.new(0, 10, 0, 4)
+hsTitle.BackgroundTransparency = 1
+hsTitle.Text = "Hub Settings"
+hsTitle.TextColor3 = COLORS.text
+hsTitle.TextSize = 13
+hsTitle.Font = Enum.Font.GothamBold
+hsTitle.TextXAlignment = Enum.TextXAlignment.Left
+hsTitle.Parent = hubSettingsFrame
+
+local hsCloseBtn = Instance.new("TextButton")
+hsCloseBtn.Size = UDim2.new(0, 20, 0, 20)
+hsCloseBtn.Position = UDim2.new(1, -24, 0, 6)
+hsCloseBtn.BackgroundTransparency = 1
+hsCloseBtn.Text = "X"
+hsCloseBtn.TextColor3 = COLORS.textMuted
+hsCloseBtn.TextSize = 14
+hsCloseBtn.Font = Enum.Font.GothamBold
+hsCloseBtn.Parent = hubSettingsFrame
+hsCloseBtn.MouseButton1Click:Connect(function()
+    hubSettingsFrame.Visible = false
+end)
+
+local gotdRow = Instance.new("Frame")
+gotdRow.Size = UDim2.new(1, -16, 0, 30)
+gotdRow.Position = UDim2.new(0, 8, 0, 32)
+gotdRow.BackgroundTransparency = 1
+gotdRow.Parent = hubSettingsFrame
+
+local gotdLabel = Instance.new("TextLabel")
+gotdLabel.Size = UDim2.new(1, -50, 1, 0)
+gotdLabel.BackgroundTransparency = 1
+gotdLabel.Text = "Game of the Day"
+gotdLabel.TextColor3 = COLORS.text
+gotdLabel.TextSize = 12
+gotdLabel.Font = Enum.Font.Gotham
+gotdLabel.TextXAlignment = Enum.TextXAlignment.Left
+gotdLabel.Parent = gotdRow
+
+local gotdToggle = Instance.new("TextButton")
+gotdToggle.Size = UDim2.new(0, 40, 0, 22)
+gotdToggle.Position = UDim2.new(1, -40, 0.5, -11)
+gotdToggle.BorderSizePixel = 0
+gotdToggle.Font = Enum.Font.GothamBold
+gotdToggle.TextSize = 11
+gotdToggle.AutoButtonColor = false
+gotdToggle.Parent = gotdRow
+Instance.new("UICorner", gotdToggle).CornerRadius = UDim.new(0, 4)
+
+local function refreshGotdToggle()
+    gotdToggle.Text = hubSettings.gotdEnabled and "ON" or "OFF"
+    gotdToggle.BackgroundColor3 = hubSettings.gotdEnabled and Color3.fromRGB(87, 242, 135) or COLORS.hover
+    gotdToggle.TextColor3 = hubSettings.gotdEnabled and COLORS.darker or COLORS.text
+end
+refreshGotdToggle()
+
+gotdToggle.MouseButton1Click:Connect(function()
+    hubSettings.gotdEnabled = not hubSettings.gotdEnabled
+    refreshGotdToggle()
+    saveHubSettings()
+end)
+
+settingsGearBtn.MouseButton1Click:Connect(function()
+    hubSettingsFrame.Visible = not hubSettingsFrame.Visible
+end)
 
 ---------- ACTIVE SCRIPTS SYSTEM ----------
 
@@ -2736,8 +2879,11 @@ gotdDismissBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- fetch and display
+-- fetch and display (respects hub settings toggle)
+gotdCard.Visible = false
 task.spawn(function()
+    if not hubSettings.gotdEnabled then return end
+
     local ok, response = pcall(function()
         return game:HttpGet("https://raw.githubusercontent.com/6014m/sixzerohub/main/game_of_the_day.json", true)
     end)
@@ -2971,6 +3117,7 @@ local function toggleGuiVisibility()
         closeSpecMenu()
         closeActiveMenu()
         closeMemoryMenu()
+        hubSettingsFrame.Visible = false
     end
 
     _G.SixZeroHubVisible = guiVisible

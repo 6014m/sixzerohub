@@ -20,13 +20,9 @@ local allConnections = {}
 local DAMAGE_NAMES = {
     "kill", "damage", "hurt", "lava", "death", "trap", "hazard",
     "fire", "spike", "acid", "poison", "harmful", "deadly", "die",
-    "burn", "shock", "zap", "neon", "laser", "blade", "saw",
-    "obstacle", "danger", "pain", "oof", "brick", "block",
-    "touch", "hit", "harm", "red", "hot", "electric", "volt",
-    "boom", "explode", "mine", "bomb", "crush", "smash",
-    "spinning", "spin", "rotate", "moving", "swing", "pendulum",
-    "wall", "barrier", "blocker", "crusher", "grinder",
-    "part", "inst", "dmg", "hp", "health", "take"
+    "burn", "shock", "zap", "laser", "blade", "saw",
+    "danger", "pain", "explode", "mine", "bomb",
+    "crush", "smash", "crusher", "grinder", "dmg",
 }
 
 -- colors commonly used for damage blocks
@@ -34,16 +30,12 @@ local DAMAGE_COLORS = {
     Color3.fromRGB(255, 0, 0),       -- red
     Color3.fromRGB(200, 0, 0),       -- dark red
     Color3.fromRGB(180, 0, 0),       -- darker red
+    Color3.fromRGB(170, 0, 0),       -- blood red
     Color3.fromRGB(255, 85, 0),      -- orange-red
-    Color3.fromRGB(255, 170, 0),     -- lava orange
     Color3.fromRGB(255, 50, 0),      -- fire red
     Color3.fromRGB(255, 0, 50),      -- pinkish red
-    Color3.fromRGB(170, 0, 0),       -- blood red
-    Color3.fromRGB(255, 255, 0),     -- yellow (electric)
-    Color3.fromRGB(0, 255, 0),       -- green (acid/poison)
-    Color3.fromRGB(0, 200, 0),       -- dark green (poison)
-    Color3.fromRGB(128, 0, 255),     -- purple (magic damage)
     Color3.fromRGB(255, 100, 0),     -- orange
+    Color3.fromRGB(255, 170, 0),     -- lava orange
 }
 
 local function colorDistance(c1, c2)
@@ -127,47 +119,10 @@ local function isDamageBlock(part)
         if hasAnyScript then isDamage = true end
     end
 
-    if not isDamage and part.Material == Enum.Material.Neon and part.CanTouch then
-        local hasScript = false
-        for _, child in ipairs(part:GetChildren()) do
-            if child:IsA("Script") then hasScript = true break end
-        end
-        if hasScript then isDamage = true end
-    end
-
-    if not isDamage and part.CanTouch then
-        for _, child in ipairs(part:GetChildren()) do
-            if child:IsA("Script") or child:IsA("LocalScript") then
-                isDamage = true
-                break
-            end
-        end
-    end
-
     if not isDamage and part.Parent and part.Parent.Parent then
         local gpName = part.Parent.Parent.Name:lower()
         for _, keyword in ipairs(DAMAGE_NAMES) do
             if gpName:find(keyword) then isDamage = true break end
-        end
-    end
-
-    if not isDamage and part.Anchored and part.CanTouch and part.Name ~= "Baseplate" and part.Name ~= "Terrain" then
-        local ancestor = part.Parent
-        while ancestor and ancestor ~= Workspace do
-            for _, child in ipairs(ancestor:GetChildren()) do
-                if child:IsA("Script") then
-                    local sName = child.Name:lower()
-                    for _, keyword in ipairs(DAMAGE_NAMES) do
-                        if sName:find(keyword) then
-                            isDamage = true
-                            break
-                        end
-                    end
-                    if isDamage then break end
-                end
-            end
-            if isDamage then break end
-            ancestor = ancestor.Parent
         end
     end
 

@@ -1,9 +1,10 @@
 -- [Dev] Dex Explorer
--- Loads Dex debugging suite with SixZeroHub deactivation support
+-- Same source as Infinite Yield, patched for Wave compatibility
+-- Fixes: Version() missing, setup.roblox.com HTTP blocked
 
-local DEX_URL = "https://raw.githubusercontent.com/LorekeeperZinnia/Dex/master/out.lua"
+local DEX_URL = "https://raw.githubusercontent.com/infyiff/backup/main/dex.lua"
 
--- Track Dex GUIs before loading so we can find new ones after
+-- Track existing GUIs so we can find what Dex creates
 local function getExistingGuis()
     local guis = {}
     local function scan(parent)
@@ -21,12 +22,65 @@ local function getExistingGuis()
     return guis
 end
 
+-- Plain-text find and replace (no pattern escaping issues)
+local function patch(src, find, replace)
+    local i, j = src:find(find, 1, true)
+    if i then return src:sub(1, i - 1) .. replace .. src:sub(j + 1) end
+    return src
+end
+
 local beforeGuis = getExistingGuis()
 
--- Load Dex
-loadstring(game:HttpGet(DEX_URL))()
+-- Fetch source
+local fetchOk, source = pcall(function()
+    return game:HttpGet(DEX_URL)
+end)
 
--- Find Dex GUIs (any new ScreenGuis that appeared)
+if not fetchOk or not source or #source < 1000 then
+    warn("[SixZeroHub] Failed to download Dex source")
+    if _G.SixZeroHubNotify then
+        _G.SixZeroHubNotify("Dex Error", "Failed to download Dex", "dismiss")
+    end
+    return
+end
+
+-- Patch 1: Version() may not exist on some executors
+source = patch(source,
+    "Main.ClientVersion = Version()",
+    'Main.ClientVersion = (type(Version)=="function" and Version()) or "0.0.0.0"'
+)
+
+-- Patch 2: setup.roblox.com version fetch (HTTP often blocked, needs pcall)
+source = patch(source,
+    'Main.RobloxVersion = Main.RobloxVersion or oldgame:HttpGet("http://setup.roblox.com/versionQTStudio")',
+    'Main.RobloxVersion = Main.RobloxVersion or (select(2, pcall(oldgame.HttpGet, oldgame, "http://setup.roblox.com/versionQTStudio")) or "")'
+)
+
+-- Patch 3: API dump fetch from setup.roblox.com (same HTTP issue, Dex has GitHub fallback)
+source = patch(source,
+    'rawAPI = rawAPI or oldgame:HttpGet("http://setup.roblox.com/"..Main.RobloxVersion.."-API-Dump.json")',
+    'rawAPI = rawAPI or (select(2, pcall(oldgame.HttpGet, oldgame, "http://setup.roblox.com/"..Main.RobloxVersion.."-API-Dump.json")))'
+)
+
+-- Patch 4: RMD fetch (HTTPS but can still fail)
+source = patch(source,
+    'rawXML = rawXML or oldgame:HttpGet("https://raw.githubusercontent.com/CloneTrooper1019/Roblox-Client-Tracker/roblox/ReflectionMetadata.xml")',
+    'rawXML = rawXML or (select(2, pcall(oldgame.HttpGet, oldgame, "https://raw.githubusercontent.com/CloneTrooper1019/Roblox-Client-Tracker/roblox/ReflectionMetadata.xml")))'
+)
+
+-- Load patched Dex
+local loadOk, loadErr = pcall(function()
+    loadstring(source)()
+end)
+
+if not loadOk then
+    warn("[SixZeroHub] Dex runtime error: " .. tostring(loadErr))
+    if _G.SixZeroHubNotify then
+        _G.SixZeroHubNotify("Dex Error", tostring(loadErr), "dismiss")
+    end
+end
+
+-- Find Dex GUIs and register cleanup
 task.delay(3, function()
     local dexGuis = {}
     local function scan(parent)
