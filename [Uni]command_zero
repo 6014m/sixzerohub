@@ -5150,32 +5150,21 @@ addcmd("unwallwalk", {"unwallclimb"}, "Disable wall walk", function(args)
     stopLoop("wallwalk")
 end)
 
-addcmd("tptool", {"teleporttool"}, "Click to teleport with tool equipped", function(args)
-    local on = toggleLoop("tptool", 0.05, function() end)
-    if on then
-        notify("TPTool", "Enabled — click to teleport tool to location")
-        local conn
-        conn = connect(UserInputService.InputBegan, function(input)
-            if not loopStates["tptool"] then conn:Disconnect(); return end
-            if input.UserInputType == Enum.UserInputType.MouseButton1 and not UserInputService:GetFocusedTextBox() then
-                local char = getChar()
-                if not char then return end
-                local tool = char:FindFirstChildOfClass("Tool")
-                if tool and tool:FindFirstChild("Handle") then
-                    local mouse = player:GetMouse()
-                    if mouse.Hit then
-                        tool.Handle.CFrame = mouse.Hit
-                    end
-                end
-            end
-        end)
-    else
-        notify("TPTool", "Disabled")
-    end
-end)
-
-addcmd("untptool", {}, "Disable TP tool", function(args)
-    stopLoop("tptool")
+addcmd("tptool", {"teleporttool"}, "Gives a tool that teleports you where you click", function(args)
+    local tpTool = Instance.new("Tool")
+    tpTool.Name = "Teleport Tool"
+    tpTool.RequiresHandle = false
+    tpTool.Parent = player:FindFirstChildOfClass("Backpack")
+    tpTool.Activated:Connect(function()
+        local root = myRoot()
+        local mouse = player:GetMouse()
+        if not root or not mouse.Hit then return end
+        local pos = mouse.Hit
+        root.CFrame = CFrame.new(pos.X, pos.Y + 3, pos.Z, select(4, root.CFrame:components()))
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+    end)
+    notify("TPTool", "Teleport Tool added to backpack")
 end)
 
 addcmd("loopxray", {}, "Keep xray on continuously", function(args)
