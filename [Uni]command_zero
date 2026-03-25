@@ -1452,7 +1452,8 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [speed])
                 root.CFrame = CFrame.new(pos) * yaw
             end
             if not walkflinging then
-                root.AssemblyLinearVelocity = Vector3.zero
+                local yVel = root.AssemblyLinearVelocity.Y
+                root.AssemblyLinearVelocity = Vector3.new(0, yVel, 0)
                 root.AssemblyAngularVelocity = Vector3.zero
             end
             RunService.Heartbeat:Wait()
