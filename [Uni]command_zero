@@ -1416,7 +1416,7 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [speed])
     local max = parseNumber(args[1], 2)
     local bobSpeed = parseNumber(args[2], 0.8)
     local min = max - 0.4
-    local tiltAngle = 12
+    local tiltAngle = 18
     local moveSpeed = 0.075
     local hum = myHumanoid()
     if not hum then return end
@@ -1430,12 +1430,17 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [speed])
             if not h or not root then RunService.Heartbeat:Wait() continue end
             h.WalkSpeed = 0
             local t = tick() * bobSpeed
-            h.HipHeight = min + (max - min) * (math.sin(t) * 0.5 + 0.5)
+            local bobOffset = min + (max - min) * (math.sin(t) * 0.5 + 0.5)
             local moveDir = h.MoveDirection
             local _, yawAngle, _ = root.CFrame:ToEulerAnglesYXZ()
             local yaw = CFrame.Angles(0, yawAngle, 0)
+            local pos = root.CFrame.Position
             if moveDir.Magnitude > 0 then
-                local pos = root.CFrame.Position + moveDir * moveSpeed
+                pos = pos + moveDir * moveSpeed
+            end
+            pos = Vector3.new(pos.X, pos.Y, pos.Z)
+            h.HipHeight = bobOffset
+            if moveDir.Magnitude > 0 then
                 local lookDir = Vector3.new(math.sin(yawAngle), 0, math.cos(yawAngle))
                 local rightDir = Vector3.new(lookDir.Z, 0, -lookDir.X)
                 local forward = moveDir:Dot(-lookDir)
@@ -1443,7 +1448,7 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [speed])
                 local tilt = CFrame.Angles(math.rad(-forward * tiltAngle), 0, math.rad(-sideways * tiltAngle))
                 root.CFrame = CFrame.new(pos) * yaw * tilt
             else
-                root.CFrame = CFrame.new(root.CFrame.Position) * yaw
+                root.CFrame = CFrame.new(pos) * yaw
             end
             root.AssemblyLinearVelocity = Vector3.zero
             root.AssemblyAngularVelocity = Vector3.zero
