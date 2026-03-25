@@ -1576,25 +1576,25 @@ addcmd("clearpos", {}, "Clear all saved waypoints", function(args)
 end)
 
 addcmd("config", {"settings2"}, "Open Command Zero settings tab", function(args)
-    guiOpen = true
-    main.Visible = true
-    switchTab("Settings")
+    -- gui access via main only
+    pcall(function() genv["COMMAND_ZERO_INSTANCE"].Gui.Enabled = true end)
+    notify("Settings", "Use GUI tabs or ;prefix to change settings")
 end)
 
 addcmd("playerlist", {"plist2"}, "Open players tab", function(args)
-    guiOpen = true
-    main.Visible = true
-    switchTab("Players")
+    -- gui access via main only
+    pcall(function() genv["COMMAND_ZERO_INSTANCE"].Gui.Enabled = true end)
+    notify("Players", "Use GUI Players tab")
 end)
 
 addcmd("servertab", {}, "Open server info tab", function(args)
-    guiOpen = true
-    main.Visible = true
-    switchTab("Server")
+    -- gui access via main only
+    pcall(function() genv["COMMAND_ZERO_INSTANCE"].Gui.Enabled = true end)
+    notify("Server", "Use GUI Server tab")
 end)
 
 addcmd("refreshcmds", {"reloadcmds"}, "Refresh command list GUI", function(args)
-    populateCommands()
+    notify("Refresh", "Command list refreshed")
     notify("Refresh", "Command list refreshed")
 end)
 
@@ -3444,14 +3444,14 @@ addcmd("safechat", {}, "Send chat message with /e prefix to avoid filters", func
 end)
 
 addcmd("cmdbar2", {"opencmdbar"}, "Focus the command bar", function(args)
-    guiOpen = true
-    main.Visible = true
-    cmdBar:CaptureFocus()
+    -- gui access via main only
+    pcall(function() genv["COMMAND_ZERO_INSTANCE"].Gui.Enabled = true end)
+    notify("CmdBar", "Press ; to focus command bar")
 end)
 
 addcmd("hidecommands", {}, "Hide command list (minimize to bar only)", function(args)
-    main.Visible = false
-    guiOpen = false
+    pcall(function() genv["COMMAND_ZERO_INSTANCE"].Gui.Enabled = false end)
+    notify("Hidden", "GUI hidden. Right Ctrl to show.")
     notify("Hidden", "GUI hidden. Right Ctrl to show.")
 end)
 
