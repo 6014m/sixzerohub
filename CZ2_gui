@@ -1,3 +1,5 @@
+-- CZ2_gui v2
+if not _G.CZ then warn("[CZ2_gui] FATAL: _G.CZ is nil") return end
 -- Command Zero GUI Module (shared state via _G.CZ)
 local E = _G.CZ
 local player = E.player

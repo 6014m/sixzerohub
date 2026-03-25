@@ -1,3 +1,6 @@
+-- CZ2_cmds1 v2
+if not _G.CZ then warn("[CZ2_cmds1] FATAL: _G.CZ is nil — main script did not load first") return end
+if not _G.CZ.addcmd then warn("[CZ2_cmds1] FATAL: _G.CZ.addcmd is nil") return end
 -- Command Zero Module (shared state via _G.CZ)
 local E = _G.CZ
 local addcmd = E.addcmd

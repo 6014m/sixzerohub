@@ -589,6 +589,7 @@ _G.CZ = {
     activeLoops=activeLoops, cmdDescriptions=cmdDescriptions,
     flyActive=flyActive, flySpeed=flySpeed, genv=genv, CZ_KEY=CZ_KEY,
 }
+warn("[CZ] _G.CZ set. addcmd=" .. tostring(_G.CZ.addcmd) .. " notify=" .. tostring(_G.CZ.notify))
 
 --================================================================
 -- LOAD MODULES
