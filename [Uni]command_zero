@@ -2749,7 +2749,7 @@ end)
 addcmd("seizure", {"juicewrld"}, "Make character have a seizure (BodyAngularVelocity, replicates)", function(args)
     local root = myRoot()
     if not root then return end
-    pcall(function() root:FindFirstChild("CZ_Seizure") and root.CZ_Seizure:Destroy() end)
+    pcall(function() local s = root:FindFirstChild("CZ_Seizure") if s then s:Destroy() end end)
     local bav = Instance.new("BodyAngularVelocity")
     bav.Name = "CZ_Seizure"
     bav.AngularVelocity = Vector3.new(math.random(-50, 50), math.random(-50, 50), math.random(-50, 50))
@@ -2779,7 +2779,7 @@ end)
 addcmd("cartwheel", {}, "Cartwheel via BodyAngularVelocity (replicates)", function(args)
     local root = myRoot()
     if not root then return end
-    pcall(function() root:FindFirstChild("CZ_Cartwheel") and root.CZ_Cartwheel:Destroy() end)
+    pcall(function() local s = root:FindFirstChild("CZ_Cartwheel") if s then s:Destroy() end end)
     local bav = Instance.new("BodyAngularVelocity")
     bav.Name = "CZ_Cartwheel"
     bav.AngularVelocity = Vector3.new(0, 0, 20)
@@ -3886,7 +3886,7 @@ end)
 addcmd("walkfling", {"wfling"}, "Fling by walking into people (BodyAngularVelocity, replicates)", function(args)
     local root = myRoot()
     if not root then return end
-    pcall(function() root:FindFirstChild("CZ_WalkFling") and root.CZ_WalkFling:Destroy() end)
+    pcall(function() local s = root:FindFirstChild("CZ_WalkFling") if s then s:Destroy() end end)
     local bav = Instance.new("BodyAngularVelocity")
     bav.Name = "CZ_WalkFling"
     bav.AngularVelocity = Vector3.new(0, 80, 0)
