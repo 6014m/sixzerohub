@@ -1409,21 +1409,32 @@ addcmd("hipheight", {"hh", "hheight"}, "Set hip height", function(args)
     if hum then hum.HipHeight = val end
 end)
 
-addcmd("levitate", {"lev", "hover"}, "Bob up and down by oscillating hip height", function(args)
+addcmd("levitate", {"lev", "hover"}, "Hover and tilt toward move direction", function(args)
     local max = parseNumber(args[1], 2)
     local step = 0.1
     local val = max
     local dir = -1
     local min = max - 0.4
+    local tiltAngle = 8
     startLoop("levitate", 0.05, function()
         local hum = myHumanoid()
-        if not hum then return end
+        local root = myRoot()
+        if not hum or not root then return end
         hum.HipHeight = val
         val = val + step * dir
         if val <= min then dir = 1
         elseif val >= max then dir = -1 end
+        local moveDir = hum.MoveDirection
+        if moveDir.Magnitude > 0 then
+            local look = root.CFrame.LookVector
+            local right = root.CFrame.RightVector
+            local forward = moveDir:Dot(look)
+            local sideways = moveDir:Dot(right)
+            local goalCF = root.CFrame * CFrame.Angles(math.rad(-forward * tiltAngle), 0, math.rad(-sideways * tiltAngle))
+            root.CFrame = root.CFrame:Lerp(goalCF, 0.3)
+        end
     end)
-    notify("Levitate", "Hovering between " .. min .. " and " .. max)
+    notify("Levitate", "Hovering — tilts toward movement")
 end)
 
 addcmd("unlevitate", {"unlev", "unhover"}, "Stop levitating", function(args)
