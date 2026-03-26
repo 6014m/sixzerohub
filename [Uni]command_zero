@@ -1968,22 +1968,28 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                 local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
                 if not fakeRoot or not fakeHum then RunService.Heartbeat:Wait() continue end
 
-                -- Double-tap Space to toggle flight
+                -- Disable jumping entirely in Viltrumite mode
+                fakeHum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+                fakeHum.JumpPower = 0
+                fakeHum.JumpHeight = 0
+
+                -- Double-tap F to toggle flight
                 if not _G.czViltFlying then _G.czViltFlying = false end
                 if not _G.czViltJumpConn then
-                    _G.czViltLastSpace = 0
+                    _G.czViltLastF = 0
                     _G.czViltToggleCooldown = 0
                     _G.czViltJumpConn = connect(UserInputService.InputBegan, function(input, processed)
                         if processed then return end
-                        if input.KeyCode == Enum.KeyCode.Space then
+                        if input.KeyCode == Enum.KeyCode.F then
                             local now = tick()
-                            if now - _G.czViltLastSpace < 0.35 then
+                            if now - _G.czViltLastF < 0.4 then
                                 _G.czViltFlying = not _G.czViltFlying
                                 _G.czViltToggleCooldown = now + 0.5
                                 fakeRoot.Anchored = _G.czViltFlying
                                 if _G.czViltFlying then
                                     fakeRoot.AssemblyLinearVelocity = Vector3.zero
-                                    notify("Viltrumite", "Flight ON — double tap space to land")
+                                    fakeRoot.AssemblyAngularVelocity = Vector3.zero
+                                    notify("Viltrumite", "Flight ON — double tap F to land")
                                 else
                                     fakeHum.PlatformStand = false
                                     if not fakeHum:FindFirstChildOfClass("Animator") then
@@ -1993,7 +1999,7 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                                     notify("Viltrumite", "Flight OFF")
                                 end
                             end
-                            _G.czViltLastSpace = now
+                            _G.czViltLastF = now
                         end
                     end)
                 end
@@ -2028,13 +2034,12 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                     local cam = workspace.CurrentCamera
                     local flySpeed = 1.5 + parseNumber(args[3], 0) * 0.3
                     local moveVec = Vector3.zero
-                    local pastCooldown = tick() > (_G.czViltToggleCooldown or 0)
-                    if pastCooldown and UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + cam.CFrame.LookVector end
-                    if pastCooldown and UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
-                    if pastCooldown and UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
-                    if pastCooldown and UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + cam.CFrame.RightVector end
-                    if pastCooldown and UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVec = moveVec + Vector3.yAxis end
-                    if pastCooldown and UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveVec = moveVec - Vector3.yAxis end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + cam.CFrame.LookVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + cam.CFrame.RightVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVec = moveVec + Vector3.yAxis end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveVec = moveVec - Vector3.yAxis end
 
                     local moving = moveVec.Magnitude > 0
 
