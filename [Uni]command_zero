@@ -1971,22 +1971,34 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                 -- Double-tap Space to toggle flight
                 if not _G.czViltFlying then _G.czViltFlying = false end
                 if not _G.czViltJumpConn then
-                    _G.czViltLastJump = 0
-                    _G.czViltJumpConn = connect(UserInputService.JumpRequest, function()
-                        local now = tick()
-                        if now - _G.czViltLastJump < 0.4 then
-                            _G.czViltFlying = not _G.czViltFlying
-                            fakeRoot.Anchored = _G.czViltFlying
-                            if _G.czViltFlying then
-                                notify("Viltrumite", "Flight ON — double tap jump to land")
-                            else
-                                fakeHum.PlatformStand = false
-                                notify("Viltrumite", "Flight OFF")
+                    _G.czViltLastSpace = 0
+                    _G.czViltJumpConn = connect(UserInputService.InputBegan, function(input, processed)
+                        if processed then return end
+                        if input.KeyCode == Enum.KeyCode.Space then
+                            local now = tick()
+                            if now - _G.czViltLastSpace < 0.35 then
+                                _G.czViltFlying = not _G.czViltFlying
+                                fakeRoot.Anchored = _G.czViltFlying
+                                if _G.czViltFlying then
+                                    notify("Viltrumite", "Flight ON — double tap space to land")
+                                else
+                                    fakeHum.PlatformStand = false
+                                    -- Recreate Animator so R6 anims work again if needed
+                                    if not fakeHum:FindFirstChildOfClass("Animator") then
+                                        Instance.new("Animator", fakeHum)
+                                    end
+                                    fakeHum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                                    notify("Viltrumite", "Flight OFF")
+                                end
                             end
+                            _G.czViltLastSpace = now
                         end
-                        _G.czViltLastJump = now
                     end)
                 end
+
+                -- Kill Animator to stop R6 Animate from overriding poses
+                local animator = fakeHum:FindFirstChildOfClass("Animator")
+                if animator then animator:Destroy() end
 
                 -- Pose defaults
                 local fakeTorso = fakeRig:FindFirstChild("Torso")
@@ -2008,7 +2020,6 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                     -- FLYING STATE
                     fakeRoot.Anchored = true
                     fakeHum.PlatformStand = true
-                    for _, track in pairs(fakeHum:GetPlayingAnimationTracks()) do track:Stop(0) end
 
                     local cam = workspace.CurrentCamera
                     local flySpeed = 1.5 + parseNumber(args[3], 0) * 0.3
@@ -2061,7 +2072,6 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                     if fakeHum:GetState() == Enum.HumanoidStateType.Physics or fakeHum:GetState() == Enum.HumanoidStateType.PlatformStanding then
                         fakeHum:ChangeState(Enum.HumanoidStateType.GettingUp)
                     end
-                    for _, track in pairs(fakeHum:GetPlayingAnimationTracks()) do track:Stop(0) end
 
                     h.HipHeight = max
 
@@ -2124,6 +2134,7 @@ addcmd("unlevitate", {"unlev", "unhover"}, "Stop levitating", function(args)
     end
     _G.czViltFlying = false
     if _G.czViltJumpConn then pcall(function() _G.czViltJumpConn:Disconnect() end); _G.czViltJumpConn = nil end
+    _G.czViltLastSpace = nil
     if _G.czReanimateFakeRig then
         local fr = _G.czReanimateFakeRig:FindFirstChild("HumanoidRootPart")
         if fr then fr.Anchored = false end
@@ -2131,6 +2142,10 @@ addcmd("unlevitate", {"unlev", "unhover"}, "Stop levitating", function(args)
         if fh then
             fh.PlatformStand = false
             fh.WalkSpeed = 16
+            if not fh:FindFirstChildOfClass("Animator") then
+                Instance.new("Animator", fh)
+            end
+            fh:ChangeState(Enum.HumanoidStateType.GettingUp)
         end
     end
     notify("Levitate", "Disabled")
