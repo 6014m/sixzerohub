@@ -1247,7 +1247,9 @@ do
         local infoText = "  COMMAND ZERO  -  Quick Reference\n\n"
             .. "  PREFIX\n"
             .. "  Default prefix is ; (semicolon)\n"
-            .. "  Type ;command or use the command bar\n\n"
+            .. "  Type ;command or use the command bar\n"
+            .. "  Use x for any number to keep default\n"
+            .. "  e.g. levitate x x 5 = default height/speed, move 5\n\n"
             .. "  PLAYER TARGETS\n"
             .. "  me / all / others / random / nearest\n"
             .. "  friends / nonfriends / %teamname\n"
@@ -2390,31 +2392,6 @@ do
         return result .. endings[math.random(#endings)]
     end
 
-    local function applyBypass(msg)
-        local leet = {
-            a = {"@","4"}, e = {"3"}, i = {"1","!"}, o = {"0"},
-            s = {"$","5"}, t = {"7"}, l = {"1"}, g = {"9"},
-            A = {"@","4"}, E = {"3"}, I = {"1","!"}, O = {"0"},
-            S = {"$","5"}, T = {"7"}, L = {"1"}, G = {"9"},
-        }
-        local words = msg:split(" ")
-        for w = 1, #words do
-            local word = words[w]
-            local out = {}
-            for i = 1, #word do
-                local ch = word:sub(i, i)
-                local subs = leet[ch]
-                if subs and math.random() > 0.4 then
-                    out[#out + 1] = subs[math.random(#subs)]
-                else
-                    out[#out + 1] = ch
-                end
-            end
-            words[w] = table.concat(out)
-        end
-        return table.concat(words, " ")
-    end
-
     local function applySmartChat(msg)
         local abbreviations = {
             ["u"] = "you", ["ur"] = "your", ["r"] = "are", ["y"] = "why",
@@ -2511,8 +2488,6 @@ do
             local modifiedMsg = originalMsg
             if _G.czChatModifierMode == "retardchat" then
                 modifiedMsg = applyRetardChat(originalMsg)
-            elseif _G.czChatModifierMode == "bypass" then
-                modifiedMsg = applyBypass(originalMsg)
             elseif _G.czChatModifierMode == "smartchat" then
                 modifiedMsg = applySmartChat(originalMsg)
             end
@@ -2552,26 +2527,6 @@ do
     addcmd("rc", {}, "Send a single uwu-ified message", function(args)
         local msg = getstring(1, args)
         if msg ~= "" then sendChat(applyRetardChat(msg)) end
-    end)
-
-    -- bypass chat
-    addcmd("bypasschat", {"bypass_on"}, "Auto-bypass chat filter", function(args)
-        if enableChatModifier("bypass") then
-            notify("Bypass", "Enabled — your messages will be auto-bypassed")
-        end
-    end)
-
-    addcmd("unbypasschat", {"unbypass"}, "Disable bypass chat", function(args)
-        if _G.czChatModifierMode ~= "bypass" then
-            notify("Bypass", "Not currently enabled"); return
-        end
-        disableChatModifier()
-        notify("Bypass", "Disabled")
-    end)
-
-    addcmd("bp2", {}, "Send a single bypassed message", function(args)
-        local msg = getstring(1, args)
-        if msg ~= "" then sendChat(applyBypass(msg)) end
     end)
 
     -- smart chat
