@@ -1021,9 +1021,12 @@ local function populateCommands(filter)
         btn.MouseEnter:Connect(function()
             btn.BackgroundTransparency = 0
             local hover = cmd.NAME
+            if #cmd.ALIAS > 0 then hover = hover .. "  (" .. aliases .. ")" end
             if tag ~= "" then hover = hover .. "  #" .. tag end
-            hover = hover .. "\n" .. (cmd.DESC ~= "" and cmd.DESC or "No description")
-            if #cmd.ALIAS > 0 then hover = hover .. "\nAliases: " .. aliases end
+            -- Split desc on | and . for readable line breaks
+            local desc = cmd.DESC ~= "" and cmd.DESC or "No description"
+            desc = desc:gsub(" | ", "\n  ")
+            hover = hover .. "\n" .. desc
             hoverLabel.Text = hover
             hoverLabel.Visible = true
         end)
@@ -1799,8 +1802,7 @@ do
             .. "  COMMANDS: " .. tostring(#cmds) .. " loaded"
 
         local infoLbl = Instance.new("TextLabel")
-        infoLbl.Size = UDim2.new(1, -8, 0, 0)
-        infoLbl.AutomaticSize = Enum.AutomaticSize.Y
+        infoLbl.Size = UDim2.new(1, -8, 0, 600)
         infoLbl.BackgroundTransparency = 1
         infoLbl.Text = infoText
         infoLbl.TextColor3 = THEME.text
@@ -1808,7 +1810,9 @@ do
         infoLbl.Font = Enum.Font.Gotham
         infoLbl.TextXAlignment = Enum.TextXAlignment.Left
         infoLbl.TextWrapped = true
+        infoLbl.TextYAlignment = Enum.TextYAlignment.Top
         infoLbl.Parent = page
+        page.CanvasSize = UDim2.new(0, 0, 0, 620)
     end
 end
 
@@ -1941,7 +1945,7 @@ end)
 local levitateActive = false
 local levitateOldWS = 16
 local walkflinging = false
-addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspeed] [movespeed]) — Viltrumite fly with reanimate", function(args)
+addcmd("levitate", {"lev", "hover"}, "Hover with tilt. Usage: levitate [height] [bobspeed] [movespeed]. Use x for default. With reanimate: Viltrumite fly (F to toggle flight)", function(args)
     execCmd("unlevitate")
     local max = parseNumber(args[1], 2)
     local bobSpeed = parseNumber(args[2], 0.8)
@@ -2709,7 +2713,7 @@ local czGhostFolder = Instance.new("Folder")
 czGhostFolder.Name = "CZ_AntiflingGhosts"
 czGhostFolder.Parent = workspace
 
-addcmd("antifling", {"afling"}, "Anti-fling (antifling [mode]: none/ghost/velocity)", function(args)
+addcmd("antifling", {"afling"}, "Anti-fling. Modes: antifling = disable collisions | antifling ghost = anchored ghost copies you can stand on | antifling velocity = kills your fling momentum", function(args)
     stopLoop("antifling")
     czGhostFolder:ClearAllChildren()
 
@@ -9157,7 +9161,7 @@ end)
 
 local toggleOn = {}
 
-addcmd("bind", {"keybind"}, "Bind a key to a command (bind <key> <command>)", function(args)
+addcmd("bind", {"keybind"}, "Bind a key to a command. Usage: bind <key> <command>. Example: bind F fly 50. Keys: F, G, H, Space, LeftShift, etc", function(args)
     if #args < 2 then notify("Bind", "Usage: bind <key> <command>"); return end
     local keyName = args[1]
     local cmd = getstring(2, args)
@@ -9173,7 +9177,7 @@ addcmd("bind", {"keybind"}, "Bind a key to a command (bind <key> <command>)", fu
     notify("Bind", keyName .. " -> " .. cmd)
 end)
 
-addcmd("togglebind", {"tbind"}, "Bind a key to toggle between two commands (togglebind <key> <on> | <off>)", function(args)
+addcmd("togglebind", {"tbind"}, "Bind a key to toggle. Usage: togglebind <key> <on cmd> | <off cmd>. Example: togglebind G noclip | clip", function(args)
     local raw = getstring(1, args)
     local keyName = raw:split(" ")[1]
     local rest = raw:sub(#keyName + 2)
