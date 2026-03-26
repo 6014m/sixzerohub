@@ -1962,27 +1962,31 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
             h.WalkSpeed = 0
 
             if _G.czReanimateActive and _G.czReanimateFakeRig then
-                -- VILTRUMITE FLY MODE
+                -- VILTRUMITE MODE
                 local fakeRig = _G.czReanimateFakeRig
                 local fakeRoot = fakeRig:FindFirstChild("HumanoidRootPart")
                 local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
                 if not fakeRoot or not fakeHum then RunService.Heartbeat:Wait() continue end
 
-                -- Anchor root so it can't fall — CFrame movement still works on anchored parts
-                fakeRoot.Anchored = true
-
-                -- Camera-relative flight (WASD + Space up, Q down)
-                local cam = workspace.CurrentCamera
-                local flySpeed = 1.5 + parseNumber(args[3], 0) * 0.3
-                local moveVec = Vector3.zero
-                if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + cam.CFrame.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + cam.CFrame.RightVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVec = moveVec + Vector3.yAxis end
-                if UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveVec = moveVec - Vector3.yAxis end
-
-                local moving = moveVec.Magnitude > 0
+                -- Double-tap Space to toggle flight
+                if not _G.czViltFlying then _G.czViltFlying = false end
+                if not _G.czViltJumpConn then
+                    _G.czViltLastJump = 0
+                    _G.czViltJumpConn = connect(UserInputService.JumpRequest, function()
+                        local now = tick()
+                        if now - _G.czViltLastJump < 0.4 then
+                            _G.czViltFlying = not _G.czViltFlying
+                            fakeRoot.Anchored = _G.czViltFlying
+                            if _G.czViltFlying then
+                                notify("Viltrumite", "Flight ON — double tap jump to land")
+                            else
+                                fakeHum.PlatformStand = false
+                                notify("Viltrumite", "Flight OFF")
+                            end
+                        end
+                        _G.czViltLastJump = now
+                    end)
+                end
 
                 -- Pose defaults
                 local fakeTorso = fakeRig:FindFirstChild("Torso")
@@ -2000,46 +2004,70 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                 local rh = fakeTorso and fakeTorso:FindFirstChild("Right Hip")
                 local lh = fakeTorso and fakeTorso:FindFirstChild("Left Hip")
 
-                -- Stop animations so we control the pose
-                fakeHum.PlatformStand = true
-                for _, track in pairs(fakeHum:GetPlayingAnimationTracks()) do track:Stop(0) end
+                if _G.czViltFlying then
+                    -- FLYING STATE
+                    fakeRoot.Anchored = true
+                    fakeHum.PlatformStand = true
+                    for _, track in pairs(fakeHum:GetPlayingAnimationTracks()) do track:Stop(0) end
 
-                if moving then
-                    local dir = moveVec.Unit
-                    fakeRoot.CFrame = fakeRoot.CFrame + dir * flySpeed
-                    -- Rotate torso to face full movement direction (including up/down)
-                    fakeRoot.CFrame = fakeRoot.CFrame:Lerp(
-                        CFrame.lookAt(fakeRoot.Position, fakeRoot.Position + dir), 0.1)
-                    -- Flying pose
-                    if rootJoint then rootJoint.C0 = rootJoint.C0:Lerp(RJD * CFrame.Angles(math.rad(65), 0, 0), 0.12) end
-                    if neck then neck.C0 = neck.C0:Lerp(NKD * CFrame.Angles(math.rad(-38), 0, 0), 0.12) end
-                    if rs then rs.C0 = rs.C0:Lerp(RSD * CFrame.new(0, 0.4, 0) * CFrame.Angles(0, 0, math.rad(-180)), 0.12) end
-                    if ls then ls.C0 = ls.C0:Lerp(LSD * CFrame.new(0, 0.4, 0) * CFrame.Angles(0, 0, math.rad(-180)), 0.12) end
-                    if rh then rh.C0 = rh.C0:Lerp(RHD * CFrame.new(0.1, 0.3, 0) * CFrame.Angles(0, math.rad(-8), math.rad(-25)), 0.12) end
-                    if lh then lh.C0 = lh.C0:Lerp(LHD * CFrame.new(0.1, 0, 0) * CFrame.Angles(0, 0, math.rad(1)), 0.12) end
-                else
-                    -- Hover pose: custom idle from pose builder
-                    local bob = math.sin(tick() * bobSpeed) * 0.06
-                    local _, curYaw, _ = fakeRoot.CFrame:ToEulerAnglesYXZ()
-                    local pos = fakeRoot.Position + Vector3.new(0, bob, 0)
-                    -- Don't go below ground
-                    local ray = workspace:Raycast(pos + Vector3.new(0, 3, 0), Vector3.new(0, -10, 0))
-                    if ray and pos.Y < ray.Position.Y + 3 then
-                        pos = Vector3.new(pos.X, ray.Position.Y + 3, pos.Z)
+                    local cam = workspace.CurrentCamera
+                    local flySpeed = 1.5 + parseNumber(args[3], 0) * 0.3
+                    local moveVec = Vector3.zero
+                    if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + cam.CFrame.LookVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + cam.CFrame.RightVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVec = moveVec + Vector3.yAxis end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveVec = moveVec - Vector3.yAxis end
+
+                    local moving = moveVec.Magnitude > 0
+
+                    if moving then
+                        local dir = moveVec.Unit
+                        fakeRoot.CFrame = fakeRoot.CFrame + dir * flySpeed
+                        fakeRoot.CFrame = fakeRoot.CFrame:Lerp(
+                            CFrame.lookAt(fakeRoot.Position, fakeRoot.Position + dir), 0.1)
+                        -- Flying pose
+                        if rootJoint then rootJoint.C0 = rootJoint.C0:Lerp(RJD * CFrame.Angles(math.rad(65), 0, 0), 0.12) end
+                        if neck then neck.C0 = neck.C0:Lerp(NKD * CFrame.Angles(math.rad(-38), 0, 0), 0.12) end
+                        if rs then rs.C0 = rs.C0:Lerp(RSD * CFrame.new(0, 0.4, 0) * CFrame.Angles(0, 0, math.rad(-180)), 0.12) end
+                        if ls then ls.C0 = ls.C0:Lerp(LSD * CFrame.new(0, 0.4, 0) * CFrame.Angles(0, 0, math.rad(-180)), 0.12) end
+                        if rh then rh.C0 = rh.C0:Lerp(RHD * CFrame.new(0.1, 0.3, 0) * CFrame.Angles(0, math.rad(-8), math.rad(-25)), 0.12) end
+                        if lh then lh.C0 = lh.C0:Lerp(LHD * CFrame.new(0.1, 0, 0) * CFrame.Angles(0, 0, math.rad(1)), 0.12) end
+                    else
+                        -- Hovering in air — idle pose + bob
+                        local bob = math.sin(tick() * bobSpeed) * 0.06
+                        local _, curYaw, _ = fakeRoot.CFrame:ToEulerAnglesYXZ()
+                        fakeRoot.CFrame = CFrame.new(fakeRoot.Position + Vector3.new(0, bob, 0))
+                            * CFrame.Angles(0, curYaw, 0)
+                        if rootJoint then rootJoint.C0 = rootJoint.C0:Lerp(RJD * CFrame.Angles(math.rad(9), 0, 0), 0.12) end
+                        if neck then neck.C0 = neck.C0:Lerp(NKD * CFrame.Angles(math.rad(-11), 0, 0), 0.12) end
+                        if rs then rs.C0 = rs.C0:Lerp(RSD * CFrame.new(0.4, 0.1, 0.2) * CFrame.Angles(math.rad(-45), 0, math.rad(109)) * CFrame.Angles(0, math.rad(-99), 0), 0.12) end
+                        if ls then ls.C0 = ls.C0:Lerp(LSD * CFrame.new(0.5, 0, 0) * CFrame.Angles(0, math.rad(-58), math.rad(11)), 0.12) end
+                        if rh then rh.C0 = rh.C0:Lerp(RHD * CFrame.new(0.3, 0.3, 0) * CFrame.Angles(0, 0, math.rad(-9)), 0.12) end
+                        if lh then lh.C0 = lh.C0:Lerp(LHD * CFrame.new(0.1, 0, 0) * CFrame.Angles(0, 0, math.rad(11)), 0.12) end
                     end
-                    fakeRoot.CFrame = CFrame.new(pos) * CFrame.Angles(0, curYaw, 0)
+
+                    -- Anti-void
+                    if fakeRoot.Position.Y < workspace.FallenPartsDestroyHeight + 80 then
+                        fakeRoot.CFrame = CFrame.new(fakeRoot.Position.X, 50, fakeRoot.Position.Z)
+                            * (fakeRoot.CFrame - fakeRoot.CFrame.Position)
+                    end
+                else
+                    -- GROUNDED STATE — idle pose only, no flight
+                    fakeRoot.Anchored = false
+                    fakeHum.PlatformStand = true
+                    for _, track in pairs(fakeHum:GetPlayingAnimationTracks()) do track:Stop(0) end
+
+                    local bob = math.sin(tick() * bobSpeed) * 0.04
+                    h.HipHeight = max + bob
+
                     if rootJoint then rootJoint.C0 = rootJoint.C0:Lerp(RJD * CFrame.Angles(math.rad(9), 0, 0), 0.12) end
                     if neck then neck.C0 = neck.C0:Lerp(NKD * CFrame.Angles(math.rad(-11), 0, 0), 0.12) end
                     if rs then rs.C0 = rs.C0:Lerp(RSD * CFrame.new(0.4, 0.1, 0.2) * CFrame.Angles(math.rad(-45), 0, math.rad(109)) * CFrame.Angles(0, math.rad(-99), 0), 0.12) end
                     if ls then ls.C0 = ls.C0:Lerp(LSD * CFrame.new(0.5, 0, 0) * CFrame.Angles(0, math.rad(-58), math.rad(11)), 0.12) end
                     if rh then rh.C0 = rh.C0:Lerp(RHD * CFrame.new(0.3, 0.3, 0) * CFrame.Angles(0, 0, math.rad(-9)), 0.12) end
                     if lh then lh.C0 = lh.C0:Lerp(LHD * CFrame.new(0.1, 0, 0) * CFrame.Angles(0, 0, math.rad(11)), 0.12) end
-                end
-
-                -- Anti-void
-                if fakeRoot.Position.Y < workspace.FallenPartsDestroyHeight + 80 then
-                    fakeRoot.CFrame = CFrame.new(fakeRoot.Position.X, 50, fakeRoot.Position.Z)
-                        * (fakeRoot.CFrame - fakeRoot.CFrame.Position)
                 end
             else
                 -- NORMAL LEVITATE MODE
@@ -2090,6 +2118,8 @@ addcmd("unlevitate", {"unlev", "unhover"}, "Stop levitating", function(args)
         hum.PlatformStand = false
         hum.WalkSpeed = levitateOldWS
     end
+    _G.czViltFlying = false
+    if _G.czViltJumpConn then pcall(function() _G.czViltJumpConn:Disconnect() end); _G.czViltJumpConn = nil end
     if _G.czReanimateFakeRig then
         local fr = _G.czReanimateFakeRig:FindFirstChild("HumanoidRootPart")
         if fr then fr.Anchored = false end
