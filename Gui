@@ -340,13 +340,13 @@ hsTitle.Parent = hubSettingsFrame
 
 local hsCloseBtn = Instance.new("TextButton")
 hsCloseBtn.Size = UDim2.new(0, 20, 0, 20)
-hsCloseBtn.Position = UDim2.new(1, -20, 0, 0)
+hsCloseBtn.Position = UDim2.new(1, -20, 0, 2)
 hsCloseBtn.BackgroundTransparency = 1
 hsCloseBtn.Text = "X"
 hsCloseBtn.TextColor3 = COLORS.textMuted
 hsCloseBtn.TextSize = 14
 hsCloseBtn.Font = Enum.Font.GothamBold
-hsCloseBtn.Parent = hubSettingsFrame
+hsCloseBtn.Parent = hsTitle
 hsCloseBtn.MouseButton1Click:Connect(function()
     hubSettingsFrame.Visible = false
 end)
@@ -406,7 +406,7 @@ settingsGearBtn.MouseButton1Click:Connect(function()
                 -- Separator line
                 local sep = Instance.new("Frame")
                 sep.Name = "DynScriptSection"
-                sep.Size = UDim2.new(1, -16, 0, 1)
+                sep.Size = UDim2.new(1, 0, 0, 1)
                 sep.BackgroundColor3 = COLORS.accent
                 sep.BackgroundTransparency = 0.7
                 sep.BorderSizePixel = 0
@@ -415,7 +415,7 @@ settingsGearBtn.MouseButton1Click:Connect(function()
                 -- Script name
                 local sTitle = Instance.new("TextLabel")
                 sTitle.Name = "DynScriptSection"
-                sTitle.Size = UDim2.new(1, -16, 0, 22)
+                sTitle.Size = UDim2.new(1, 0, 0, 22)
                 sTitle.BackgroundTransparency = 1
                 sTitle.Text = "  " .. (defs._title or fileKey)
                 sTitle.TextColor3 = COLORS.accent
@@ -427,7 +427,7 @@ settingsGearBtn.MouseButton1Click:Connect(function()
                 -- Open settings button
                 local openBtn = Instance.new("TextButton")
                 openBtn.Name = "DynScriptSection"
-                openBtn.Size = UDim2.new(1, -16, 0, 26)
+                openBtn.Size = UDim2.new(1, 0, 0, 26)
                 openBtn.BackgroundColor3 = COLORS.hover
                 openBtn.BorderSizePixel = 0
                 openBtn.Text = "Open Settings"
