@@ -170,21 +170,12 @@ local conn = RunService.Heartbeat:Connect(function(dt)
     end
 
     if FLING_MODE then
-        -- Fling mode: gentle arc over the laser using velocity
-        local halfSz = bestPart.Size * 0.5
-        local laserTop = bestPart.Position.Y + halfSz.Y
-        local jumpHeight = math.min(math.max(laserTop - pPos.Y + 1.5, 2), 7.2)
-
-        -- Cross distance: just the laser's thickness in our direction + pass beyond
-        -- Project the laser's half-size onto our crossing direction to get actual thickness
-        local localDir = bestPart.CFrame:VectorToObjectSpace(dir)
-        local thickness = math.abs(localDir.X) * halfSz.X + math.abs(localDir.Y) * halfSz.Y + math.abs(localDir.Z) * halfSz.Z
-        local crossDist = math.min(thickness * 2 + PASS_BEYOND, 12) -- cap at 12 studs
-
-        -- Gentle arc: normal jump velocity, capped horizontal
-        local upVel = math.sqrt(2 * workspace.Gravity * jumpHeight)
+        -- Fling mode: same distance as teleport would be, just arc over instead
+        local targetDist = (newPos - pPos).Magnitude
+        local jumpUp = 5 -- gentle hop height
+        local upVel = math.sqrt(2 * workspace.Gravity * jumpUp)
         local airTime = (2 * upVel) / workspace.Gravity
-        local horizSpeed = math.min(crossDist / math.max(airTime, 0.2), 40) -- cap at 40 studs/sec (gentle)
+        local horizSpeed = targetDist / math.max(airTime, 0.3)
 
         rootPart.AssemblyLinearVelocity = Vector3.new(
             dir.X * horizSpeed,
