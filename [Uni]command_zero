@@ -2709,76 +2709,86 @@ local czGhostFolder = Instance.new("Folder")
 czGhostFolder.Name = "CZ_AntiflingGhosts"
 czGhostFolder.Parent = workspace
 
-addcmd("antifling", {"antiflingg", "afling"}, "Anchored ghost collision on other players (no fling physics)", function(args)
+addcmd("antifling", {"afling"}, "Anti-fling (antifling [mode]: none/ghost/velocity)", function(args)
     stopLoop("antifling")
+    czGhostFolder:ClearAllChildren()
+
+    local mode2 = (args[1] or "none"):lower()
     local ghostParts = {}
     local bodyNames = {"Head", "Torso", "UpperTorso", "LowerTorso", "HumanoidRootPart",
         "LeftUpperArm", "LeftLowerArm", "RightUpperArm", "RightLowerArm",
         "LeftUpperLeg", "LeftLowerLeg", "RightUpperLeg", "RightLowerLeg",
         "Left Arm", "Right Arm", "Left Leg", "Right Leg"}
-    startLoop("antifling", 0, function()
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= player and p.Character then
-                for _, v in ipairs(p.Character:GetDescendants()) do
-                    if v:IsA("BasePart") then v.CanCollide = false end
-                end
-                for _, partName in ipairs(bodyNames) do
-                    local part = p.Character:FindFirstChild(partName)
-                    if part and part:IsA("BasePart") then
-                        local key = p.UserId .. "_" .. partName
-                        local ghost = ghostParts[key]
-                        if not ghost or not ghost.Parent then
-                            ghost = Instance.new("Part")
-                            ghost.Name = "CZ_Ghost"
-                            ghost.Transparency = 1
-                            ghost.CanCollide = true
-                            ghost.Anchored = true
+
+    if mode2 == "ghost" then
+        -- Ghost mode: disable real collision, create anchored ghost copies
+        startLoop("antifling", 0, function()
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= player and p.Character then
+                    for _, v in ipairs(p.Character:GetDescendants()) do
+                        if v:IsA("BasePart") then v.CanCollide = false end
+                    end
+                    for _, partName in ipairs(bodyNames) do
+                        local part = p.Character:FindFirstChild(partName)
+                        if part and part:IsA("BasePart") then
+                            local key = p.UserId .. "_" .. partName
+                            local ghost = ghostParts[key]
+                            if not ghost or not ghost.Parent then
+                                ghost = Instance.new("Part")
+                                ghost.Name = "CZ_Ghost"
+                                ghost.Transparency = 1
+                                ghost.CanCollide = true
+                                ghost.Anchored = true
+                                ghost.Size = part.Size
+                                ghost.Parent = czGhostFolder
+                                ghostParts[key] = ghost
+                            end
                             ghost.Size = part.Size
-                            ghost.Parent = czGhostFolder
-                            ghostParts[key] = ghost
+                            ghost.CFrame = part.CFrame
                         end
-                        ghost.Size = part.Size
-                        ghost.CFrame = part.CFrame
                     end
                 end
             end
-        end
-        -- clean up ghosts for players who left
-        for key, ghost in pairs(ghostParts) do
-            local uid = tonumber(key:match("^(%d+)_"))
-            if uid and not Players:GetPlayerByUserId(uid) then
-                ghost:Destroy()
-                ghostParts[key] = nil
+            for key, ghost in pairs(ghostParts) do
+                local uid = tonumber(key:match("^(%d+)_"))
+                if uid and not Players:GetPlayerByUserId(uid) then ghost:Destroy(); ghostParts[key] = nil end
             end
-        end
-    end)
-    notify("Anti-Fling", "Enabled — anchored ghost collision on all players")
+        end)
+        notify("Anti-Fling", "Ghost mode — anchored collision copies, can stand on players")
+
+    elseif mode2 == "velocity" or mode2 == "vel" then
+        -- Velocity mode: kill your own fling momentum
+        startLoop("antifling", 0, function()
+            local root = myRoot()
+            if root then
+                local vel = root.AssemblyLinearVelocity
+                if vel.Magnitude > 80 then
+                    root.AssemblyLinearVelocity = Vector3.new(0, math.min(vel.Y, 0), 0)
+                    root.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
+        end)
+        notify("Anti-Fling", "Velocity mode — kills fling momentum on you")
+
+    else
+        -- Default (none): just disable other player collisions
+        startLoop("antifling", 0, function()
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= player and p.Character then
+                    for _, v in ipairs(p.Character:GetDescendants()) do
+                        if v:IsA("BasePart") then v.CanCollide = false end
+                    end
+                end
+            end
+        end)
+        notify("Anti-Fling", "Enabled — other player collisions disabled")
+    end
 end)
 
-addcmd("unantifling", {}, "Disable anti-fling", function(args)
+addcmd("unantifling", {"unafling"}, "Disable anti-fling", function(args)
     stopLoop("antifling")
-    stopLoop("antifling2")
     czGhostFolder:ClearAllChildren()
     notify("Anti-Fling", "Disabled")
-end)
-
-addcmd("antifling2", {"afling2", "defling"}, "Stop fling momentum on yourself (zeros velocity each frame)", function(args)
-    stopLoop("antifling2")
-    startLoop("antifling2", 0, function()
-        local root = myRoot()
-        if root then
-            local vel = root.AssemblyLinearVelocity
-            if vel.Magnitude > 80 then
-                root.AssemblyLinearVelocity = Vector3.new(0, math.min(vel.Y, 0), 0)
-                root.AssemblyAngularVelocity = Vector3.zero
-            end
-        end
-    end)
-    notify("Anti-Fling 2", "Enabled — kills fling momentum on you")
-end)
-
-addcmd("unantifling2", {"undefling"}, "Disable anti-fling 2", function(args)
-    stopLoop("antifling2")
     notify("Anti-Fling 2", "Disabled")
 end)
 
