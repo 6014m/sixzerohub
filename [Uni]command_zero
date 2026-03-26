@@ -2151,15 +2151,10 @@ addcmd("antifling", {"antiflingg", "afling"}, "Disable collisions except top of 
                         cap.Size = Vector3.new(1, 0.3, 1)
                         cap.Transparency = 1
                         cap.CanCollide = true
-                        cap.Massless = true
-                        cap.Anchored = false
-                        local weld = Instance.new("WeldConstraint")
-                        weld.Part0 = head
-                        weld.Part1 = cap
-                        weld.Parent = cap
-                        cap.CFrame = head.CFrame + Vector3.new(0, 0.7, 0)
+                        cap.Anchored = true
                         cap.Parent = head
                     end
+                    cap.CFrame = head.CFrame + Vector3.new(0, 0.7, 0)
                     cap.CanCollide = true
                 end
             end
