@@ -8313,6 +8313,95 @@ end)
 
 
 
+--================================================================
+-- KEYBIND SYSTEM
+--================================================================
+
+local toggleOn = {}
+
+addcmd("bind", {"keybind"}, "Bind a key to a command (bind <key> <command>)", function(args)
+    if #args < 2 then notify("Bind", "Usage: bind <key> <command>"); return end
+    local keyName = args[1]
+    local cmd = getstring(2, args)
+    local keyEnum = Enum.KeyCode[keyName] or Enum.KeyCode[keyName:sub(1,1):upper() .. keyName:sub(2):lower()]
+    if not keyEnum then
+        notify("Bind", "Unknown key: " .. keyName .. "\nExamples: F, G, H, Space, LeftShift"); return
+    end
+    for i = #binds, 1, -1 do
+        if binds[i].KEY == tostring(keyEnum) then table.remove(binds, i) end
+    end
+    table.insert(binds, { COMMAND = cmd, KEY = tostring(keyEnum) })
+    notify("Bind", keyName .. " -> " .. cmd)
+end)
+
+addcmd("togglebind", {"tbind"}, "Bind a key to toggle between two commands (togglebind <key> <on> | <off>)", function(args)
+    local raw = getstring(1, args)
+    local keyName = raw:split(" ")[1]
+    local rest = raw:sub(#keyName + 2)
+    local parts = rest:split("|")
+    if #parts < 2 then notify("ToggleBind", "Usage: togglebind <key> <on cmd> | <off cmd>"); return end
+    local onCmd = parts[1]:gsub("^%s+",""):gsub("%s+$","")
+    local offCmd = parts[2]:gsub("^%s+",""):gsub("%s+$","")
+    local keyEnum = Enum.KeyCode[keyName] or Enum.KeyCode[keyName:sub(1,1):upper() .. keyName:sub(2):lower()]
+    if not keyEnum then
+        notify("ToggleBind", "Unknown key: " .. keyName); return
+    end
+    for i = #binds, 1, -1 do
+        if binds[i].KEY == tostring(keyEnum) then table.remove(binds, i) end
+    end
+    table.insert(binds, { COMMAND = onCmd, KEY = tostring(keyEnum), TOGGLE = offCmd })
+    notify("ToggleBind", keyName .. " -> " .. onCmd .. " / " .. offCmd)
+end)
+
+addcmd("unbind", {"unkeybind"}, "Remove a keybind", function(args)
+    local keyName = args[1]
+    if not keyName then notify("Unbind", "Usage: unbind <key>"); return end
+    local keyEnum = Enum.KeyCode[keyName] or Enum.KeyCode[keyName:sub(1,1):upper() .. keyName:sub(2):lower()]
+    if not keyEnum then notify("Unbind", "Unknown key: " .. keyName); return end
+    for i = #binds, 1, -1 do
+        if binds[i].KEY == tostring(keyEnum) then
+            toggleOn[binds[i]] = nil
+            table.remove(binds, i)
+        end
+    end
+    notify("Unbind", "Unbound " .. keyName)
+end)
+
+addcmd("unbindall", {"clearbinds"}, "Remove all keybinds", function(args)
+    binds = {}
+    toggleOn = {}
+    notify("Unbind", "All keybinds cleared")
+end)
+
+addcmd("binds", {"listbinds", "keybinds"}, "Show all current keybinds", function(args)
+    if #binds == 0 then notify("Binds", "No keybinds set"); return end
+    local lines = {}
+    for _, b in ipairs(binds) do
+        local key = tostring(b.KEY):gsub("Enum.KeyCode.", "")
+        if b.TOGGLE then
+            table.insert(lines, key .. " -> " .. b.COMMAND .. " / " .. b.TOGGLE)
+        else
+            table.insert(lines, key .. " -> " .. b.COMMAND)
+        end
+    end
+    notify("Binds", table.concat(lines, "\n"), 10)
+end)
+
+connect(UserInputService.InputBegan, function(input, processed)
+    if processed or #binds == 0 then return end
+    for _, v in ipairs(binds) do
+        if input.UserInputType == Enum.UserInputType.Keyboard and v.KEY:lower() == tostring(input.KeyCode):lower() then
+            if v.TOGGLE then
+                local isOn = toggleOn[v] == true
+                toggleOn[v] = not isOn
+                execCmd(isOn and v.TOGGLE or v.COMMAND, player, false)
+            else
+                execCmd(v.COMMAND, player, false)
+            end
+        end
+    end
+end)
+
 if populateCommands then populateCommands() end
 
 --================================================================
