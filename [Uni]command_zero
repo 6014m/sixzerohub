@@ -1972,18 +1972,20 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                 if not _G.czViltFlying then _G.czViltFlying = false end
                 if not _G.czViltJumpConn then
                     _G.czViltLastSpace = 0
+                    _G.czViltToggleCooldown = 0
                     _G.czViltJumpConn = connect(UserInputService.InputBegan, function(input, processed)
                         if processed then return end
                         if input.KeyCode == Enum.KeyCode.Space then
                             local now = tick()
                             if now - _G.czViltLastSpace < 0.35 then
                                 _G.czViltFlying = not _G.czViltFlying
+                                _G.czViltToggleCooldown = now + 0.5
                                 fakeRoot.Anchored = _G.czViltFlying
                                 if _G.czViltFlying then
+                                    fakeRoot.AssemblyLinearVelocity = Vector3.zero
                                     notify("Viltrumite", "Flight ON — double tap space to land")
                                 else
                                     fakeHum.PlatformStand = false
-                                    -- Recreate Animator so R6 anims work again if needed
                                     if not fakeHum:FindFirstChildOfClass("Animator") then
                                         Instance.new("Animator", fakeHum)
                                     end
@@ -2028,7 +2030,7 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                     if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
                     if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
                     if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + cam.CFrame.RightVector end
-                    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVec = moveVec + Vector3.yAxis end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.Space) and tick() > (_G.czViltToggleCooldown or 0) then moveVec = moveVec + Vector3.yAxis end
                     if UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveVec = moveVec - Vector3.yAxis end
 
                     local moving = moveVec.Magnitude > 0
@@ -2077,7 +2079,7 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                         fakeHum:ChangeState(Enum.HumanoidStateType.GettingUp)
                     end
 
-                    local bob = math.sin(tick() * bobSpeed) * 0.15
+                    local bob = math.sin(tick() * bobSpeed) * 0.5
                     h.HipHeight = max + bob
 
                     -- Full idle pose
