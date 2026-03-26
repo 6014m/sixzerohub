@@ -2000,33 +2000,43 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
 
                 local sine = math.sin(tick() * 3)
 
+                -- R6 default C0 values (rotation baked in)
+                local rsDefault = CFrame.new(1, 0.5, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0)
+                local lsDefault = CFrame.new(-1, 0.5, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0)
+                local rhDefault = CFrame.new(1, -1, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0)
+                local lhDefault = CFrame.new(-1, -1, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0)
+                local nkDefault = CFrame.new(0, 1, 0, -1, 0, 0, 0, 0, 1, 0, 1, 0)
+
                 if moving then
-                    -- Conquest pose: one fist forward, other arm back, body angled ~50deg
+                    -- Conquest pose: body angled forward, right fist out, left arm back
                     local flyDir = moveVec.Unit
-                    fakeRoot.CFrame = fakeRoot.CFrame:Lerp(
-                        CFrame.lookAt(fakeRoot.Position, fakeRoot.Position + Vector3.new(flyDir.X, flyDir.Y * 0.5, flyDir.Z))
-                            * CFrame.Angles(math.rad(-50), 0, 0),
-                        0.12
-                    )
-                    -- Right arm: fist punching forward
-                    if rs then rs.C0 = rs.C0:Lerp(CFrame.new(1, 0.5, 0) * CFrame.Angles(math.rad(-10 + sine * 2), 0, math.rad(8)), 0.12) end
-                    -- Left arm: swept back at side
-                    if ls then ls.C0 = ls.C0:Lerp(CFrame.new(-1, 0.5, 0) * CFrame.Angles(math.rad(170 + sine * 3), 0, math.rad(-10)), 0.12) end
-                    -- Legs together, trailing
-                    if rh then rh.C0 = rh.C0:Lerp(CFrame.new(1, -1, 0) * CFrame.Angles(math.rad(-8 + sine * 2), 0, math.rad(3)), 0.12) end
-                    if lh then lh.C0 = lh.C0:Lerp(CFrame.new(-1, -1, 0) * CFrame.Angles(math.rad(-12 - sine * 2), 0, math.rad(-3)), 0.12) end
-                    -- Neck: looking forward to compensate for body tilt
-                    if neck then neck.C0 = neck.C0:Lerp(CFrame.new(0, 1, 0) * CFrame.Angles(math.rad(-25), 0, 0), 0.12) end
+                    local flatDir = Vector3.new(flyDir.X, 0, flyDir.Z)
+                    if flatDir.Magnitude > 0 then flatDir = flatDir.Unit end
+                    local targetCF = CFrame.lookAt(fakeRoot.Position, fakeRoot.Position + flatDir)
+                        * CFrame.Angles(math.rad(-55), 0, 0)
+                    fakeRoot.CFrame = fakeRoot.CFrame:Lerp(targetCF, 0.12)
+
+                    -- Right arm: fist forward (raise arm up relative to shoulder)
+                    if rs then rs.C0 = rs.C0:Lerp(rsDefault * CFrame.Angles(math.rad(-160 + sine * 3), 0, 0), 0.12) end
+                    -- Left arm: back behind body
+                    if ls then ls.C0 = ls.C0:Lerp(lsDefault * CFrame.Angles(math.rad(40 + sine * 3), 0, 0), 0.12) end
+                    -- Legs trailing straight
+                    if rh then rh.C0 = rh.C0:Lerp(rhDefault * CFrame.Angles(math.rad(15 + sine * 2), 0, 0), 0.12) end
+                    if lh then lh.C0 = lh.C0:Lerp(lhDefault * CFrame.Angles(math.rad(10 - sine * 2), 0, 0), 0.12) end
+                    -- Neck: compensate tilt so head looks forward
+                    if neck then neck.C0 = neck.C0:Lerp(nkDefault * CFrame.Angles(math.rad(35), 0, 0), 0.12) end
                 else
-                    -- Idle hover: arms crossed/fists at sides, slight bob
+                    -- Idle hover: arms at sides, fists clenched, slight bob
                     local bob = math.sin(tick() * bobSpeed)
                     fakeRoot.CFrame = CFrame.new(fakeRoot.Position + Vector3.new(0, bob * 0.1, 0))
                         * (fakeRoot.CFrame - fakeRoot.CFrame.Position)
-                    if rs then rs.C0 = rs.C0:Lerp(CFrame.new(1, 0.5, 0) * CFrame.Angles(math.rad(-30), math.rad(-30), math.rad(10)), 0.08) end
-                    if ls then ls.C0 = ls.C0:Lerp(CFrame.new(-1, 0.5, 0) * CFrame.Angles(math.rad(-30), math.rad(30), math.rad(-10)), 0.08) end
-                    if rh then rh.C0 = rh.C0:Lerp(CFrame.new(1, -1, 0) * CFrame.Angles(math.rad(5 + sine * 3), 0, math.rad(5)), 0.08) end
-                    if lh then lh.C0 = lh.C0:Lerp(CFrame.new(-1, -1, 0) * CFrame.Angles(math.rad(5 - sine * 3), 0, math.rad(-5)), 0.08) end
-                    if neck then neck.C0 = neck.C0:Lerp(CFrame.new(0, 1, 0) * CFrame.Angles(math.rad(-90), 0, math.pi), 0.08) end
+                    -- Arms slightly out from sides
+                    if rs then rs.C0 = rs.C0:Lerp(rsDefault * CFrame.Angles(math.rad(sine * 5), 0, math.rad(-10)), 0.08) end
+                    if ls then ls.C0 = ls.C0:Lerp(lsDefault * CFrame.Angles(math.rad(sine * 5), 0, math.rad(10)), 0.08) end
+                    -- Legs relaxed
+                    if rh then rh.C0 = rh.C0:Lerp(rhDefault * CFrame.Angles(math.rad(sine * 3), 0, 0), 0.08) end
+                    if lh then lh.C0 = lh.C0:Lerp(lhDefault * CFrame.Angles(math.rad(-sine * 3), 0, 0), 0.08) end
+                    if neck then neck.C0 = neck.C0:Lerp(nkDefault, 0.08) end
                 end
 
                 fakeRoot.AssemblyLinearVelocity = Vector3.zero
