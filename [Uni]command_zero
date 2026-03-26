@@ -2058,6 +2058,9 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                     fakeRoot.Anchored = false
                     fakeHum.PlatformStand = false
                     fakeHum.WalkSpeed = 16
+                    if fakeHum:GetState() == Enum.HumanoidStateType.Physics or fakeHum:GetState() == Enum.HumanoidStateType.PlatformStanding then
+                        fakeHum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                    end
 
                     h.HipHeight = max
 
@@ -3787,6 +3790,10 @@ addcmd("reanimate", {"reanim", "feanim"}, "FE Reanimate — appear dead, control
     local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
     fakeHum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
     fakeHum.BreakJointsOnDeath = false
+    fakeHum.PlatformStand = false
+    fakeHum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+    fakeHum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    fakeHum:ChangeState(Enum.HumanoidStateType.GettingUp)
 
     char.Parent = fakeRig
     workspace.CurrentCamera.CameraSubject = fakeHum
