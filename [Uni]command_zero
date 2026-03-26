@@ -1968,11 +1968,6 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                 local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
                 if not fakeRoot or not fakeHum then RunService.Heartbeat:Wait() continue end
 
-                -- Disable jumping entirely in Viltrumite mode
-                fakeHum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-                fakeHum.JumpPower = 0
-                fakeHum.JumpHeight = 0
-
                 -- Double-tap F to toggle flight
                 if not _G.czViltFlying then _G.czViltFlying = false end
                 if not _G.czViltJumpConn then
