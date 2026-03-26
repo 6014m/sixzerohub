@@ -304,24 +304,16 @@ settingsGearBtn.MouseLeave:Connect(function()
     TweenService:Create(settingsGearBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
 end)
 
-local hubSettingsFrame = Instance.new("ScrollingFrame")
+local hubSettingsFrame = Instance.new("Frame")
 hubSettingsFrame.Name = "HubSettingsPopup"
-hubSettingsFrame.Size = UDim2.new(0, 230, 0, 300)
-hubSettingsFrame.Position = UDim2.new(1, -240, 0, 36)
+hubSettingsFrame.Size = UDim2.new(0, 220, 0, 90)
+hubSettingsFrame.Position = UDim2.new(1, -230, 0, 36)
 hubSettingsFrame.BackgroundColor3 = COLORS.darker
 hubSettingsFrame.BorderSizePixel = 0
 hubSettingsFrame.Visible = false
-hubSettingsFrame.ScrollBarThickness = 3
-hubSettingsFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+hubSettingsFrame.ClipsDescendants = true
 hubSettingsFrame.Parent = toggleGui
 Instance.new("UICorner", hubSettingsFrame).CornerRadius = UDim.new(0, 8)
-local hsLayout = Instance.new("UIListLayout", hubSettingsFrame)
-hsLayout.Padding = UDim.new(0, 3)
-local hsPad = Instance.new("UIPadding", hubSettingsFrame)
-hsPad.PaddingTop = UDim.new(0, 6)
-hsPad.PaddingLeft = UDim.new(0, 8)
-hsPad.PaddingRight = UDim.new(0, 8)
-hsPad.PaddingBottom = UDim.new(0, 6)
 
 local hsStroke = Instance.new("UIStroke", hubSettingsFrame)
 hsStroke.Color = COLORS.accent
@@ -329,7 +321,8 @@ hsStroke.Thickness = 1
 hsStroke.Transparency = 0.5
 
 local hsTitle = Instance.new("TextLabel")
-hsTitle.Size = UDim2.new(1, 0, 0, 24)
+hsTitle.Size = UDim2.new(1, -10, 0, 24)
+hsTitle.Position = UDim2.new(0, 10, 0, 4)
 hsTitle.BackgroundTransparency = 1
 hsTitle.Text = "Hub Settings"
 hsTitle.TextColor3 = COLORS.text
@@ -346,13 +339,15 @@ hsCloseBtn.Text = "X"
 hsCloseBtn.TextColor3 = COLORS.textMuted
 hsCloseBtn.TextSize = 14
 hsCloseBtn.Font = Enum.Font.GothamBold
-hsCloseBtn.Parent = hsTitle
+hsCloseBtn.Position = UDim2.new(1, -24, 0, 6)
+hsCloseBtn.Parent = hubSettingsFrame
 hsCloseBtn.MouseButton1Click:Connect(function()
     hubSettingsFrame.Visible = false
 end)
 
 local gotdRow = Instance.new("Frame")
-gotdRow.Size = UDim2.new(1, 0, 0, 30)
+gotdRow.Size = UDim2.new(1, -16, 0, 30)
+gotdRow.Position = UDim2.new(0, 8, 0, 32)
 gotdRow.BackgroundTransparency = 1
 gotdRow.Parent = hubSettingsFrame
 
@@ -401,33 +396,39 @@ settingsGearBtn.MouseButton1Click:Connect(function()
         end
 
         -- Loop through ALL registered settings
+        local yPos = 70
         for fileKey, defs in pairs(scriptSettingsDefs) do
             if defs then
-                -- Separator line
+                -- Separator
                 local sep = Instance.new("Frame")
                 sep.Name = "DynScriptSection"
-                sep.Size = UDim2.new(1, 0, 0, 1)
+                sep.Size = UDim2.new(1, -16, 0, 1)
+                sep.Position = UDim2.new(0, 8, 0, yPos)
                 sep.BackgroundColor3 = COLORS.accent
                 sep.BackgroundTransparency = 0.7
                 sep.BorderSizePixel = 0
                 sep.Parent = hubSettingsFrame
+                yPos = yPos + 5
 
                 -- Script name
                 local sTitle = Instance.new("TextLabel")
                 sTitle.Name = "DynScriptSection"
-                sTitle.Size = UDim2.new(1, 0, 0, 22)
+                sTitle.Size = UDim2.new(1, -16, 0, 18)
+                sTitle.Position = UDim2.new(0, 8, 0, yPos)
                 sTitle.BackgroundTransparency = 1
-                sTitle.Text = "  " .. (defs._title or fileKey)
+                sTitle.Text = defs._title or fileKey
                 sTitle.TextColor3 = COLORS.accent
                 sTitle.TextSize = 12
                 sTitle.Font = Enum.Font.GothamBold
                 sTitle.TextXAlignment = Enum.TextXAlignment.Left
                 sTitle.Parent = hubSettingsFrame
+                yPos = yPos + 20
 
                 -- Open settings button
                 local openBtn = Instance.new("TextButton")
                 openBtn.Name = "DynScriptSection"
-                openBtn.Size = UDim2.new(1, 0, 0, 26)
+                openBtn.Size = UDim2.new(1, -16, 0, 24)
+                openBtn.Position = UDim2.new(0, 8, 0, yPos)
                 openBtn.BackgroundColor3 = COLORS.hover
                 openBtn.BorderSizePixel = 0
                 openBtn.Text = "Open Settings"
@@ -441,8 +442,12 @@ settingsGearBtn.MouseButton1Click:Connect(function()
                     hubSettingsFrame.Visible = false
                     showSettingsPanel(fileKey)
                 end)
+                yPos = yPos + 30
             end
         end
+
+        -- Resize frame to fit content
+        hubSettingsFrame.Size = UDim2.new(0, 220, 0, math.max(90, yPos + 10))
     end
 end)
 
