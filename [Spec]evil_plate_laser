@@ -178,12 +178,14 @@ local conn = RunService.Heartbeat:Connect(function(dt)
     end
 
     if FLING_MODE then
-        -- Fling mode: same distance as teleport would be, just arc over instead
-        local targetDist = (newPos - pPos).Magnitude
-        local jumpUp = 5 -- gentle hop height
+        -- Fling mode: always arc UP and ACROSS the laser
+        -- Horizontal distance = distance to far edge + pass beyond
+        local horizTarget = farPt + dir * PASS_BEYOND
+        local horizDist = math.max((Vector3.new(horizTarget.X, 0, horizTarget.Z) - Vector3.new(pPos.X, 0, pPos.Z)).Magnitude, 2)
+        local jumpUp = 5
         local upVel = math.sqrt(2 * workspace.Gravity * jumpUp)
         local airTime = (2 * upVel) / workspace.Gravity
-        local horizSpeed = targetDist / math.max(airTime, 0.3)
+        local horizSpeed = horizDist / math.max(airTime, 0.3)
 
         rootPart.AssemblyLinearVelocity = Vector3.new(
             dir.X * horizSpeed,
