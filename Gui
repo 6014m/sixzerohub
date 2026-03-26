@@ -263,6 +263,8 @@ end)
 
 ---------- HUB SETTINGS BUTTON ----------
 
+local loadedScripts = {}
+
 local settingsGearBtn = Instance.new("TextButton")
 settingsGearBtn.Name = "HubSettings"
 settingsGearBtn.Size = UDim2.new(0, 32, 0, 26)
@@ -444,8 +446,7 @@ settingsGearBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------- ACTIVE SCRIPTS SYSTEM ----------
-
-local loadedScripts = {}
+-- (loadedScripts moved above settings gear handler)
 local activeScripts = {}
 genv[SCRIPT_KEY].ActiveScripts = activeScripts
 local activeMenuOpen = false
