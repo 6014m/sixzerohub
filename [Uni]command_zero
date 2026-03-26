@@ -757,7 +757,7 @@ connect(UserInputService.InputBegan, function(input, gpe)
 end)
 
 -- Tab system
-local tabNames = { "Commands", "Players", "Server", "Aliases", "Keybinds", "Info", "Settings" }
+local tabNames = { "Commands", "Players", "Server", "Aliases", "Keybinds", "Events", "Info", "Settings" }
 local tabBtns = {}
 local tabPages = {}
 local currentTab = "Commands"
@@ -777,7 +777,7 @@ tabLayout.Parent = tabBar
 for i, name in ipairs(tabNames) do
     local btn = Instance.new("TextButton")
     btn.Name = name
-    btn.Size = UDim2.new(0, 68, 1, 0)
+    btn.Size = UDim2.new(0, 58, 1, 0)
     btn.BackgroundColor3 = THEME.panel
     btn.BorderSizePixel = 0
     btn.Text = name
@@ -1387,54 +1387,225 @@ do
 
         refreshBindsTab()
         _G.czRefreshBindsTab = refreshBindsTab
+    end
+end
 
-        -- EVENT BINDS
-        local evtTitle = Instance.new("TextLabel")
-        evtTitle.Size = UDim2.new(1, -8, 0, 20)
-        evtTitle.BackgroundTransparency = 1
-        evtTitle.Text = "  EVENT BINDS  (use $1 $2 for args)"
-        evtTitle.TextColor3 = THEME.accent
-        evtTitle.TextSize = 12
-        evtTitle.Font = Enum.Font.GothamBold
-        evtTitle.TextXAlignment = Enum.TextXAlignment.Left
-        evtTitle.Parent = page
+--================================================================
+-- POPULATE EVENTS TAB
+--================================================================
 
-        local eventBinds = {}
-        local eventConns = {}
-
-        local events = {
-            { name = "OnSpawn", desc = "Player respawns ($1=player)" },
-            { name = "OnDied", desc = "Player dies ($1=player)" },
-            { name = "OnJoin", desc = "Player joins ($1=player)" },
-            { name = "OnLeave", desc = "Player leaves ($1=player)" },
-            { name = "OnChatted", desc = "Player chats ($1=player $2=msg)" },
+do
+    local page = tabPages["Events"]
+    if page then
+        local eventDefs = {
+            { name = "OnSpawn", desc = "$1 = player name" },
+            { name = "OnDied", desc = "$1 = player name" },
+            { name = "OnJoin", desc = "$1 = player name" },
+            { name = "OnLeave", desc = "$1 = player name" },
+            { name = "OnChatted", desc = "$1 = player, $2 = message" },
         }
 
+        local eventCommands = {}
+        for _, e in ipairs(eventDefs) do eventCommands[e.name] = {} end
+
         local function fireEvent(eventName, ...)
-            local cmd = eventBinds[eventName]
-            if not cmd or cmd == "" then return end
+            local cmdsForEvent = eventCommands[eventName]
+            if not cmdsForEvent then return end
             local args = {...}
-            local expanded = cmd
-            for i, a in ipairs(args) do
-                expanded = expanded:gsub("%$" .. i, tostring(a))
+            for _, cmd in ipairs(cmdsForEvent) do
+                local expanded = cmd
+                for i, a in ipairs(args) do
+                    expanded = expanded:gsub("%$" .. i, tostring(a))
+                end
+                pcall(execCmd, expanded, player, false)
             end
-            execCmd(expanded, player, false)
         end
 
-        local function hookEventBinds()
-            for _, c in pairs(eventConns) do pcall(function() c:Disconnect() end) end
-            eventConns = {}
-            table.insert(eventConns, connect(Players.PlayerAdded, function(p)
+        local infoL = Instance.new("TextLabel")
+        infoL.Size = UDim2.new(1, -8, 0, 18)
+        infoL.BackgroundTransparency = 1
+        infoL.Text = "  Click event to expand. Use $1 $2 for args."
+        infoL.TextColor3 = THEME.muted
+        infoL.TextSize = 10
+        infoL.Font = Enum.Font.Gotham
+        infoL.TextXAlignment = Enum.TextXAlignment.Left
+        infoL.Parent = page
+
+        for _, evt in ipairs(eventDefs) do
+            local expanded = false
+            local container = Instance.new("Frame")
+            container.Size = UDim2.new(1, -8, 0, 24)
+            container.AutomaticSize = Enum.AutomaticSize.Y
+            container.BackgroundTransparency = 1
+            container.ClipsDescendants = true
+            container.Parent = page
+
+            local header = Instance.new("TextButton")
+            header.Size = UDim2.new(1, 0, 0, 24)
+            header.BackgroundColor3 = THEME.panel
+            header.BorderSizePixel = 0
+            header.Text = ""
+            header.AutoButtonColor = false
+            header.Parent = container
+            Instance.new("UICorner", header).CornerRadius = UDim.new(0, 4)
+
+            local arrow = Instance.new("TextLabel")
+            arrow.Size = UDim2.new(0, 20, 0, 24)
+            arrow.BackgroundTransparency = 1
+            arrow.Text = ">"
+            arrow.TextColor3 = THEME.accent
+            arrow.TextSize = 14
+            arrow.Font = Enum.Font.GothamBold
+            arrow.Parent = header
+
+            local nameL = Instance.new("TextLabel")
+            nameL.Size = UDim2.new(0, 80, 0, 24)
+            nameL.Position = UDim2.new(0, 18, 0, 0)
+            nameL.BackgroundTransparency = 1
+            nameL.Text = evt.name
+            nameL.TextColor3 = THEME.text
+            nameL.TextSize = 11
+            nameL.Font = Enum.Font.GothamBold
+            nameL.TextXAlignment = Enum.TextXAlignment.Left
+            nameL.Parent = header
+
+            local descL = Instance.new("TextLabel")
+            descL.Size = UDim2.new(1, -105, 0, 24)
+            descL.Position = UDim2.new(0, 100, 0, 0)
+            descL.BackgroundTransparency = 1
+            descL.Text = evt.desc
+            descL.TextColor3 = THEME.muted
+            descL.TextSize = 10
+            descL.Font = Enum.Font.Gotham
+            descL.TextXAlignment = Enum.TextXAlignment.Left
+            descL.Parent = header
+
+            local cmdList = Instance.new("Frame")
+            cmdList.Size = UDim2.new(1, 0, 0, 0)
+            cmdList.AutomaticSize = Enum.AutomaticSize.Y
+            cmdList.Position = UDim2.new(0, 0, 0, 26)
+            cmdList.BackgroundTransparency = 1
+            cmdList.Visible = false
+            cmdList.Parent = container
+            Instance.new("UIListLayout", cmdList).Padding = UDim.new(0, 2)
+
+            local addRow = Instance.new("Frame")
+            addRow.Size = UDim2.new(1, 0, 0, 24)
+            addRow.BackgroundTransparency = 1
+            addRow.LayoutOrder = 9999
+            addRow.Parent = cmdList
+
+            local addBox = Instance.new("TextBox")
+            addBox.Size = UDim2.new(1, -34, 0, 22)
+            addBox.BackgroundColor3 = THEME.input
+            addBox.BorderSizePixel = 0
+            addBox.Text = ""
+            addBox.PlaceholderText = "Add command..."
+            addBox.PlaceholderColor3 = THEME.muted
+            addBox.TextColor3 = THEME.text
+            addBox.TextSize = 10
+            addBox.Font = Enum.Font.Gotham
+            addBox.TextXAlignment = Enum.TextXAlignment.Left
+            addBox.ClearTextOnFocus = false
+            addBox.Parent = addRow
+            Instance.new("UICorner", addBox).CornerRadius = UDim.new(0, 4)
+            Instance.new("UIPadding", addBox).PaddingLeft = UDim.new(0, 6)
+
+            local addBtn = Instance.new("TextButton")
+            addBtn.Size = UDim2.new(0, 28, 0, 22)
+            addBtn.Position = UDim2.new(1, -28, 0, 0)
+            addBtn.BackgroundColor3 = THEME.accent
+            addBtn.BorderSizePixel = 0
+            addBtn.Text = "+"
+            addBtn.TextColor3 = Color3.new(1, 1, 1)
+            addBtn.TextSize = 14
+            addBtn.Font = Enum.Font.GothamBold
+            addBtn.Parent = addRow
+            Instance.new("UICorner", addBtn).CornerRadius = UDim.new(0, 4)
+
+            local function refreshCmdList()
+                for _, c in ipairs(cmdList:GetChildren()) do
+                    if c:IsA("Frame") and c ~= addRow then c:Destroy() end
+                end
+                for idx, cmd in ipairs(eventCommands[evt.name]) do
+                    local row = Instance.new("Frame")
+                    row.Size = UDim2.new(1, 0, 0, 22)
+                    row.BackgroundColor3 = THEME.hover
+                    row.BackgroundTransparency = 0.5
+                    row.BorderSizePixel = 0
+                    row.LayoutOrder = idx
+                    row.Parent = cmdList
+                    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+
+                    local cmdLbl = Instance.new("TextLabel")
+                    cmdLbl.Size = UDim2.new(1, -30, 1, 0)
+                    cmdLbl.Position = UDim2.new(0, 6, 0, 0)
+                    cmdLbl.BackgroundTransparency = 1
+                    cmdLbl.Text = cmd
+                    cmdLbl.TextColor3 = THEME.text
+                    cmdLbl.TextSize = 10
+                    cmdLbl.Font = Enum.Font.Gotham
+                    cmdLbl.TextXAlignment = Enum.TextXAlignment.Left
+                    cmdLbl.Parent = row
+
+                    local del = Instance.new("TextButton")
+                    del.Size = UDim2.new(0, 20, 0, 16)
+                    del.Position = UDim2.new(1, -24, 0.5, -8)
+                    del.BackgroundColor3 = THEME.error
+                    del.BorderSizePixel = 0
+                    del.Text = "X"
+                    del.TextColor3 = Color3.new(1, 1, 1)
+                    del.TextSize = 9
+                    del.Font = Enum.Font.GothamBold
+                    del.Parent = row
+                    Instance.new("UICorner", del).CornerRadius = UDim.new(0, 4)
+                    del.MouseButton1Click:Connect(function()
+                        table.remove(eventCommands[evt.name], idx)
+                        refreshCmdList()
+                    end)
+                end
+            end
+
+            addBtn.MouseButton1Click:Connect(function()
+                if addBox.Text == "" then return end
+                table.insert(eventCommands[evt.name], addBox.Text)
+                addBox.Text = ""
+                refreshCmdList()
+            end)
+
+            addBox.FocusLost:Connect(function(enter)
+                if enter and addBox.Text ~= "" then
+                    table.insert(eventCommands[evt.name], addBox.Text)
+                    addBox.Text = ""
+                    refreshCmdList()
+                end
+            end)
+
+            header.MouseButton1Click:Connect(function()
+                expanded = not expanded
+                arrow.Text = expanded and "v" or ">"
+                cmdList.Visible = expanded
+                if expanded then
+                    container.AutomaticSize = Enum.AutomaticSize.Y
+                else
+                    container.AutomaticSize = Enum.AutomaticSize.None
+                    container.Size = UDim2.new(1, -8, 0, 24)
+                end
+            end)
+        end
+
+        -- Hook all game events
+        local function hookAllEvents()
+            connect(Players.PlayerAdded, function(p)
                 fireEvent("OnJoin", p.Name)
                 p.CharacterAdded:Connect(function()
                     fireEvent("OnSpawn", p.Name)
                     local hum = p.Character:WaitForChild("Humanoid", 5)
                     if hum then hum.Died:Connect(function() fireEvent("OnDied", p.Name) end) end
                 end)
-            end))
-            table.insert(eventConns, connect(Players.PlayerRemoving, function(p)
-                fireEvent("OnLeave", p.Name)
-            end))
+                p.Chatted:Connect(function(msg) fireEvent("OnChatted", p.Name, msg) end)
+            end)
+            connect(Players.PlayerRemoving, function(p) fireEvent("OnLeave", p.Name) end)
             for _, p in ipairs(Players:GetPlayers()) do
                 if p.Character then
                     local hum = p.Character:FindFirstChildOfClass("Humanoid")
@@ -1445,73 +1616,19 @@ do
                     local hum = p.Character:WaitForChild("Humanoid", 5)
                     if hum then hum.Died:Connect(function() fireEvent("OnDied", p.Name) end) end
                 end)
+                p.Chatted:Connect(function(msg) fireEvent("OnChatted", p.Name, msg) end)
             end
-        end
-
-        for _, evt in ipairs(events) do
-            local row = Instance.new("Frame")
-            row.Size = UDim2.new(1, -8, 0, 26)
-            row.BackgroundColor3 = THEME.hover
-            row.BackgroundTransparency = 0.5
-            row.BorderSizePixel = 0
-            row.Parent = page
-            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
-
-            local lbl = Instance.new("TextLabel")
-            lbl.Size = UDim2.new(0, 70, 1, 0)
-            lbl.Position = UDim2.new(0, 6, 0, 0)
-            lbl.BackgroundTransparency = 1
-            lbl.Text = evt.name
-            lbl.TextColor3 = THEME.text
-            lbl.TextSize = 10
-            lbl.Font = Enum.Font.GothamBold
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            lbl.Parent = row
-
-            local box = Instance.new("TextBox")
-            box.Size = UDim2.new(1, -84, 0, 20)
-            box.Position = UDim2.new(0, 78, 0, 3)
-            box.BackgroundColor3 = THEME.input
-            box.BorderSizePixel = 0
-            box.Text = ""
-            box.PlaceholderText = evt.desc
-            box.PlaceholderColor3 = THEME.muted
-            box.TextColor3 = THEME.text
-            box.TextSize = 10
-            box.Font = Enum.Font.Gotham
-            box.TextXAlignment = Enum.TextXAlignment.Left
-            box.ClearTextOnFocus = false
-            box.Parent = row
-            Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
-            Instance.new("UIPadding", box).PaddingLeft = UDim.new(0, 4)
-
-            box.FocusLost:Connect(function()
-                eventBinds[evt.name] = box.Text ~= "" and box.Text or nil
-            end)
-        end
-
-        hookEventBinds()
-
-        -- Chat event needs special handling
-        local function hookChat()
             pcall(function()
-                local tcs = game:GetService("TextChatService")
-                local channel = tcs:FindFirstChild("TextChannels") and tcs.TextChannels:FindFirstChild("RBXGeneral")
+                local channel = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
                 if channel then
-                    table.insert(eventConns, channel.MessageReceived:Connect(function(msg)
+                    connect(channel.MessageReceived, function(msg)
                         local sender = msg.TextSource and Players:GetPlayerByUserId(msg.TextSource.UserId)
                         if sender then fireEvent("OnChatted", sender.Name, msg.Text) end
-                    end))
+                    end)
                 end
             end)
-            for _, p in ipairs(Players:GetPlayers()) do
-                p.Chatted:Connect(function(msg) fireEvent("OnChatted", p.Name, msg) end)
-            end
-            Players.PlayerAdded:Connect(function(p)
-                p.Chatted:Connect(function(msg) fireEvent("OnChatted", p.Name, msg) end)
-            end)
         end
-        hookChat()
+        hookAllEvents()
     end
 end
 
