@@ -1512,8 +1512,8 @@ do
         end)
 
         clearBtn.MouseButton1Click:Connect(function()
-            binds = {}
-            toggleOn = {}
+            for i = #binds, 1, -1 do table.remove(binds, i) end
+            for k in pairs(toggleOn) do toggleOn[k] = nil end
             refreshBindsTab()
             notify("Keybinds", "All keybinds cleared")
         end)
@@ -9240,8 +9240,8 @@ addcmd("unbind", {"unkeybind"}, "Remove a keybind", function(args)
 end)
 
 addcmd("unbindall", {"clearbinds"}, "Remove all keybinds", function(args)
-    binds = {}
-    toggleOn = {}
+    for i = #binds, 1, -1 do table.remove(binds, i) end
+    for k in pairs(toggleOn) do toggleOn[k] = nil end
     if _G.czRefreshBindsTab then _G.czRefreshBindsTab() end
     notify("Unbind", "All keybinds cleared")
 end)
