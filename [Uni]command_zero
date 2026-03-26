@@ -2060,7 +2060,10 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                         local bob = math.sin(tick() * bobSpeed) * 0.06
                         local _, curYaw, _ = fakeRoot.CFrame:ToEulerAnglesYXZ()
                         local pos = fakeRoot.Position + Vector3.new(0, bob, 0)
-                        local ray = workspace:Raycast(fakeRoot.Position + Vector3.new(0, 3, 0), Vector3.new(0, -10, 0))
+                        local rayParams = RaycastParams.new()
+                        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+                        rayParams.FilterDescendantsInstances = {fakeRig}
+                        local ray = workspace:Raycast(fakeRoot.Position + Vector3.new(0, 3, 0), Vector3.new(0, -15, 0), rayParams)
                         if ray and pos.Y < ray.Position.Y + 4 then
                             pos = Vector3.new(pos.X, ray.Position.Y + 4, pos.Z)
                         end
