@@ -2391,15 +2391,11 @@ do
     end
 
     local function applyBypass(msg)
-        local sep = {
-            "\205\143",     -- U+034F Combining Grapheme Joiner
-            "\226\129\163", -- U+2063 Invisible Separator
-            "\226\128\140", -- U+200C Zero Width Non-Joiner
-        }
-        local vowelMap = {
-            a = "\208\176", e = "\208\181", o = "\208\190",
-            i = "\209\150", u = "\209\131",
-            A = "\208\144", E = "\208\149", O = "\208\158",
+        local leet = {
+            a = {"@","4"}, e = {"3"}, i = {"1","!"}, o = {"0"},
+            s = {"$","5"}, t = {"7"}, l = {"1"}, g = {"9"},
+            A = {"@","4"}, E = {"3"}, I = {"1","!"}, O = {"0"},
+            S = {"$","5"}, T = {"7"}, L = {"1"}, G = {"9"},
         }
         local words = msg:split(" ")
         for w = 1, #words do
@@ -2407,9 +2403,11 @@ do
             local out = {}
             for i = 1, #word do
                 local ch = word:sub(i, i)
-                out[#out + 1] = vowelMap[ch] or ch
-                if i < #word and ch:match("%a") then
-                    out[#out + 1] = sep[(i % #sep) + 1]
+                local subs = leet[ch]
+                if subs and math.random() > 0.4 then
+                    out[#out + 1] = subs[math.random(#subs)]
+                else
+                    out[#out + 1] = ch
                 end
             end
             words[w] = table.concat(out)
