@@ -2056,7 +2056,7 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                 else
                     -- GROUNDED STATE — idle pose only, no flight
                     fakeRoot.Anchored = false
-                    fakeHum.PlatformStand = true
+                    fakeHum.PlatformStand = false
                     for _, track in pairs(fakeHum:GetPlayingAnimationTracks()) do track:Stop(0) end
 
                     local bob = math.sin(tick() * bobSpeed) * 0.04
