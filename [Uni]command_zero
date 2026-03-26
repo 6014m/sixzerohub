@@ -2082,13 +2082,9 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                         fakeHum:ChangeState(Enum.HumanoidStateType.GettingUp)
                     end
 
-                    -- Levitate bob via direct Y offset on fakeRoot
-                    local bob = math.sin(tick() * bobSpeed) * 0.4
-                    local rayG = workspace:Raycast(fakeRoot.Position + Vector3.new(0, 5, 0), Vector3.new(0, -20, 0))
-                    local groundY = rayG and (rayG.Position.Y + 3 + max) or fakeRoot.Position.Y
-                    local _, yaw, _ = fakeRoot.CFrame:ToEulerAnglesYXZ()
-                    fakeRoot.CFrame = CFrame.new(fakeRoot.Position.X, groundY + bob, fakeRoot.Position.Z)
-                        * CFrame.Angles(0, yaw, 0)
+                    -- Levitate bob via HipHeight
+                    local bob = math.sin(tick() * bobSpeed) * 0.6
+                    fakeHum.HipHeight = max + bob
 
                     -- Full idle pose
                     if rootJoint then rootJoint.C0 = rootJoint.C0:Lerp(RJD * CFrame.Angles(math.rad(9), 0, 0), 0.12) end
