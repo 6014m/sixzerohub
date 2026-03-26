@@ -1531,8 +1531,11 @@ do
     local page = tabPages["Events"]
     if page then
         local eventDefs = {
+            { name = "OnExecute", desc = "Fires once on load" },
             { name = "OnSpawn", desc = "$1 = player name" },
             { name = "OnDied", desc = "$1 = player name" },
+            { name = "OnDamage", desc = "$1 = player, $2 = health" },
+            { name = "OnKilled", desc = "$1 = victim, $2 = killer" },
             { name = "OnJoin", desc = "$1 = player name" },
             { name = "OnLeave", desc = "$1 = player name" },
             { name = "OnChatted", desc = "$1 = player, $2 = message" },
@@ -1727,27 +1730,48 @@ do
             end)
         end
 
+        -- Hook character events (damage, death, killed)
+        local function hookCharEvents(plr)
+            task.spawn(function()
+                local char = plr.Character
+                if not char then return end
+                local hum = char:WaitForChild("Humanoid", 10)
+                if not hum then return end
+
+                local oldHealth = hum.Health
+                hum.HealthChanged:Connect(function(health)
+                    if oldHealth > health then
+                        fireEvent("OnDamage", plr.Name, tostring(math.floor(health)))
+                    end
+                    oldHealth = health
+                end)
+
+                hum.Died:Connect(function()
+                    fireEvent("OnDied", plr.Name)
+                    local creator = hum:FindFirstChild("creator")
+                    if creator and creator.Value and creator.Value.Parent then
+                        fireEvent("OnKilled", plr.Name, creator.Value.Name)
+                    end
+                end)
+            end)
+        end
+
         -- Hook all game events
         local function hookAllEvents()
             connect(Players.PlayerAdded, function(p)
                 fireEvent("OnJoin", p.Name)
                 p.CharacterAdded:Connect(function()
                     fireEvent("OnSpawn", p.Name)
-                    local hum = p.Character:WaitForChild("Humanoid", 5)
-                    if hum then hum.Died:Connect(function() fireEvent("OnDied", p.Name) end) end
+                    hookCharEvents(p)
                 end)
                 p.Chatted:Connect(function(msg) fireEvent("OnChatted", p.Name, msg) end)
             end)
             connect(Players.PlayerRemoving, function(p) fireEvent("OnLeave", p.Name) end)
             for _, p in ipairs(Players:GetPlayers()) do
-                if p.Character then
-                    local hum = p.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then hum.Died:Connect(function() fireEvent("OnDied", p.Name) end) end
-                end
+                if p.Character then hookCharEvents(p) end
                 p.CharacterAdded:Connect(function()
                     fireEvent("OnSpawn", p.Name)
-                    local hum = p.Character:WaitForChild("Humanoid", 5)
-                    if hum then hum.Died:Connect(function() fireEvent("OnDied", p.Name) end) end
+                    hookCharEvents(p)
                 end)
                 p.Chatted:Connect(function(msg) fireEvent("OnChatted", p.Name, msg) end)
             end
@@ -1760,6 +1784,9 @@ do
                     end)
                 end
             end)
+
+            -- Fire OnExecute once
+            task.defer(function() fireEvent("OnExecute") end)
         end
         hookAllEvents()
     end
