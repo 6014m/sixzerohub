@@ -757,7 +757,7 @@ connect(UserInputService.InputBegan, function(input, gpe)
 end)
 
 -- Tab system
-local tabNames = { "Commands", "Players", "Server", "Aliases", "Info", "Settings" }
+local tabNames = { "Commands", "Players", "Server", "Aliases", "Keybinds", "Info", "Settings" }
 local tabBtns = {}
 local tabPages = {}
 local currentTab = "Commands"
@@ -777,7 +777,7 @@ tabLayout.Parent = tabBar
 for i, name in ipairs(tabNames) do
     local btn = Instance.new("TextButton")
     btn.Name = name
-    btn.Size = UDim2.new(0, 75, 1, 0)
+    btn.Size = UDim2.new(0, 68, 1, 0)
     btn.BackgroundColor3 = THEME.panel
     btn.BorderSizePixel = 0
     btn.Text = name
@@ -1234,6 +1234,114 @@ do
             end
         end
         refreshAliases()
+    end
+end
+
+--================================================================
+-- POPULATE KEYBINDS TAB
+--================================================================
+
+do
+    local page = tabPages["Keybinds"]
+    if page then
+        local titleL = Instance.new("TextLabel")
+        titleL.Size = UDim2.new(1, -8, 0, 22)
+        titleL.BackgroundTransparency = 1
+        titleL.Text = "  Keybinds — use ;bind <key> <command>"
+        titleL.TextColor3 = THEME.accent
+        titleL.TextSize = 12
+        titleL.Font = Enum.Font.GothamBold
+        titleL.TextXAlignment = Enum.TextXAlignment.Left
+        titleL.Parent = page
+
+        local infoL = Instance.new("TextLabel")
+        infoL.Size = UDim2.new(1, -8, 0, 18)
+        infoL.BackgroundTransparency = 1
+        infoL.Text = "  ;togglebind <key> <on> | <off>  ;unbind <key>  ;unbindall"
+        infoL.TextColor3 = THEME.muted
+        infoL.TextSize = 10
+        infoL.Font = Enum.Font.Gotham
+        infoL.TextXAlignment = Enum.TextXAlignment.Left
+        infoL.Parent = page
+
+        local bindListFrame = Instance.new("Frame")
+        bindListFrame.Size = UDim2.new(1, -8, 0, 0)
+        bindListFrame.AutomaticSize = Enum.AutomaticSize.Y
+        bindListFrame.BackgroundTransparency = 1
+        bindListFrame.Parent = page
+        Instance.new("UIListLayout", bindListFrame).Padding = UDim.new(0, 2)
+
+        local function refreshBindsTab()
+            for _, c in ipairs(bindListFrame:GetChildren()) do
+                if c:IsA("Frame") then c:Destroy() end
+            end
+            if #binds == 0 then
+                local empty = Instance.new("TextLabel")
+                empty.Size = UDim2.new(1, 0, 0, 30)
+                empty.BackgroundTransparency = 1
+                empty.Text = "  No keybinds set"
+                empty.TextColor3 = THEME.muted
+                empty.TextSize = 11
+                empty.Font = Enum.Font.Gotham
+                empty.TextXAlignment = Enum.TextXAlignment.Left
+                empty.Name = "Empty"
+                local holder = Instance.new("Frame")
+                holder.Size = UDim2.new(1, 0, 0, 30)
+                holder.BackgroundTransparency = 1
+                empty.Parent = holder
+                holder.Parent = bindListFrame
+                return
+            end
+            for idx, b in ipairs(binds) do
+                local key = tostring(b.KEY):gsub("Enum.KeyCode.", "")
+                local row = Instance.new("Frame")
+                row.Size = UDim2.new(1, 0, 0, 26)
+                row.BackgroundColor3 = THEME.hover
+                row.BackgroundTransparency = 0.5
+                row.BorderSizePixel = 0
+                row.Parent = bindListFrame
+                Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+
+                local lbl = Instance.new("TextLabel")
+                lbl.Size = UDim2.new(1, -40, 1, 0)
+                lbl.Position = UDim2.new(0, 8, 0, 0)
+                lbl.BackgroundTransparency = 1
+                if b.TOGGLE then
+                    lbl.Text = key .. "  ->  " .. b.COMMAND .. "  /  " .. b.TOGGLE
+                else
+                    lbl.Text = key .. "  ->  " .. b.COMMAND
+                end
+                lbl.TextColor3 = THEME.text
+                lbl.TextSize = 11
+                lbl.Font = Enum.Font.Gotham
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                lbl.Parent = row
+
+                local del = Instance.new("TextButton")
+                del.Size = UDim2.new(0, 24, 0, 18)
+                del.Position = UDim2.new(1, -28, 0.5, -9)
+                del.BackgroundColor3 = THEME.error
+                del.BorderSizePixel = 0
+                del.Text = "X"
+                del.TextColor3 = Color3.new(1, 1, 1)
+                del.TextSize = 10
+                del.Font = Enum.Font.GothamBold
+                del.Parent = row
+                Instance.new("UICorner", del).CornerRadius = UDim.new(0, 4)
+                del.MouseButton1Click:Connect(function()
+                    for i = #binds, 1, -1 do
+                        if binds[i] == b then
+                            toggleOn[b] = nil
+                            table.remove(binds, i)
+                        end
+                    end
+                    refreshBindsTab()
+                end)
+            end
+        end
+
+        refreshBindsTab()
+        _G.czRefreshBindsTab = refreshBindsTab
     end
 end
 
@@ -8331,6 +8439,7 @@ addcmd("bind", {"keybind"}, "Bind a key to a command (bind <key> <command>)", fu
         if binds[i].KEY == tostring(keyEnum) then table.remove(binds, i) end
     end
     table.insert(binds, { COMMAND = cmd, KEY = tostring(keyEnum) })
+    if _G.czRefreshBindsTab then _G.czRefreshBindsTab() end
     notify("Bind", keyName .. " -> " .. cmd)
 end)
 
@@ -8350,6 +8459,7 @@ addcmd("togglebind", {"tbind"}, "Bind a key to toggle between two commands (togg
         if binds[i].KEY == tostring(keyEnum) then table.remove(binds, i) end
     end
     table.insert(binds, { COMMAND = onCmd, KEY = tostring(keyEnum), TOGGLE = offCmd })
+    if _G.czRefreshBindsTab then _G.czRefreshBindsTab() end
     notify("ToggleBind", keyName .. " -> " .. onCmd .. " / " .. offCmd)
 end)
 
@@ -8364,12 +8474,14 @@ addcmd("unbind", {"unkeybind"}, "Remove a keybind", function(args)
             table.remove(binds, i)
         end
     end
+    if _G.czRefreshBindsTab then _G.czRefreshBindsTab() end
     notify("Unbind", "Unbound " .. keyName)
 end)
 
 addcmd("unbindall", {"clearbinds"}, "Remove all keybinds", function(args)
     binds = {}
     toggleOn = {}
+    if _G.czRefreshBindsTab then _G.czRefreshBindsTab() end
     notify("Unbind", "All keybinds cleared")
 end)
 
