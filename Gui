@@ -379,7 +379,68 @@ gotdToggle.MouseButton1Click:Connect(function()
 end)
 
 settingsGearBtn.MouseButton1Click:Connect(function()
+    -- Show unified settings: hub settings + all active scripts with settings
     hubSettingsFrame.Visible = not hubSettingsFrame.Visible
+
+    if hubSettingsFrame.Visible then
+        -- Rebuild with active script settings
+        -- Remove old dynamic content
+        for _, child in ipairs(hubSettingsFrame:GetChildren()) do
+            if child.Name == "DynScriptSection" then child:Destroy() end
+        end
+
+        -- Resize based on content
+        local yOffset = 70 -- after hub settings
+
+        for fileKey, _ in pairs(loadedScripts) do
+            local defs = scriptSettingsDefs[fileKey]
+            if defs then
+                local section = Instance.new("Frame")
+                section.Name = "DynScriptSection"
+                section.Size = UDim2.new(1, -16, 0, 0)
+                section.AutomaticSize = Enum.AutomaticSize.Y
+                section.Position = UDim2.new(0, 8, 0, yOffset)
+                section.BackgroundTransparency = 1
+                section.Parent = hubSettingsFrame
+
+                local sLayout = Instance.new("UIListLayout", section)
+                sLayout.Padding = UDim.new(0, 2)
+
+                -- Script name header
+                local sTitle = Instance.new("TextLabel")
+                sTitle.Size = UDim2.new(1, 0, 0, 20)
+                sTitle.BackgroundTransparency = 1
+                sTitle.Text = (defs._title or fileKey)
+                sTitle.TextColor3 = COLORS.accent
+                sTitle.TextSize = 12
+                sTitle.Font = Enum.Font.GothamBold
+                sTitle.TextXAlignment = Enum.TextXAlignment.Left
+                sTitle.Parent = section
+
+                -- Settings button for this script
+                local openBtn = Instance.new("TextButton")
+                openBtn.Size = UDim2.new(1, 0, 0, 24)
+                openBtn.BackgroundColor3 = COLORS.hover
+                openBtn.BorderSizePixel = 0
+                openBtn.Text = "Open Settings"
+                openBtn.TextColor3 = COLORS.text
+                openBtn.TextSize = 11
+                openBtn.Font = Enum.Font.Gotham
+                openBtn.Parent = section
+                Instance.new("UICorner", openBtn).CornerRadius = UDim.new(0, 4)
+
+                openBtn.MouseButton1Click:Connect(function()
+                    hubSettingsFrame.Visible = false
+                    showSettingsPanel(fileKey)
+                end)
+
+                yOffset = yOffset + 50
+            end
+        end
+
+        -- Resize the frame to fit
+        hubSettingsFrame.Size = UDim2.new(0, 220, 0, math.max(90, yOffset + 10))
+    end
 end)
 
 ---------- ACTIVE SCRIPTS SYSTEM ----------
@@ -1354,37 +1415,7 @@ local function createScriptButton(info, targetContent, source)
     status.TextXAlignment = Enum.TextXAlignment.Right
     status.Parent = btn
 
-    -- settings cog (before star)
-    local cogBtn = Instance.new("TextButton")
-    cogBtn.Name = "Settings"
-    cogBtn.Size = UDim2.new(0, 24, 0, 24)
-    cogBtn.Position = UDim2.new(1, -56, 0.5, -12)
-    cogBtn.BackgroundTransparency = 1
-    cogBtn.Text = "\xE2\x9A\x99"
-    cogBtn.TextColor3 = COLORS.textMuted
-    cogBtn.TextSize = 16
-    cogBtn.Font = Enum.Font.GothamBold
-    cogBtn.Visible = false
-    cogBtn.Parent = btn
-
-    cogBtn.MouseButton1Click:Connect(function()
-        showSettingsPanel(fileKey)
-    end)
-
-    -- check if settings exist now, and keep checking periodically
-    local function updateCogVisibility()
-        cogBtn.Visible = scriptSettingsDefs[fileKey] ~= nil
-    end
-    updateCogVisibility()
-    -- poll for late registrations
-    task.spawn(function()
-        local checks = 0
-        while checks < 10 and not scriptSettingsDefs[fileKey] do
-            task.wait(1)
-            checks = checks + 1
-            updateCogVisibility()
-        end
-    end)
+    -- (Settings cog removed — all script settings accessible from hub gear button)
 
     -- favorite star (far right)
     local favBtn = Instance.new("TextButton")
