@@ -1968,33 +1968,25 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                 local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
                 if not fakeRoot or not fakeHum then RunService.Heartbeat:Wait() continue end
 
-                -- Double-tap F to toggle flight
+                -- Press F to toggle flight
                 if not _G.czViltFlying then _G.czViltFlying = false end
                 if not _G.czViltJumpConn then
-                    _G.czViltLastF = 0
-                    _G.czViltToggleCooldown = 0
-                    _G.czViltJumpConn = connect(UserInputService.InputBegan, function(input, processed)
-                        if processed then return end
-                        if input.KeyCode == Enum.KeyCode.F then
-                            local now = tick()
-                            if now - _G.czViltLastF < 0.4 then
-                                _G.czViltFlying = not _G.czViltFlying
-                                _G.czViltToggleCooldown = now + 0.5
-                                fakeRoot.Anchored = _G.czViltFlying
-                                if _G.czViltFlying then
-                                    fakeRoot.AssemblyLinearVelocity = Vector3.zero
-                                    fakeRoot.AssemblyAngularVelocity = Vector3.zero
-                                    notify("Viltrumite", "Flight ON — double tap F to land")
-                                else
-                                    fakeHum.PlatformStand = false
-                                    if not fakeHum:FindFirstChildOfClass("Animator") then
-                                        Instance.new("Animator", fakeHum)
-                                    end
-                                    fakeHum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                                    notify("Viltrumite", "Flight OFF")
+                    _G.czViltJumpConn = connect(UserInputService.InputBegan, function(input)
+                        if input.KeyCode == Enum.KeyCode.F and not UserInputService:GetFocusedTextBox() then
+                            _G.czViltFlying = not _G.czViltFlying
+                            fakeRoot.Anchored = _G.czViltFlying
+                            if _G.czViltFlying then
+                                fakeRoot.AssemblyLinearVelocity = Vector3.zero
+                                fakeRoot.AssemblyAngularVelocity = Vector3.zero
+                                notify("Viltrumite", "Flight ON — press F to land")
+                            else
+                                fakeHum.PlatformStand = false
+                                if not fakeHum:FindFirstChildOfClass("Animator") then
+                                    Instance.new("Animator", fakeHum)
                                 end
+                                fakeHum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                                notify("Viltrumite", "Flight OFF")
                             end
-                            _G.czViltLastF = now
                         end
                     end)
                 end
