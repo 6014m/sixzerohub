@@ -2391,21 +2391,30 @@ do
     end
 
     local function applyBypass(msg)
-        local map = {
-            a = "\208\176", e = "\208\181", o = "\208\190",
-            c = "\209\129", p = "\209\128", x = "\209\133",
-            y = "\209\131", s = "\209\149", i = "\209\150",
-            A = "\208\144", E = "\208\149", O = "\208\158",
-            C = "\208\161", P = "\208\160", X = "\208\165",
-            B = "\208\146", H = "\208\157", K = "\208\154",
-            M = "\208\156", T = "\208\162",
+        local sep = {
+            "\205\143",     -- U+034F Combining Grapheme Joiner
+            "\226\129\163", -- U+2063 Invisible Separator
+            "\226\128\140", -- U+200C Zero Width Non-Joiner
         }
-        local out = {}
-        for i = 1, #msg do
-            local ch = msg:sub(i, i)
-            out[i] = map[ch] or ch
+        local vowelMap = {
+            a = "\208\176", e = "\208\181", o = "\208\190",
+            i = "\209\150", u = "\209\131",
+            A = "\208\144", E = "\208\149", O = "\208\158",
+        }
+        local words = msg:split(" ")
+        for w = 1, #words do
+            local word = words[w]
+            local out = {}
+            for i = 1, #word do
+                local ch = word:sub(i, i)
+                out[#out + 1] = vowelMap[ch] or ch
+                if i < #word and ch:match("%a") then
+                    out[#out + 1] = sep[(i % #sep) + 1]
+                end
+            end
+            words[w] = table.concat(out)
         end
-        return table.concat(out)
+        return table.concat(words, " ")
     end
 
     local function applySmartChat(msg)
