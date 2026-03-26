@@ -1954,11 +1954,6 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
     hum.WalkSpeed = 0
     levitateActive = true
 
-    local isViltrumite = _G.czReanimateActive and _G.czReanimateFakeRig
-    if isViltrumite then
-        notify("Levitate", "Viltrumite flight — WASD + Q/E to fly")
-    end
-
     task.spawn(function()
         while levitateActive do
             local h = myHumanoid()
@@ -1966,7 +1961,7 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
             if not h or not root then RunService.Heartbeat:Wait() continue end
             h.WalkSpeed = 0
 
-            if isViltrumite and _G.czReanimateFakeRig then
+            if _G.czReanimateActive and _G.czReanimateFakeRig then
                 -- VILTRUMITE FLY MODE
                 local fakeRig = _G.czReanimateFakeRig
                 local fakeRoot = fakeRig:FindFirstChild("HumanoidRootPart")
@@ -1974,7 +1969,9 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                 local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
                 if not fakeRoot or not fakeTorso or not fakeHum then RunService.Heartbeat:Wait() continue end
 
-                -- Stop default animations
+                -- Kill the R6 animate system by forcing PlatformStand + stopping tracks
+                fakeHum.PlatformStand = true
+                fakeHum.WalkSpeed = 0
                 for _, track in pairs(fakeHum:GetPlayingAnimationTracks()) do track:Stop(0) end
 
                 -- Camera-relative flight (WASD + QE)
@@ -2071,7 +2068,11 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                     root.AssemblyAngularVelocity = Vector3.zero
                 end
             end
-            RunService.Heartbeat:Wait()
+            if _G.czReanimateActive then
+                RunService.RenderStepped:Wait()
+            else
+                RunService.Heartbeat:Wait()
+            end
         end
     end)
     notify("Levitate", "Hovering (bob speed " .. bobSpeed .. ")")
@@ -2083,6 +2084,7 @@ addcmd("unlevitate", {"unlev", "unhover"}, "Stop levitating", function(args)
     if hum then
         hum.HipHeight = 0
         hum.WalkSpeed = levitateOldWS
+        hum.PlatformStand = false
     end
     notify("Levitate", "Disabled")
 end)
