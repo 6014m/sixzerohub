@@ -2054,20 +2054,16 @@ addcmd("levitate", {"lev", "hover"}, "Hover and tilt (levitate [height] [bobspee
                             * (fakeRoot.CFrame - fakeRoot.CFrame.Position)
                     end
                 else
-                    -- GROUNDED STATE — idle pose only, no flight
+                    -- GROUNDED STATE — let humanoid handle standing/walking, only pose arms
                     fakeRoot.Anchored = false
                     fakeHum.PlatformStand = false
-                    for _, track in pairs(fakeHum:GetPlayingAnimationTracks()) do track:Stop(0) end
+                    fakeHum.WalkSpeed = 16
 
-                    local bob = math.sin(tick() * bobSpeed) * 0.04
-                    h.HipHeight = max + bob
+                    h.HipHeight = max
 
-                    if rootJoint then rootJoint.C0 = rootJoint.C0:Lerp(RJD * CFrame.Angles(math.rad(9), 0, 0), 0.12) end
-                    if neck then neck.C0 = neck.C0:Lerp(NKD * CFrame.Angles(math.rad(-11), 0, 0), 0.12) end
-                    if rs then rs.C0 = rs.C0:Lerp(RSD * CFrame.new(0.4, 0.1, 0.2) * CFrame.Angles(math.rad(-45), 0, math.rad(109)) * CFrame.Angles(0, math.rad(-99), 0), 0.12) end
-                    if ls then ls.C0 = ls.C0:Lerp(LSD * CFrame.new(0.5, 0, 0) * CFrame.Angles(0, math.rad(-58), math.rad(11)), 0.12) end
-                    if rh then rh.C0 = rh.C0:Lerp(RHD * CFrame.new(0.3, 0.3, 0) * CFrame.Angles(0, 0, math.rad(-9)), 0.12) end
-                    if lh then lh.C0 = lh.C0:Lerp(LHD * CFrame.new(0.1, 0, 0) * CFrame.Angles(0, 0, math.rad(11)), 0.12) end
+                    -- Only pose arms and neck, leave root/hips alone for physics
+                    if rs then rs.C0 = rs.C0:Lerp(RSD * CFrame.new(0.4, 0.1, 0.2) * CFrame.Angles(math.rad(-45), 0, math.rad(109)) * CFrame.Angles(0, math.rad(-99), 0), 0.08) end
+                    if ls then ls.C0 = ls.C0:Lerp(LSD * CFrame.new(0.5, 0, 0) * CFrame.Angles(0, math.rad(-58), math.rad(11)), 0.08) end
                 end
             else
                 -- NORMAL LEVITATE MODE
