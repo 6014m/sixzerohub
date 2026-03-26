@@ -264,6 +264,8 @@ end)
 ---------- HUB SETTINGS BUTTON ----------
 
 local loadedScripts = {}
+local scriptSettingsDefs = {} -- forward declare so gear handler can see it
+local showSettingsPanel -- forward declare
 
 local settingsGearBtn = Instance.new("TextButton")
 settingsGearBtn.Name = "HubSettings"
@@ -471,7 +473,7 @@ end
 
 local SETTINGS_FILE = "SixZeroHub_settings.json"
 
-local scriptSettingsDefs = {} -- [fileKey] = { {name, type, default, ...}, ... }
+-- scriptSettingsDefs already forward-declared above gear handler
 local scriptSettingsValues = {} -- [fileKey] = { [settingName] = value }
 
 -- load saved settings from file
@@ -622,7 +624,7 @@ local function buildSettingsPanel()
     end)
 end
 
-local function showSettingsPanel(fileKey)
+showSettingsPanel = function(fileKey)
     if not settingsPanel then buildSettingsPanel() end
 
     local defs = scriptSettingsDefs[fileKey]
