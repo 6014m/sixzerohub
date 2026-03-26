@@ -3625,6 +3625,137 @@ end)
 -- COMMANDS: CAMERA (IY + CmdX)
 --================================================================
 
+addcmd("reanimate", {"reanim", "feanim"}, "FE Reanimate — appear dead, control limbs (R6 only)", function(args)
+    local char = getChar()
+    local hum = myHumanoid()
+    local rootP = myRoot()
+    if not char or not hum or not rootP then notify("Reanimate", "No character"); return end
+    if hum.RigType ~= Enum.HumanoidRigType.R6 then notify("Reanimate", "R6 only"); return end
+
+    char.Archivable = true
+    local shp = sethiddenproperty or set_hidden_property or function() end
+
+    if char:FindFirstChild("Animate") then
+        char.Animate.Disabled = true
+        for _, t in pairs(hum:GetPlayingAnimationTracks()) do t:Stop() end
+    end
+    hum:ChangeState("Physics")
+
+    pcall(function()
+        player.ReplicationFocus = workspace
+        settings().Physics.AllowSleep = false
+        shp(workspace, "PhysicsSteppingMethod", Enum.PhysicsSteppingMethod.Fixed)
+    end)
+
+    local fakeRig = char:Clone()
+    fakeRig.Name = "CZReanimate"
+    for _, v in pairs(fakeRig:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("Decal") then v.Transparency = 1
+        elseif v:IsA("SpecialMesh") then v.MeshId = ""
+        elseif v:IsA("LocalScript") or v:IsA("Script") then v:Destroy() end
+    end
+    fakeRig.HumanoidRootPart.CFrame = rootP.CFrame
+    fakeRig.Parent = workspace
+
+    local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
+    fakeHum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+    fakeHum.BreakJointsOnDeath = false
+
+    char.Parent = fakeRig
+    workspace.CurrentCamera.CameraSubject = fakeHum
+    hum.PlatformStand = true
+
+    local vel = Vector3.new(0, 0, -25.8)
+    local bvs = {}
+    for _, v in pairs(char:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+            v.Massless = true
+            v.RootPriority = 127
+            local abv = Instance.new("BodyAngularVelocity")
+            abv.P = math.huge; abv.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            abv.AngularVelocity = Vector3.zero; abv.Parent = v
+            local bv = Instance.new("BodyVelocity")
+            bv.P = math.huge; bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bv.Velocity = Vector3.zero; bv.Parent = v
+            table.insert(bvs, bv)
+        end
+    end
+
+    local offsets = {
+        ["Torso"] = fakeRig:FindFirstChild("Torso"),
+        ["Right Arm"] = fakeRig:FindFirstChild("Right Arm"),
+        ["Left Arm"] = fakeRig:FindFirstChild("Left Arm"),
+        ["Right Leg"] = fakeRig:FindFirstChild("Right Leg"),
+        ["Left Leg"] = fakeRig:FindFirstChild("Left Leg"),
+    }
+
+    local rootOff = 0.02
+    task.spawn(function() while task.wait(0.05) do rootOff = rootOff * -1 end end)
+
+    local rEvents = {}
+    local charDesc = char:GetDescendants()
+
+    table.insert(rEvents, RunService.PreSimulation:Connect(function()
+        for _, v in pairs(charDesc) do
+            if v:IsA("BasePart") and v.Parent then v.CanCollide = false; v.CanQuery = false; v.CanTouch = false end
+        end
+        pcall(function() fakeRig.Head.CanCollide = false; fakeRig.Torso.CanCollide = false end)
+    end))
+
+    table.insert(rEvents, RunService.Heartbeat:Connect(function()
+        pcall(function()
+            settings().Physics.AllowSleep = false
+            shp(player, "MaximumSimulationRadius", math.huge)
+            shp(player, "SimulationRadius", math.huge)
+        end)
+        pcall(function()
+            local t = char:FindFirstChild("Torso")
+            if t then t.AssemblyLinearVelocity = vel end
+        end)
+        for _, bv in pairs(bvs) do bv.Velocity = vel end
+        for name, fakePart in pairs(offsets) do
+            local realPart = char:FindFirstChild(name)
+            if realPart and fakePart and realPart.Parent and fakePart.Parent then
+                realPart.CFrame = fakePart.CFrame
+            end
+        end
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("Accessory") and v:FindFirstChild("Handle") then
+                local fa = fakeRig:FindFirstChild(v.Name)
+                if fa and fa:FindFirstChild("Handle") then v.Handle.CFrame = fa.Handle.CFrame end
+            end
+        end
+        rootP.CFrame = (char:FindFirstChild("Torso") or rootP).CFrame * CFrame.new(0, rootOff, 0)
+    end))
+
+    local function rDeath()
+        char.Parent = workspace
+        player.Character = workspace:FindFirstChild(char.Name)
+        hum:ChangeState(15)
+        if fakeRig then fakeRig:Destroy() end
+        for _, e in pairs(rEvents) do pcall(function() e:Disconnect() end) end
+    end
+    table.insert(rEvents, fakeHum.Died:Connect(rDeath))
+
+    player.Character = fakeRig
+
+    task.spawn(function()
+        task.wait(Players.RespawnTime + 0.5)
+        pcall(function()
+            local head = char:FindFirstChild("Head")
+            if head then head:BreakJoints() end
+        end)
+        offsets["Head"] = fakeRig:FindFirstChild("Head")
+    end)
+
+    task.wait(0.3)
+    task.spawn(function()
+        local a=player.Character;local b=a:WaitForChild("Torso")local c=b:WaitForChild("Right Shoulder")local d=b:WaitForChild("Left Shoulder")local e=b:WaitForChild("Right Hip")local f=b:WaitForChild("Left Hip")local g=b:WaitForChild("Neck")local h=a:WaitForChild("Humanoid")local i="Standing"local j=""local k=nil;local l=nil;local m=nil;local n=1.0;local o={}local p={idle={{id="http://www.roblox.com/asset/?id=180435571",weight=9},{id="http://www.roblox.com/asset/?id=180435792",weight=1}},walk={{id="http://www.roblox.com/asset/?id=180426354",weight=10}},run={{id="run.xml",weight=10}},jump={{id="http://www.roblox.com/asset/?id=125750702",weight=10}},fall={{id="http://www.roblox.com/asset/?id=180436148",weight=10}},climb={{id="http://www.roblox.com/asset/?id=180436334",weight=10}},sit={{id="http://www.roblox.com/asset/?id=178130996",weight=10}},toolnone={{id="http://www.roblox.com/asset/?id=182393478",weight=10}},toolslash={{id="http://www.roblox.com/asset/?id=129967390",weight=10}},toollunge={{id="http://www.roblox.com/asset/?id=129967478",weight=10}},wave={{id="http://www.roblox.com/asset/?id=128777973",weight=10}},point={{id="http://www.roblox.com/asset/?id=128853357",weight=10}},dance1={{id="http://www.roblox.com/asset/?id=182435998",weight=10},{id="http://www.roblox.com/asset/?id=182491037",weight=10},{id="http://www.roblox.com/asset/?id=182491065",weight=10}},dance2={{id="http://www.roblox.com/asset/?id=182436842",weight=10},{id="http://www.roblox.com/asset/?id=182491248",weight=10},{id="http://www.roblox.com/asset/?id=182491277",weight=10}},dance3={{id="http://www.roblox.com/asset/?id=182436935",weight=10},{id="http://www.roblox.com/asset/?id=182491368",weight=10},{id="http://www.roblox.com/asset/?id=182491423",weight=10}},laugh={{id="http://www.roblox.com/asset/?id=129423131",weight=10}},cheer={{id="http://www.roblox.com/asset/?id=129423030",weight=10}}}local q={"dance1","dance2","dance3"}local r={wave=false,point=false,dance1=true,dance2=true,dance3=true,laugh=false,cheer=false}function configureAnimationSet(s,t)if o[s]~=nil then for u,v in pairs(o[s].connections)do v:disconnect()end end;o[s]={}o[s].count=0;o[s].totalWeight=0;o[s].connections={}local w=nil;if o[s].count<=0 then for y,C in pairs(t)do o[s][y]={}o[s][y].anim=Instance.new("Animation")o[s][y].anim.Name=s;o[s][y].anim.AnimationId=C.id;o[s][y].weight=C.weight;o[s].count=o[s].count+1;o[s].totalWeight=o[s].totalWeight+C.weight end end end;for s,t in pairs(p)do configureAnimationSet(s,t)end;local D="None"local E=0;local F=0;local G=0.3;local H=0.1;local I=0.3;function stopAllAnimations()local K=j;if r[K]~=nil and r[K]==false then K="idle"end;j=""k=nil;if m~=nil then m:disconnect()end;if l~=nil then l:Stop()l:Destroy()l=nil end;return K end;function setAnimationSpeed(L)if L~=n then n=L;l:AdjustSpeed(n)end end;function keyFrameReachedFunc(M)if M=="End"then local N=j;if r[N]~=nil and r[N]==false then N="idle"end;local O=n;playAnimation(N,0.0,h)setAnimationSpeed(O)end end;function playAnimation(P,Q,R)pcall(function()local S=math.random(1,o[P].totalWeight)local y=1;while S>o[P][y].weight do S=S-o[P][y].weight;y=y+1 end;local C=o[P][y].anim;if C~=k then if l~=nil then l:Stop(Q)l:Destroy()end;n=1.0;l=R:LoadAnimation(C)l.Priority=Enum.AnimationPriority.Core;l:Play(Q)j=P;k=C;if m~=nil then m:disconnect()end;m=l.KeyframeReached:connect(keyFrameReachedFunc)end end)end;function onRunning(L)pcall(function()if L>0.01 then playAnimation("walk",0.1,h)if k and k.AnimationId=="http://www.roblox.com/asset/?id=180426354"then setAnimationSpeed(L/14.5)end;i="Running"else if r[j]==nil then playAnimation("idle",0.1,h)i="Standing"end end end)end;function onDied()i="Dead"end;function onJumping()playAnimation("jump",0.1,h)F=G;i="Jumping"end;function onClimbing(L)playAnimation("climb",0.1,h)setAnimationSpeed(L/12.0)i="Climbing"end;function onGettingUp()i="GettingUp"end;function onFreeFall()if F<=0 then playAnimation("fall",I,h)end;i="FreeFall"end;function onFallingDown()i="FallingDown"end;function onSeated()i="Seated"end;function onPlatformStanding()i="PlatformStanding"end;function onSwimming(L)if L>0 then i="Running"else i="Standing"end end;h.Died:connect(onDied);h.Running:connect(onRunning);h.Jumping:connect(onJumping);h.Climbing:connect(onClimbing);h.GettingUp:connect(onGettingUp);h.FreeFalling:connect(onFreeFall);h.FallingDown:connect(onFallingDown);h.Seated:connect(onSeated);h.PlatformStanding:connect(onPlatformStanding);h.Swimming:connect(onSwimming);player.Chatted:connect(function(aa)local ab=""if aa=="/e dance"then ab=q[math.random(1,#q)]elseif string.sub(aa,1,3)=="/e "then ab=string.sub(aa,4)elseif string.sub(aa,1,7)=="/emote "then ab=string.sub(aa,8)end;if i=="Standing"and r[ab]~=nil then playAnimation(ab,0.1,h)end end);playAnimation("idle",0.1,h);i="Standing";RunService.Stepped:Connect(function()local u,a2=wait(0.1)move(a2)end)
+    end)
+    notify("Reanimate", "Active — you appear dead to others")
+end)
+
 addcmd("noclipcam", {"nccam"}, "Camera goes through walls", function(args)
     local sc = (debug and debug.setconstant) or setconstant
     local gc = (debug and debug.getconstants) or getconstants
