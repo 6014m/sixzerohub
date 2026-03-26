@@ -1244,73 +1244,104 @@ end
 do
     local page = tabPages["Keybinds"]
     if page then
+        -- KEYBIND EDITOR
         local titleL = Instance.new("TextLabel")
-        titleL.Size = UDim2.new(1, -8, 0, 22)
+        titleL.Size = UDim2.new(1, -8, 0, 20)
         titleL.BackgroundTransparency = 1
-        titleL.Text = "  Keybinds — use ;bind <key> <command>"
+        titleL.Text = "  KEYBINDS"
         titleL.TextColor3 = THEME.accent
         titleL.TextSize = 12
         titleL.Font = Enum.Font.GothamBold
         titleL.TextXAlignment = Enum.TextXAlignment.Left
         titleL.Parent = page
 
-        local infoL = Instance.new("TextLabel")
-        infoL.Size = UDim2.new(1, -8, 0, 18)
-        infoL.BackgroundTransparency = 1
-        infoL.Text = "  ;togglebind <key> <on> | <off>  ;unbind <key>  ;unbindall"
-        infoL.TextColor3 = THEME.muted
-        infoL.TextSize = 10
-        infoL.Font = Enum.Font.Gotham
-        infoL.TextXAlignment = Enum.TextXAlignment.Left
-        infoL.Parent = page
+        local editorRow = Instance.new("Frame")
+        editorRow.Size = UDim2.new(1, -8, 0, 28)
+        editorRow.BackgroundTransparency = 1
+        editorRow.Parent = page
 
-        local bindListFrame = Instance.new("Frame")
-        bindListFrame.Size = UDim2.new(1, -8, 0, 0)
-        bindListFrame.AutomaticSize = Enum.AutomaticSize.Y
-        bindListFrame.BackgroundTransparency = 1
-        bindListFrame.Parent = page
-        Instance.new("UIListLayout", bindListFrame).Padding = UDim.new(0, 2)
+        local awaitingBind = false
+        local pendingKey = nil
+
+        local bindKeyBtn = Instance.new("TextButton")
+        bindKeyBtn.Size = UDim2.new(0, 90, 0, 26)
+        bindKeyBtn.Position = UDim2.new(0, 0, 0, 0)
+        bindKeyBtn.BackgroundColor3 = THEME.input
+        bindKeyBtn.BorderSizePixel = 0
+        bindKeyBtn.Text = "Click to bind"
+        bindKeyBtn.TextColor3 = THEME.muted
+        bindKeyBtn.TextSize = 11
+        bindKeyBtn.Font = Enum.Font.Gotham
+        bindKeyBtn.Parent = editorRow
+        Instance.new("UICorner", bindKeyBtn).CornerRadius = UDim.new(0, 4)
+
+        local bindCmdBox = Instance.new("TextBox")
+        bindCmdBox.Size = UDim2.new(1, -140, 0, 26)
+        bindCmdBox.Position = UDim2.new(0, 94, 0, 0)
+        bindCmdBox.BackgroundColor3 = THEME.input
+        bindCmdBox.BorderSizePixel = 0
+        bindCmdBox.Text = ""
+        bindCmdBox.PlaceholderText = "Command..."
+        bindCmdBox.PlaceholderColor3 = THEME.muted
+        bindCmdBox.TextColor3 = THEME.text
+        bindCmdBox.TextSize = 11
+        bindCmdBox.Font = Enum.Font.Gotham
+        bindCmdBox.TextXAlignment = Enum.TextXAlignment.Left
+        bindCmdBox.ClearTextOnFocus = false
+        bindCmdBox.Parent = editorRow
+        Instance.new("UICorner", bindCmdBox).CornerRadius = UDim.new(0, 4)
+        Instance.new("UIPadding", bindCmdBox).PaddingLeft = UDim.new(0, 6)
+
+        local addBtn = Instance.new("TextButton")
+        addBtn.Size = UDim2.new(0, 38, 0, 26)
+        addBtn.Position = UDim2.new(1, -38, 0, 0)
+        addBtn.BackgroundColor3 = THEME.accent
+        addBtn.BorderSizePixel = 0
+        addBtn.Text = "Add"
+        addBtn.TextColor3 = Color3.new(1, 1, 1)
+        addBtn.TextSize = 11
+        addBtn.Font = Enum.Font.GothamBold
+        addBtn.Parent = editorRow
+        Instance.new("UICorner", addBtn).CornerRadius = UDim.new(0, 4)
+
+        bindKeyBtn.MouseButton1Click:Connect(function()
+            awaitingBind = true
+            pendingKey = nil
+            bindKeyBtn.Text = "Press a key..."
+            bindKeyBtn.TextColor3 = THEME.accent
+        end)
+
+        connect(UserInputService.InputBegan, function(input, processed)
+            if not awaitingBind then return end
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                pendingKey = tostring(input.KeyCode)
+                bindKeyBtn.Text = pendingKey:gsub("Enum.KeyCode.", "")
+                bindKeyBtn.TextColor3 = THEME.text
+                awaitingBind = false
+            end
+        end)
 
         local function refreshBindsTab()
-            for _, c in ipairs(bindListFrame:GetChildren()) do
-                if c:IsA("Frame") then c:Destroy() end
+            -- clear old bind rows
+            for _, c in ipairs(page:GetChildren()) do
+                if c:IsA("Frame") and c.Name == "BindRow" then c:Destroy() end
             end
-            if #binds == 0 then
-                local empty = Instance.new("TextLabel")
-                empty.Size = UDim2.new(1, 0, 0, 30)
-                empty.BackgroundTransparency = 1
-                empty.Text = "  No keybinds set"
-                empty.TextColor3 = THEME.muted
-                empty.TextSize = 11
-                empty.Font = Enum.Font.Gotham
-                empty.TextXAlignment = Enum.TextXAlignment.Left
-                empty.Name = "Empty"
-                local holder = Instance.new("Frame")
-                holder.Size = UDim2.new(1, 0, 0, 30)
-                holder.BackgroundTransparency = 1
-                empty.Parent = holder
-                holder.Parent = bindListFrame
-                return
-            end
-            for idx, b in ipairs(binds) do
+            for _, b in ipairs(binds) do
                 local key = tostring(b.KEY):gsub("Enum.KeyCode.", "")
                 local row = Instance.new("Frame")
-                row.Size = UDim2.new(1, 0, 0, 26)
+                row.Name = "BindRow"
+                row.Size = UDim2.new(1, -8, 0, 24)
                 row.BackgroundColor3 = THEME.hover
                 row.BackgroundTransparency = 0.5
                 row.BorderSizePixel = 0
-                row.Parent = bindListFrame
+                row.Parent = page
                 Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
 
                 local lbl = Instance.new("TextLabel")
                 lbl.Size = UDim2.new(1, -40, 1, 0)
                 lbl.Position = UDim2.new(0, 8, 0, 0)
                 lbl.BackgroundTransparency = 1
-                if b.TOGGLE then
-                    lbl.Text = key .. "  ->  " .. b.COMMAND .. "  /  " .. b.TOGGLE
-                else
-                    lbl.Text = key .. "  ->  " .. b.COMMAND
-                end
+                lbl.Text = b.TOGGLE and (key .. "  ->  " .. b.COMMAND .. "  /  " .. b.TOGGLE) or (key .. "  ->  " .. b.COMMAND)
                 lbl.TextColor3 = THEME.text
                 lbl.TextSize = 11
                 lbl.Font = Enum.Font.Gotham
@@ -1318,8 +1349,8 @@ do
                 lbl.Parent = row
 
                 local del = Instance.new("TextButton")
-                del.Size = UDim2.new(0, 24, 0, 18)
-                del.Position = UDim2.new(1, -28, 0.5, -9)
+                del.Size = UDim2.new(0, 22, 0, 16)
+                del.Position = UDim2.new(1, -26, 0.5, -8)
                 del.BackgroundColor3 = THEME.error
                 del.BorderSizePixel = 0
                 del.Text = "X"
@@ -1330,18 +1361,157 @@ do
                 Instance.new("UICorner", del).CornerRadius = UDim.new(0, 4)
                 del.MouseButton1Click:Connect(function()
                     for i = #binds, 1, -1 do
-                        if binds[i] == b then
-                            toggleOn[b] = nil
-                            table.remove(binds, i)
-                        end
+                        if binds[i] == b then toggleOn[b] = nil; table.remove(binds, i) end
                     end
                     refreshBindsTab()
                 end)
             end
         end
 
+        addBtn.MouseButton1Click:Connect(function()
+            if not pendingKey or bindCmdBox.Text == "" then
+                notify("Keybind", "Select a key and type a command first"); return
+            end
+            for i = #binds, 1, -1 do
+                if binds[i].KEY == pendingKey then table.remove(binds, i) end
+            end
+            table.insert(binds, { COMMAND = bindCmdBox.Text, KEY = pendingKey })
+            refreshBindsTab()
+            local keyName = pendingKey:gsub("Enum.KeyCode.", "")
+            notify("Keybind", keyName .. " -> " .. bindCmdBox.Text)
+            bindCmdBox.Text = ""
+            bindKeyBtn.Text = "Click to bind"
+            bindKeyBtn.TextColor3 = THEME.muted
+            pendingKey = nil
+        end)
+
         refreshBindsTab()
         _G.czRefreshBindsTab = refreshBindsTab
+
+        -- EVENT BINDS
+        local evtTitle = Instance.new("TextLabel")
+        evtTitle.Size = UDim2.new(1, -8, 0, 20)
+        evtTitle.BackgroundTransparency = 1
+        evtTitle.Text = "  EVENT BINDS  (use $1 $2 for args)"
+        evtTitle.TextColor3 = THEME.accent
+        evtTitle.TextSize = 12
+        evtTitle.Font = Enum.Font.GothamBold
+        evtTitle.TextXAlignment = Enum.TextXAlignment.Left
+        evtTitle.Parent = page
+
+        local eventBinds = {}
+        local eventConns = {}
+
+        local events = {
+            { name = "OnSpawn", desc = "Player respawns ($1=player)" },
+            { name = "OnDied", desc = "Player dies ($1=player)" },
+            { name = "OnJoin", desc = "Player joins ($1=player)" },
+            { name = "OnLeave", desc = "Player leaves ($1=player)" },
+            { name = "OnChatted", desc = "Player chats ($1=player $2=msg)" },
+        }
+
+        local function fireEvent(eventName, ...)
+            local cmd = eventBinds[eventName]
+            if not cmd or cmd == "" then return end
+            local args = {...}
+            local expanded = cmd
+            for i, a in ipairs(args) do
+                expanded = expanded:gsub("%$" .. i, tostring(a))
+            end
+            execCmd(expanded, player, false)
+        end
+
+        local function hookEventBinds()
+            for _, c in pairs(eventConns) do pcall(function() c:Disconnect() end) end
+            eventConns = {}
+            table.insert(eventConns, connect(Players.PlayerAdded, function(p)
+                fireEvent("OnJoin", p.Name)
+                p.CharacterAdded:Connect(function()
+                    fireEvent("OnSpawn", p.Name)
+                    local hum = p.Character:WaitForChild("Humanoid", 5)
+                    if hum then hum.Died:Connect(function() fireEvent("OnDied", p.Name) end) end
+                end)
+            end))
+            table.insert(eventConns, connect(Players.PlayerRemoving, function(p)
+                fireEvent("OnLeave", p.Name)
+            end))
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Character then
+                    local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                    if hum then hum.Died:Connect(function() fireEvent("OnDied", p.Name) end) end
+                end
+                p.CharacterAdded:Connect(function()
+                    fireEvent("OnSpawn", p.Name)
+                    local hum = p.Character:WaitForChild("Humanoid", 5)
+                    if hum then hum.Died:Connect(function() fireEvent("OnDied", p.Name) end) end
+                end)
+            end
+        end
+
+        for _, evt in ipairs(events) do
+            local row = Instance.new("Frame")
+            row.Size = UDim2.new(1, -8, 0, 26)
+            row.BackgroundColor3 = THEME.hover
+            row.BackgroundTransparency = 0.5
+            row.BorderSizePixel = 0
+            row.Parent = page
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0, 70, 1, 0)
+            lbl.Position = UDim2.new(0, 6, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = evt.name
+            lbl.TextColor3 = THEME.text
+            lbl.TextSize = 10
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = row
+
+            local box = Instance.new("TextBox")
+            box.Size = UDim2.new(1, -84, 0, 20)
+            box.Position = UDim2.new(0, 78, 0, 3)
+            box.BackgroundColor3 = THEME.input
+            box.BorderSizePixel = 0
+            box.Text = ""
+            box.PlaceholderText = evt.desc
+            box.PlaceholderColor3 = THEME.muted
+            box.TextColor3 = THEME.text
+            box.TextSize = 10
+            box.Font = Enum.Font.Gotham
+            box.TextXAlignment = Enum.TextXAlignment.Left
+            box.ClearTextOnFocus = false
+            box.Parent = row
+            Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+            Instance.new("UIPadding", box).PaddingLeft = UDim.new(0, 4)
+
+            box.FocusLost:Connect(function()
+                eventBinds[evt.name] = box.Text ~= "" and box.Text or nil
+            end)
+        end
+
+        hookEventBinds()
+
+        -- Chat event needs special handling
+        local function hookChat()
+            pcall(function()
+                local tcs = game:GetService("TextChatService")
+                local channel = tcs:FindFirstChild("TextChannels") and tcs.TextChannels:FindFirstChild("RBXGeneral")
+                if channel then
+                    table.insert(eventConns, channel.MessageReceived:Connect(function(msg)
+                        local sender = msg.TextSource and Players:GetPlayerByUserId(msg.TextSource.UserId)
+                        if sender then fireEvent("OnChatted", sender.Name, msg.Text) end
+                    end))
+                end
+            end)
+            for _, p in ipairs(Players:GetPlayers()) do
+                p.Chatted:Connect(function(msg) fireEvent("OnChatted", p.Name, msg) end)
+            end
+            Players.PlayerAdded:Connect(function(p)
+                p.Chatted:Connect(function(msg) fireEvent("OnChatted", p.Name, msg) end)
+            end)
+        end
+        hookChat()
     end
 end
 
