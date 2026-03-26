@@ -132,24 +132,17 @@ local conn = RunService.Heartbeat:Connect(function(dt)
     -- calculate teleport: move through the laser to the other side
     local halfSize = bestPart.Size * 0.5
 
-    -- Use the laser's VELOCITY direction as the crossing direction
-    -- This prevents corner hits from sending you diagonally
-    local horizVel = Vector3.new(bestVel.X, 0, bestVel.Z)
-    local dir
-
-    if horizVel.Magnitude > 1 then
-        -- Cross in the direction the laser is moving (go with its flow)
-        dir = horizVel.Unit
-    else
-        -- Fallback: direction from player toward nearest point
-        local nearPtFallback = closestPointOBB(bestPart.CFrame, halfSize, pPos)
-        local towardLaser = nearPtFallback - pPos
-        local horizDir = Vector3.new(towardLaser.X, 0, towardLaser.Z)
-        if horizDir.Magnitude < 0.1 then return end
-        dir = horizDir.Unit
-    end
-
+    -- direction from player toward the nearest point on the laser
     local nearPt = closestPointOBB(bestPart.CFrame, halfSize, pPos)
+    local towardLaser = nearPt - pPos
+    local horizDir = Vector3.new(towardLaser.X, 0, towardLaser.Z)
+
+    -- if player is inside the laser bounding box, use velocity direction instead
+    if horizDir.Magnitude < 0.1 then
+        horizDir = Vector3.new(bestVel.X, 0, bestVel.Z)
+    end
+    if horizDir.Magnitude < 0.1 then return end
+    local dir = horizDir.Unit
 
     -- find the FAR edge of the laser in our teleport direction
     local farProbe = pPos + dir * 200
