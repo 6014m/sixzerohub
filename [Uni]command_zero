@@ -2302,49 +2302,60 @@ addcmd("unantiafk", {}, "Disable anti-AFK", function(args)
     notify("Anti-AFK", "Disabled")
 end)
 
-addcmd("antifling", {"antiflingg", "afling"}, "Disable collisions except top of head on other players", function(args)
+local czGhostFolder = Instance.new("Folder")
+czGhostFolder.Name = "CZ_AntiflingGhosts"
+czGhostFolder.Parent = workspace
+
+addcmd("antifling", {"antiflingg", "afling"}, "Anchored ghost collision on other players (no fling physics)", function(args)
     stopLoop("antifling")
+    local ghostParts = {}
+    local bodyNames = {"Head", "Torso", "UpperTorso", "LowerTorso", "HumanoidRootPart",
+        "LeftUpperArm", "LeftLowerArm", "RightUpperArm", "RightLowerArm",
+        "LeftUpperLeg", "LeftLowerLeg", "RightUpperLeg", "RightLowerLeg",
+        "Left Arm", "Right Arm", "Left Leg", "Right Leg"}
     startLoop("antifling", 0, function()
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player and p.Character then
                 for _, v in ipairs(p.Character:GetDescendants()) do
-                    if v:IsA("BasePart") then
-                        v.CanCollide = false
-                    end
+                    if v:IsA("BasePart") then v.CanCollide = false end
                 end
-                local head = p.Character:FindFirstChild("Head")
-                if head then
-                    local cap = head:FindFirstChild("CZ_HeadCap")
-                    if not cap then
-                        cap = Instance.new("Part")
-                        cap.Name = "CZ_HeadCap"
-                        cap.Size = Vector3.new(1, 0.3, 1)
-                        cap.Transparency = 1
-                        cap.CanCollide = true
-                        cap.Anchored = true
-                        cap.Parent = head
+                for _, partName in ipairs(bodyNames) do
+                    local part = p.Character:FindFirstChild(partName)
+                    if part and part:IsA("BasePart") then
+                        local key = p.UserId .. "_" .. partName
+                        local ghost = ghostParts[key]
+                        if not ghost or not ghost.Parent then
+                            ghost = Instance.new("Part")
+                            ghost.Name = "CZ_Ghost"
+                            ghost.Transparency = 1
+                            ghost.CanCollide = true
+                            ghost.Anchored = true
+                            ghost.Size = part.Size
+                            ghost.Parent = czGhostFolder
+                            ghostParts[key] = ghost
+                        end
+                        ghost.Size = part.Size
+                        ghost.CFrame = part.CFrame
                     end
-                    cap.CFrame = head.CFrame + Vector3.new(0, 0.7, 0)
-                    cap.CanCollide = true
                 end
             end
         end
+        -- clean up ghosts for players who left
+        for key, ghost in pairs(ghostParts) do
+            local uid = tonumber(key:match("^(%d+)_"))
+            if uid and not Players:GetPlayerByUserId(uid) then
+                ghost:Destroy()
+                ghostParts[key] = nil
+            end
+        end
     end)
-    notify("Anti-Fling", "Enabled — only top of head has collision")
+    notify("Anti-Fling", "Enabled — anchored ghost collision on all players")
 end)
 
 addcmd("unantifling", {}, "Disable anti-fling", function(args)
     stopLoop("antifling")
     stopLoop("antifling2")
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Character then
-            local head = p.Character:FindFirstChild("Head")
-            if head then
-                local cap = head:FindFirstChild("CZ_HeadCap")
-                if cap then cap:Destroy() end
-            end
-        end
-    end
+    czGhostFolder:ClearAllChildren()
     notify("Anti-Fling", "Disabled")
 end)
 
