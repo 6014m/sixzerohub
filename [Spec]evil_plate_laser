@@ -13,6 +13,7 @@ local TRIGGER_DIST = 2.5  -- OBB distance to trigger teleport (lower = stealthie
 local PASS_BEYOND = 2     -- studs past the far edge of the laser
 local COOLDOWN = 0.5      -- seconds between teleports
 local HEIGHT_RANGE = 7
+local FLING_MODE = false  -- false = teleport, true = fling over
 
 local character, humanoid, rootPart
 local lastPos = {}
@@ -168,9 +169,32 @@ local conn = RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    _G.SixZeroHubDensityPause = now + 0.2
-    rootPart.CFrame = CFrame.new(newPos) * (rootPart.CFrame - rootPart.CFrame.Position)
-    lastTP = now
+    if FLING_MODE then
+        -- Fling mode: arc over the laser using velocity
+        local halfSz = bestPart.Size * 0.5
+        local laserTop = bestPart.Position.Y + halfSz.Y
+        local jumpHeight = math.min(math.max(laserTop - pPos.Y + 2, 3), 7.2) -- cap at jump height
+
+        -- Direction to cross the laser
+        local crossDir = dir
+        local crossDist = (nearPt - pPos).Magnitude + halfSz.Magnitude + PASS_BEYOND
+
+        -- Fling up and across
+        local upVel = math.sqrt(2 * workspace.Gravity * jumpHeight)
+        local airTime = (2 * upVel) / workspace.Gravity
+        local horizSpeed = crossDist / math.max(airTime, 0.1)
+
+        rootPart.AssemblyLinearVelocity = Vector3.new(
+            crossDir.X * horizSpeed,
+            upVel,
+            crossDir.Z * horizSpeed
+        )
+        lastTP = now
+    else
+        _G.SixZeroHubDensityPause = now + 0.2
+        rootPart.CFrame = CFrame.new(newPos) * (rootPart.CFrame - rootPart.CFrame.Position)
+        lastTP = now
+    end
 
     -- periodic dead-ref cleanup
     if math.floor(now) % 3 == 0 then
@@ -219,6 +243,13 @@ if _G.SixZeroHubRegisterSettings then
                 max = 5,
                 step = 0.5,
                 onChange = function(val) PASS_BEYOND = val end,
+            },
+            {
+                name = "flingMode",
+                label = "Fling Mode (arc over)",
+                type = "toggle",
+                default = false,
+                onChange = function(val) FLING_MODE = val end,
             },
         })
     end)
