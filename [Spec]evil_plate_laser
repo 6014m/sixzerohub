@@ -116,7 +116,11 @@ local conn = RunService.Heartbeat:Connect(function(dt)
         local halfSize = part.Size * 0.5
         local dist = closestDistOBB(part.CFrame, halfSize, pPos)
 
-        if dist < TRIGGER_DIST and dist < bestDist then
+        -- Scale trigger distance by laser speed: faster = earlier trigger
+        local speed = Vector3.new(vel.X, 0, vel.Z).Magnitude
+        local scaledTrigger = TRIGGER_DIST + speed * 0.04
+
+        if dist < scaledTrigger and dist < bestDist then
             bestPart = part
             bestDist = dist
             bestVel = vel
