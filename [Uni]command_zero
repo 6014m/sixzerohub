@@ -1244,65 +1244,56 @@ end
 do
     local page = tabPages["Keybinds"]
     if page then
-        -- KEYBIND EDITOR
-        local titleL = Instance.new("TextLabel")
-        titleL.Size = UDim2.new(1, -8, 0, 20)
-        titleL.BackgroundTransparency = 1
-        titleL.Text = "  KEYBINDS"
-        titleL.TextColor3 = THEME.accent
-        titleL.TextSize = 12
-        titleL.Font = Enum.Font.GothamBold
-        titleL.TextXAlignment = Enum.TextXAlignment.Left
-        titleL.Parent = page
-
-        local editorRow = Instance.new("Frame")
-        editorRow.Size = UDim2.new(1, -8, 0, 28)
-        editorRow.BackgroundTransparency = 1
-        editorRow.Parent = page
-
         local awaitingBind = false
         local pendingKey = nil
+        local isToggleMode = false
+        local isKeyUp = false
+
+        -- Instructions
+        local directions = Instance.new("TextLabel")
+        directions.Size = UDim2.new(1, -8, 0, 36)
+        directions.BackgroundTransparency = 1
+        directions.Text = "  Press the button and hit a key, then type\n  the command to bind it to."
+        directions.TextColor3 = THEME.muted
+        directions.TextSize = 10
+        directions.Font = Enum.Font.Gotham
+        directions.TextXAlignment = Enum.TextXAlignment.Left
+        directions.TextYAlignment = Enum.TextYAlignment.Top
+        directions.Parent = page
+
+        -- Row 1: Bind button + Trigger select
+        local row1 = Instance.new("Frame")
+        row1.Size = UDim2.new(1, -8, 0, 36)
+        row1.BackgroundTransparency = 1
+        row1.Parent = page
 
         local bindKeyBtn = Instance.new("TextButton")
-        bindKeyBtn.Size = UDim2.new(0, 90, 0, 26)
-        bindKeyBtn.Position = UDim2.new(0, 0, 0, 0)
+        bindKeyBtn.Size = UDim2.new(0.5, -4, 0, 34)
         bindKeyBtn.BackgroundColor3 = THEME.input
         bindKeyBtn.BorderSizePixel = 0
         bindKeyBtn.Text = "Click to bind"
         bindKeyBtn.TextColor3 = THEME.muted
-        bindKeyBtn.TextSize = 11
-        bindKeyBtn.Font = Enum.Font.Gotham
-        bindKeyBtn.Parent = editorRow
+        bindKeyBtn.TextSize = 13
+        bindKeyBtn.Font = Enum.Font.GothamBold
+        bindKeyBtn.Parent = row1
         Instance.new("UICorner", bindKeyBtn).CornerRadius = UDim.new(0, 4)
 
-        local bindCmdBox = Instance.new("TextBox")
-        bindCmdBox.Size = UDim2.new(1, -140, 0, 26)
-        bindCmdBox.Position = UDim2.new(0, 94, 0, 0)
-        bindCmdBox.BackgroundColor3 = THEME.input
-        bindCmdBox.BorderSizePixel = 0
-        bindCmdBox.Text = ""
-        bindCmdBox.PlaceholderText = "Command..."
-        bindCmdBox.PlaceholderColor3 = THEME.muted
-        bindCmdBox.TextColor3 = THEME.text
-        bindCmdBox.TextSize = 11
-        bindCmdBox.Font = Enum.Font.Gotham
-        bindCmdBox.TextXAlignment = Enum.TextXAlignment.Left
-        bindCmdBox.ClearTextOnFocus = false
-        bindCmdBox.Parent = editorRow
-        Instance.new("UICorner", bindCmdBox).CornerRadius = UDim.new(0, 4)
-        Instance.new("UIPadding", bindCmdBox).PaddingLeft = UDim.new(0, 6)
+        local triggerBtn = Instance.new("TextButton")
+        triggerBtn.Size = UDim2.new(0.5, -4, 0, 34)
+        triggerBtn.Position = UDim2.new(0.5, 4, 0, 0)
+        triggerBtn.BackgroundColor3 = THEME.input
+        triggerBtn.BorderSizePixel = 0
+        triggerBtn.Text = "Trigger: KeyDown"
+        triggerBtn.TextColor3 = THEME.text
+        triggerBtn.TextSize = 11
+        triggerBtn.Font = Enum.Font.Gotham
+        triggerBtn.Parent = row1
+        Instance.new("UICorner", triggerBtn).CornerRadius = UDim.new(0, 4)
 
-        local addBtn = Instance.new("TextButton")
-        addBtn.Size = UDim2.new(0, 38, 0, 26)
-        addBtn.Position = UDim2.new(1, -38, 0, 0)
-        addBtn.BackgroundColor3 = THEME.accent
-        addBtn.BorderSizePixel = 0
-        addBtn.Text = "Add"
-        addBtn.TextColor3 = Color3.new(1, 1, 1)
-        addBtn.TextSize = 11
-        addBtn.Font = Enum.Font.GothamBold
-        addBtn.Parent = editorRow
-        Instance.new("UICorner", addBtn).CornerRadius = UDim.new(0, 4)
+        triggerBtn.MouseButton1Click:Connect(function()
+            isKeyUp = not isKeyUp
+            triggerBtn.Text = isKeyUp and "Trigger: KeyUp" or "Trigger: KeyDown"
+        end)
 
         bindKeyBtn.MouseButton1Click:Connect(function()
             awaitingBind = true
@@ -1318,16 +1309,141 @@ do
                 bindKeyBtn.Text = pendingKey:gsub("Enum.KeyCode.", "")
                 bindKeyBtn.TextColor3 = THEME.text
                 awaitingBind = false
+            elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+                pendingKey = "LeftClick"
+                bindKeyBtn.Text = "LeftClick"
+                bindKeyBtn.TextColor3 = THEME.text
+                awaitingBind = false
+            elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+                pendingKey = "RightClick"
+                bindKeyBtn.Text = "RightClick"
+                bindKeyBtn.TextColor3 = THEME.text
+                awaitingBind = false
             end
         end)
 
+        -- Row 2: Toggle checkbox
+        local row2 = Instance.new("Frame")
+        row2.Size = UDim2.new(1, -8, 0, 22)
+        row2.BackgroundTransparency = 1
+        row2.Parent = page
+
+        local toggleLbl = Instance.new("TextLabel")
+        toggleLbl.Size = UDim2.new(1, -30, 1, 0)
+        toggleLbl.Position = UDim2.new(0, 2, 0, 0)
+        toggleLbl.BackgroundTransparency = 1
+        toggleLbl.Text = "  Create Toggle (press key = cmd 1, press again = cmd 2)"
+        toggleLbl.TextColor3 = THEME.text
+        toggleLbl.TextSize = 10
+        toggleLbl.Font = Enum.Font.Gotham
+        toggleLbl.TextXAlignment = Enum.TextXAlignment.Left
+        toggleLbl.Parent = row2
+
+        local toggleBox = Instance.new("Frame")
+        toggleBox.Size = UDim2.new(0, 18, 0, 18)
+        toggleBox.Position = UDim2.new(1, -20, 0, 2)
+        toggleBox.BackgroundColor3 = THEME.input
+        toggleBox.BorderSizePixel = 0
+        toggleBox.Parent = row2
+        Instance.new("UICorner", toggleBox).CornerRadius = UDim.new(0, 4)
+
+        local toggleCheck = Instance.new("TextButton")
+        toggleCheck.Size = UDim2.new(1, -4, 1, -4)
+        toggleCheck.Position = UDim2.new(0, 2, 0, 2)
+        toggleCheck.BackgroundColor3 = THEME.accent
+        toggleCheck.BackgroundTransparency = 1
+        toggleCheck.BorderSizePixel = 0
+        toggleCheck.Text = ""
+        toggleCheck.Parent = toggleBox
+        Instance.new("UICorner", toggleCheck).CornerRadius = UDim.new(0, 3)
+
+        toggleCheck.MouseButton1Click:Connect(function()
+            isToggleMode = not isToggleMode
+            toggleCheck.BackgroundTransparency = isToggleMode and 0 or 1
+        end)
+
+        -- Row 3: Command 1
+        local cmdBox1 = Instance.new("TextBox")
+        cmdBox1.Size = UDim2.new(1, -8, 0, 24)
+        cmdBox1.BackgroundColor3 = THEME.input
+        cmdBox1.BorderSizePixel = 0
+        cmdBox1.Text = ""
+        cmdBox1.PlaceholderText = "Command"
+        cmdBox1.PlaceholderColor3 = THEME.muted
+        cmdBox1.TextColor3 = THEME.text
+        cmdBox1.TextSize = 11
+        cmdBox1.Font = Enum.Font.Gotham
+        cmdBox1.TextXAlignment = Enum.TextXAlignment.Left
+        cmdBox1.ClearTextOnFocus = false
+        cmdBox1.Parent = page
+        Instance.new("UICorner", cmdBox1).CornerRadius = UDim.new(0, 4)
+        Instance.new("UIPadding", cmdBox1).PaddingLeft = UDim.new(0, 6)
+
+        -- Row 4: Command 2 (toggle only)
+        local cmdBox2 = Instance.new("TextBox")
+        cmdBox2.Size = UDim2.new(1, -8, 0, 24)
+        cmdBox2.BackgroundColor3 = THEME.input
+        cmdBox2.BorderSizePixel = 0
+        cmdBox2.Text = ""
+        cmdBox2.PlaceholderText = "Command 2 (toggle off)"
+        cmdBox2.PlaceholderColor3 = THEME.muted
+        cmdBox2.TextColor3 = THEME.text
+        cmdBox2.TextSize = 11
+        cmdBox2.Font = Enum.Font.Gotham
+        cmdBox2.TextXAlignment = Enum.TextXAlignment.Left
+        cmdBox2.ClearTextOnFocus = false
+        cmdBox2.Visible = false
+        cmdBox2.Parent = page
+        Instance.new("UICorner", cmdBox2).CornerRadius = UDim.new(0, 4)
+        Instance.new("UIPadding", cmdBox2).PaddingLeft = UDim.new(0, 6)
+
+        toggleCheck.MouseButton1Click:Connect(function()
+            cmdBox2.Visible = isToggleMode
+        end)
+
+        -- Row 5: Add + Clear buttons
+        local btnRow = Instance.new("Frame")
+        btnRow.Size = UDim2.new(1, -8, 0, 26)
+        btnRow.BackgroundTransparency = 1
+        btnRow.Parent = page
+
+        local addBtn = Instance.new("TextButton")
+        addBtn.Size = UDim2.new(0, 60, 0, 24)
+        addBtn.BackgroundColor3 = THEME.accent
+        addBtn.BorderSizePixel = 0
+        addBtn.Text = "Add"
+        addBtn.TextColor3 = Color3.new(1, 1, 1)
+        addBtn.TextSize = 12
+        addBtn.Font = Enum.Font.GothamBold
+        addBtn.Parent = btnRow
+        Instance.new("UICorner", addBtn).CornerRadius = UDim.new(0, 4)
+
+        local clearBtn = Instance.new("TextButton")
+        clearBtn.Size = UDim2.new(0, 60, 0, 24)
+        clearBtn.Position = UDim2.new(0, 65, 0, 0)
+        clearBtn.BackgroundColor3 = THEME.hover
+        clearBtn.BorderSizePixel = 0
+        clearBtn.Text = "Clear All"
+        clearBtn.TextColor3 = THEME.text
+        clearBtn.TextSize = 11
+        clearBtn.Font = Enum.Font.Gotham
+        clearBtn.Parent = btnRow
+        Instance.new("UICorner", clearBtn).CornerRadius = UDim.new(0, 4)
+
+        -- Separator
+        local sep = Instance.new("Frame")
+        sep.Size = UDim2.new(1, -16, 0, 1)
+        sep.BackgroundColor3 = THEME.hover
+        sep.BorderSizePixel = 0
+        sep.Parent = page
+
         local function refreshBindsTab()
-            -- clear old bind rows
             for _, c in ipairs(page:GetChildren()) do
                 if c:IsA("Frame") and c.Name == "BindRow" then c:Destroy() end
             end
             for _, b in ipairs(binds) do
                 local key = tostring(b.KEY):gsub("Enum.KeyCode.", "")
+                local trigger = b.ISKEYUP and " (keyup)" or ""
                 local row = Instance.new("Frame")
                 row.Name = "BindRow"
                 row.Size = UDim2.new(1, -8, 0, 24)
@@ -1337,25 +1453,27 @@ do
                 row.Parent = page
                 Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
 
+                local text = key .. trigger .. "  ->  " .. b.COMMAND
+                if b.TOGGLE then text = text .. "  /  " .. b.TOGGLE end
                 local lbl = Instance.new("TextLabel")
-                lbl.Size = UDim2.new(1, -40, 1, 0)
+                lbl.Size = UDim2.new(1, -30, 1, 0)
                 lbl.Position = UDim2.new(0, 8, 0, 0)
                 lbl.BackgroundTransparency = 1
-                lbl.Text = b.TOGGLE and (key .. "  ->  " .. b.COMMAND .. "  /  " .. b.TOGGLE) or (key .. "  ->  " .. b.COMMAND)
+                lbl.Text = text
                 lbl.TextColor3 = THEME.text
-                lbl.TextSize = 11
+                lbl.TextSize = 10
                 lbl.Font = Enum.Font.Gotham
                 lbl.TextXAlignment = Enum.TextXAlignment.Left
                 lbl.Parent = row
 
                 local del = Instance.new("TextButton")
-                del.Size = UDim2.new(0, 22, 0, 16)
-                del.Position = UDim2.new(1, -26, 0.5, -8)
+                del.Size = UDim2.new(0, 40, 0, 18)
+                del.Position = UDim2.new(1, -44, 0.5, -9)
                 del.BackgroundColor3 = THEME.error
                 del.BorderSizePixel = 0
-                del.Text = "X"
+                del.Text = "Delete"
                 del.TextColor3 = Color3.new(1, 1, 1)
-                del.TextSize = 10
+                del.TextSize = 9
                 del.Font = Enum.Font.GothamBold
                 del.Parent = row
                 Instance.new("UICorner", del).CornerRadius = UDim.new(0, 4)
@@ -1369,20 +1487,32 @@ do
         end
 
         addBtn.MouseButton1Click:Connect(function()
-            if not pendingKey or bindCmdBox.Text == "" then
-                notify("Keybind", "Select a key and type a command first"); return
+            if not pendingKey or cmdBox1.Text == "" then
+                notify("Keybind", "Select a key and enter a command"); return
             end
             for i = #binds, 1, -1 do
                 if binds[i].KEY == pendingKey then table.remove(binds, i) end
             end
-            table.insert(binds, { COMMAND = bindCmdBox.Text, KEY = pendingKey })
+            local entry = { COMMAND = cmdBox1.Text, KEY = pendingKey, ISKEYUP = isKeyUp }
+            if isToggleMode and cmdBox2.Text ~= "" then
+                entry.TOGGLE = cmdBox2.Text
+            end
+            table.insert(binds, entry)
             refreshBindsTab()
             local keyName = pendingKey:gsub("Enum.KeyCode.", "")
-            notify("Keybind", keyName .. " -> " .. bindCmdBox.Text)
-            bindCmdBox.Text = ""
+            notify("Keybind", keyName .. " -> " .. cmdBox1.Text .. (entry.TOGGLE and (" / " .. entry.TOGGLE) or ""))
+            cmdBox1.Text = ""
+            cmdBox2.Text = ""
             bindKeyBtn.Text = "Click to bind"
             bindKeyBtn.TextColor3 = THEME.muted
             pendingKey = nil
+        end)
+
+        clearBtn.MouseButton1Click:Connect(function()
+            binds = {}
+            toggleOn = {}
+            refreshBindsTab()
+            notify("Keybinds", "All keybinds cleared")
         end)
 
         refreshBindsTab()
@@ -8795,12 +8925,31 @@ end)
 connect(UserInputService.InputBegan, function(input, processed)
     if processed or #binds == 0 then return end
     for _, v in ipairs(binds) do
-        if input.UserInputType == Enum.UserInputType.Keyboard and v.KEY:lower() == tostring(input.KeyCode):lower() then
-            if v.TOGGLE then
-                local isOn = toggleOn[v] == true
-                toggleOn[v] = not isOn
-                execCmd(isOn and v.TOGGLE or v.COMMAND, player, false)
-            else
+        if not v.ISKEYUP then
+            local match = (input.UserInputType == Enum.UserInputType.Keyboard and v.KEY:lower() == tostring(input.KeyCode):lower())
+                or (input.UserInputType == Enum.UserInputType.MouseButton1 and v.KEY:lower() == "leftclick")
+                or (input.UserInputType == Enum.UserInputType.MouseButton2 and v.KEY:lower() == "rightclick")
+            if match then
+                if v.TOGGLE then
+                    local isOn = toggleOn[v] == true
+                    toggleOn[v] = not isOn
+                    execCmd(isOn and v.TOGGLE or v.COMMAND, player, false)
+                else
+                    execCmd(v.COMMAND, player, false)
+                end
+            end
+        end
+    end
+end)
+
+connect(UserInputService.InputEnded, function(input, processed)
+    if processed or #binds == 0 then return end
+    for _, v in ipairs(binds) do
+        if v.ISKEYUP then
+            local match = (input.UserInputType == Enum.UserInputType.Keyboard and v.KEY:lower() == tostring(input.KeyCode):lower())
+                or (input.UserInputType == Enum.UserInputType.MouseButton1 and v.KEY:lower() == "leftclick")
+                or (input.UserInputType == Enum.UserInputType.MouseButton2 and v.KEY:lower() == "rightclick")
+            if match then
                 execCmd(v.COMMAND, player, false)
             end
         end
