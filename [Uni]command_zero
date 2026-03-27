@@ -2765,10 +2765,7 @@ addcmd("antifling", {"afling"}, "Anti-fling. Modes: antifling = disable collisio
 
     local mode2 = (args[1] or "none"):lower()
     local ghostParts = {}
-    local bodyNames = {"Head", "Torso", "UpperTorso", "LowerTorso", "HumanoidRootPart",
-        "LeftUpperArm", "LeftLowerArm", "RightUpperArm", "RightLowerArm",
-        "LeftUpperLeg", "LeftLowerLeg", "RightUpperLeg", "RightLowerLeg",
-        "Left Arm", "Right Arm", "Left Leg", "Right Leg"}
+    local bodyNames = {"Head", "Torso", "UpperTorso", "LowerTorso"}
 
     if mode2 == "ghost" then
         -- Ghost mode: disable real collision, create anchored ghost copies
