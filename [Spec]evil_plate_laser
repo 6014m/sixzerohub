@@ -1,6 +1,6 @@
--- [Spec] Evil Plate Game - Laser Dodger
--- Teleports just past incoming lasers for minimal visibility
--- Detects Lasers1, Lasers2, ... LasersN under ActiveEvents/Round
+-- [Spec] Evil Plate Game - Laser Jumper
+-- Heuristic detection: scores parts by shape, material, name, color
+-- Jumps automatically when a laser is close
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,15 +9,21 @@ local localPlayer = Players.LocalPlayer
 local connections = {}
 local active = true
 
-local TRIGGER_DIST = 2.5  -- OBB distance to trigger teleport (lower = stealthier)
-local PASS_BEYOND = 2     -- studs past the far edge of the laser
-local COOLDOWN = 0.5      -- seconds between teleports
-local HEIGHT_RANGE = 7
-local FLING_MODE = false  -- false = teleport, true = fling over
+-- Config
+local JUMP_DIST    = 13    -- studs: how close a laser must be to trigger jump
+local MIN_LENGTH   = 8     -- studs: minimum part length to count as beam-shaped
+local HEIGHT_RANGE = 7     -- studs: ignore lasers outside this range of player feet
+local SCORE_MIN    = 3     -- minimum heuristic score to track a part
+local SCORE_ACTIVE = 5     -- score needed for stationary parts to trigger jumps
+local PREDICT_SEC  = 0.15  -- seconds ahead to predict laser position
+local RAY_INTERVAL = 4     -- backup raycasts every N frames
+local RAY_COUNT    = 8     -- number of backup raycast directions
 
+-- State
 local character, humanoid, rootPart
-local lastPos = {}
-local lastTP = 0
+local tracked = {}    -- BasePart -> score
+local lastPos = {}    -- BasePart -> Vector3
+local frameN = 0
 
 local function bindCharacter(char)
     character = char
@@ -29,34 +35,73 @@ if localPlayer.Character then task.spawn(bindCharacter, localPlayer.Character) e
 local charConn = localPlayer.CharacterAdded:Connect(bindCharacter)
 table.insert(connections, charConn)
 
-local function findActiveRound()
-    local activeEvents = workspace:FindFirstChild("ActiveEvents")
-    if not activeEvents then return nil end
-    for _, child in ipairs(activeEvents:GetChildren()) do
-        if child.Name:find("Round") then
-            return child
-        end
+-- Laser heuristic scoring: shape, material, name, collision, color
+local KEYWORDS = {
+    "laser", "beam", "sweep", "ray",
+    "hazard", "kill", "deadly", "damage",
+}
+
+local function scorePart(part)
+    if not part:IsA("BasePart") or part:IsA("Terrain") then return 0 end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character and part:IsDescendantOf(p.Character) then return 0 end
     end
-    return nil
+
+    local score = 0
+    local sx, sy, sz = part.Size.X, part.Size.Y, part.Size.Z
+    local longest = math.max(sx, sy, sz)
+    local shortest = math.max(math.min(sx, sy, sz), 0.01)
+
+    -- beam shape: one axis much longer than the others
+    if longest >= MIN_LENGTH then
+        local ratio = longest / shortest
+        if ratio >= 5 then score = score + 3
+        elseif ratio >= 3 then score = score + 2 end
+    end
+
+    -- neon material (very common for lasers)
+    if part.Material == Enum.Material.Neon then score = score + 2 end
+
+    -- name contains laser/hazard keywords
+    local lo = part.Name:lower()
+    for _, kw in ipairs(KEYWORDS) do
+        if lo:find(kw) then score = score + 3; break end
+    end
+
+    -- non-collidable = touch-to-kill pattern
+    if not part.CanCollide then score = score + 1 end
+
+    -- bright saturated color (red, green lasers etc)
+    local _, s, v = part.Color:ToHSV()
+    if s > 0.5 and v > 0.5 then score = score + 1 end
+
+    return score
 end
 
--- Collect all BaseParts from children named Lasers1, Lasers2, etc.
-local function collectLasers(round)
-    local parts = {}
-    for _, child in ipairs(round:GetChildren()) do
-        if child.Name:match("^Lasers%d+$") then
-            if child:IsA("BasePart") then
-                table.insert(parts, child)
-            else
-                for _, desc in ipairs(child:GetDescendants()) do
-                    if desc:IsA("BasePart") then
-                        table.insert(parts, desc)
-                    end
-                end
-            end
-        end
-    end
-    return parts
+-- Track all workspace descendants that pass the score threshold
+local function tryTrack(part)
+    local s = scorePart(part)
+    if s >= SCORE_MIN then tracked[part] = s end
+end
+
+for _, d in ipairs(workspace:GetDescendants()) do tryTrack(d) end
+
+local addConn = workspace.DescendantAdded:Connect(tryTrack)
+table.insert(connections, addConn)
+
+local removeConn = workspace.DescendantRemoving:Connect(function(d)
+    tracked[d] = nil
+    lastPos[d] = nil
+end)
+table.insert(connections, removeConn)
+
+-- Grounded check using HumanoidState (FloorMaterial unreliable on Wave)
+local function isGrounded()
+    if not humanoid then return false end
+    local st = humanoid:GetState()
+    return st == Enum.HumanoidStateType.Running
+        or st == Enum.HumanoidStateType.RunningNoPhysics
+        or st == Enum.HumanoidStateType.Landed
 end
 
 -- OBB closest-point distance
@@ -68,128 +113,72 @@ local function closestDistOBB(cf, halfSize, point)
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 end
 
--- OBB closest point in world space
-local function closestPointOBB(cf, halfSize, point)
-    local lp = cf:PointToObjectSpace(point)
-    local cx = math.clamp(lp.X, -halfSize.X, halfSize.X)
-    local cy = math.clamp(lp.Y, -halfSize.Y, halfSize.Y)
-    local cz = math.clamp(lp.Z, -halfSize.Z, halfSize.Z)
-    return cf:PointToWorldSpace(Vector3.new(cx, cy, cz))
-end
-
+-- Main loop
 local conn = RunService.Heartbeat:Connect(function(dt)
     if not active then return end
     if not rootPart or not rootPart.Parent then return end
     if not humanoid or humanoid.Health <= 0 then return end
 
-    local round = findActiveRound()
-    if not round then return end
-
-    local now = tick()
-    local cd = FLING_MODE and math.max(COOLDOWN, 1.0) or COOLDOWN
-    if now - lastTP < cd then return end
-
     local pPos = rootPart.Position
     local feetY = pPos.Y - 3
-    local lasers = collectLasers(round)
+    frameN = frameN + 1
 
-    -- find the closest laser that's within trigger range
-    local bestPart, bestDist, bestVel = nil, math.huge, Vector3.zero
+    -- Phase 1: scan tracked lasers
+    for part, score in pairs(tracked) do
+        if not part or not part.Parent then
+            tracked[part] = nil
+            lastPos[part] = nil
+            continue
+        end
 
-    for _, part in ipairs(lasers) do
         local pos = part.Position
 
-        -- velocity tracking
+        -- velocity from frame delta
         local vel = Vector3.zero
         if lastPos[part] and dt > 0 then
             vel = (pos - lastPos[part]) / dt
         end
         lastPos[part] = pos
 
-        -- skip stationary (not moving yet or event ended)
-        if vel.Magnitude < 1 then continue end
+        -- skip stationary low-confidence parts (railings, decor)
+        if vel.Magnitude < 1 and score < SCORE_ACTIVE then continue end
 
-        -- height filter
-        if math.abs(pos.Y - feetY) > HEIGHT_RANGE then continue end
+        -- predict where the laser will be shortly
+        local predY = pos.Y + vel.Y * PREDICT_SEC
+        if math.abs(predY - feetY) > HEIGHT_RANGE then continue end
 
-        -- OBB distance
-        local halfSize = part.Size * 0.5
-        local dist = closestDistOBB(part.CFrame, halfSize, pPos)
+        -- closest-point distance on the predicted bounding box
+        local predCF = part.CFrame + vel * PREDICT_SEC
+        local dist = closestDistOBB(predCF, part.Size * 0.5, pPos)
 
-        -- Scale trigger distance by laser speed: faster = earlier trigger
-        local speed = Vector3.new(vel.X, 0, vel.Z).Magnitude
-        local scaledTrigger = TRIGGER_DIST + speed * 0.04
-
-        if dist < scaledTrigger and dist < bestDist then
-            bestPart = part
-            bestDist = dist
-            bestVel = vel
+        if dist < JUMP_DIST and isGrounded() then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            break
         end
     end
 
-    if not bestPart then return end
+    -- Phase 2: backup raycasts at foot level
+    if frameN % RAY_INTERVAL == 0 then
+        local origin = pPos - Vector3.new(0, 2.5, 0)
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        if character then params.FilterDescendantsInstances = {character} end
 
-    -- calculate teleport: move through the laser to the other side
-    local halfSize = bestPart.Size * 0.5
+        for i = 0, RAY_COUNT - 1 do
+            local angle = i * (math.pi * 2 / RAY_COUNT)
+            local dir = Vector3.new(math.cos(angle), 0, math.sin(angle)) * JUMP_DIST
+            local hit = workspace:Raycast(origin, dir, params)
 
-    -- direction from player toward the nearest point on the laser
-    local nearPt = closestPointOBB(bestPart.CFrame, halfSize, pPos)
-    local towardLaser = nearPt - pPos
-    local horizDir = Vector3.new(towardLaser.X, 0, towardLaser.Z)
-
-    -- if player is inside the laser bounding box, use velocity direction instead
-    if horizDir.Magnitude < 0.1 then
-        horizDir = Vector3.new(bestVel.X, 0, bestVel.Z)
-    end
-    if horizDir.Magnitude < 0.1 then return end
-    local dir = horizDir.Unit
-
-    -- find the FAR edge of the laser in our teleport direction
-    local farProbe = pPos + dir * 200
-    local farPt = closestPointOBB(bestPart.CFrame, halfSize, farProbe)
-
-    -- teleport to just past the far edge
-    local target = farPt + dir * PASS_BEYOND
-    local newPos = Vector3.new(target.X, pPos.Y, target.Z)
-
-    -- check there's ground under the target so we don't fly off our plate
-    local rayParams = RaycastParams.new()
-    rayParams.FilterType = Enum.RaycastFilterType.Exclude
-    rayParams.FilterDescendantsInstances = {character}
-    local ground = workspace:Raycast(newPos + Vector3.new(0, 2, 0), Vector3.new(0, -15, 0), rayParams)
-
-    if not ground then
-        -- no ground at horizontal teleport target — try going over the laser instead
-        -- max height: ~7.2 studs (standard roblox jump height)
-        local MAX_JUMP_HEIGHT = 7.2
-        local laserTop = bestPart.Position.Y + halfSize.Y
-        local clearance = laserTop - pPos.Y + 1 -- 1 stud above the laser top
-
-        if clearance > 0 and clearance <= MAX_JUMP_HEIGHT then
-            -- teleport straight up, just above the laser
-            newPos = Vector3.new(pPos.X, pPos.Y + clearance, pPos.Z)
-        else
-            -- laser too tall to jump over, skip
-            return
-        end
-    end
-
-    if FLING_MODE then
-        -- Jump mode: make the humanoid jump at the right time
-        if humanoid then
-            humanoid.Jump = true
-        end
-        lastTP = now
-    else
-        _G.SixZeroHubDensityPause = now + 0.2
-        rootPart.CFrame = CFrame.new(newPos) * (rootPart.CFrame - rootPart.CFrame.Position)
-        lastTP = now
-    end
-
-    -- periodic dead-ref cleanup
-    if math.floor(now) % 3 == 0 then
-        for p in pairs(lastPos) do
-            if not p or not p.Parent then lastPos[p] = nil end
+            if hit and hit.Instance then
+                local s = scorePart(hit.Instance)
+                if s >= SCORE_MIN then
+                    tracked[hit.Instance] = s
+                    if isGrounded() then
+                        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                    end
+                    break
+                end
+            end
         end
     end
 end)
@@ -203,6 +192,7 @@ local function cleanup()
         pcall(function() c:Disconnect() end)
     end
     connections = {}
+    tracked = {}
     lastPos = {}
 end
 
@@ -215,31 +205,34 @@ if _G.SixZeroHubRegisterSettings then
         _G.SixZeroHubRegisterSettings("[Spec]evil_plate_laser", {
             _title = "Laser Jumper",
             {
-                name = "triggerDist",
-                label = "Trigger Distance",
+                name = "jumpDist",
+                label = "Jump Distance",
                 type = "slider",
-                default = 2.5,
+                default = 13,
+                min = 5,
+                max = 25,
+                step = 1,
+                onChange = function(val) JUMP_DIST = val end,
+            },
+            {
+                name = "heightRange",
+                label = "Height Range",
+                type = "slider",
+                default = 7,
+                min = 3,
+                max = 15,
+                step = 1,
+                onChange = function(val) HEIGHT_RANGE = val end,
+            },
+            {
+                name = "scoreMin",
+                label = "Detection Sensitivity",
+                type = "slider",
+                default = 3,
                 min = 1,
                 max = 6,
-                step = 0.5,
-                onChange = function(val) TRIGGER_DIST = val end,
-            },
-            {
-                name = "passBeyond",
-                label = "Pass Distance",
-                type = "slider",
-                default = 2,
-                min = 1,
-                max = 5,
-                step = 0.5,
-                onChange = function(val) PASS_BEYOND = val end,
-            },
-            {
-                name = "flingMode",
-                label = "Jump Mode (jump over)",
-                type = "toggle",
-                default = false,
-                onChange = function(val) FLING_MODE = val end,
+                step = 1,
+                onChange = function(val) SCORE_MIN = val end,
             },
         })
     end)
