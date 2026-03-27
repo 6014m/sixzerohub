@@ -1,0 +1,886 @@
+-- [Dev] Reanim Compiler — Build reanimate scripts from animation data
+-- SixZeroHub dev tool. GUI to assign animations to slots, configure
+-- attacks/keybinds/hitboxes, then compile into a standalone reanimate script.
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local active = true
+local connections = {}
+local animations = {} -- { { slot="walk", name="...", tween=0.1, frames={...} }, ... }
+
+---------- THEME ----------
+
+local TH = {
+    bg = Color3.fromRGB(20, 20, 24),
+    panel = Color3.fromRGB(30, 30, 36),
+    accent = Color3.fromRGB(0, 170, 255),
+    text = Color3.new(1, 1, 1),
+    muted = Color3.fromRGB(140, 140, 140),
+    btn = Color3.fromRGB(50, 50, 58),
+    green = Color3.fromRGB(60, 200, 80),
+    red = Color3.fromRGB(200, 50, 50),
+    yellow = Color3.fromRGB(230, 190, 40),
+    orange = Color3.fromRGB(230, 140, 40),
+}
+
+---------- GUI ----------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "ReanimCompiler"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 11
+local ok, hui = pcall(gethui)
+gui.Parent = ok and hui or playerGui
+
+-- Main window
+local win = Instance.new("Frame")
+win.Size = UDim2.new(0, 420, 0, 500)
+win.Position = UDim2.new(0.5, -210, 0.5, -250)
+win.BackgroundColor3 = TH.bg
+win.BorderSizePixel = 0
+win.Parent = gui
+Instance.new("UICorner", win).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", win).Color = TH.accent
+
+-- Title bar (draggable)
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 28)
+titleBar.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = win
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 8)
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(1, -40, 1, 0)
+titleLbl.Position = UDim2.new(0, 10, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "Reanim Compiler"
+titleLbl.TextColor3 = TH.accent
+titleLbl.TextSize = 13
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Parent = titleBar
+
+-- Drag
+local dragging, dragStart, dragPos = false, nil, nil
+titleBar.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; dragStart = i.Position; dragPos = win.Position end end)
+UIS.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then local d = i.Position - dragStart; win.Position = UDim2.new(dragPos.X.Scale, dragPos.X.Offset + d.X, dragPos.Y.Scale, dragPos.Y.Offset + d.Y) end end)
+UIS.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+
+-- Content scroll
+local content = Instance.new("ScrollingFrame")
+content.Size = UDim2.new(1, -12, 1, -70)
+content.Position = UDim2.new(0, 6, 0, 32)
+content.BackgroundColor3 = TH.panel
+content.BorderSizePixel = 0
+content.ScrollBarThickness = 3
+content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+content.Parent = win
+Instance.new("UICorner", content).CornerRadius = UDim.new(0, 6)
+Instance.new("UIListLayout", content).Padding = UDim.new(0, 4)
+local cPad = Instance.new("UIPadding", content)
+cPad.PaddingTop = UDim.new(0, 6); cPad.PaddingLeft = UDim.new(0, 6)
+cPad.PaddingRight = UDim.new(0, 6); cPad.PaddingBottom = UDim.new(0, 6)
+
+-- Bottom buttons
+local bottomBar = Instance.new("Frame")
+bottomBar.Size = UDim2.new(1, -12, 0, 30)
+bottomBar.Position = UDim2.new(0, 6, 1, -36)
+bottomBar.BackgroundTransparency = 1
+bottomBar.Parent = win
+Instance.new("UIListLayout", bottomBar).FillDirection = Enum.FillDirection.Horizontal
+Instance.new("UIListLayout", bottomBar).Padding = UDim.new(0, 6)
+
+---------- ANIMATION SLOT CATEGORIES ----------
+
+local SINGLE_SLOTS = { "idle", "walk", "run", "jump", "fall" }
+local MULTI_SLOTS = { "attack", "ranged attack", "keybind attack", "keybind animation" }
+local SPECIAL_SLOTS = { "near ledge", "near wall", "fly" }
+local ALL_SLOTS = {}
+for _, s in ipairs(SINGLE_SLOTS) do table.insert(ALL_SLOTS, s) end
+for _, s in ipairs(SPECIAL_SLOTS) do table.insert(ALL_SLOTS, s) end
+for _, s in ipairs(MULTI_SLOTS) do table.insert(ALL_SLOTS, s) end
+
+local function isMultiSlot(slot)
+    for _, s in ipairs(MULTI_SLOTS) do if s == slot then return true end end
+    return false
+end
+
+local function isSingleSlot(slot)
+    for _, s in ipairs(SINGLE_SLOTS) do if s == slot then return true end end
+    for _, s in ipairs(SPECIAL_SLOTS) do if s == slot then return true end end
+    return false
+end
+
+local function hasSlot(slot)
+    for _, a in ipairs(animations) do if a.slot == slot then return true end end
+    return false
+end
+
+---------- REFRESH ANIMATION LIST ----------
+
+local function refreshList()
+    for _, c in ipairs(content:GetChildren()) do
+        if c:IsA("Frame") and c.Name ~= "" then c:Destroy() end
+    end
+
+    for idx, anim in ipairs(animations) do
+        local row = Instance.new("Frame")
+        row.Name = "anim_" .. idx
+        row.Size = UDim2.new(1, 0, 0, 0)
+        row.AutomaticSize = Enum.AutomaticSize.Y
+        row.BackgroundColor3 = TH.btn
+        row.BackgroundTransparency = 0.3
+        row.BorderSizePixel = 0
+        row.Parent = content
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+        local rPad = Instance.new("UIPadding", row)
+        rPad.PaddingTop = UDim.new(0, 4); rPad.PaddingBottom = UDim.new(0, 4)
+        rPad.PaddingLeft = UDim.new(0, 6); rPad.PaddingRight = UDim.new(0, 6)
+        Instance.new("UIListLayout", row).Padding = UDim.new(0, 3)
+
+        -- Slot label + frame count
+        local slotColor = TH.accent
+        if anim.slot:find("attack") then slotColor = TH.orange end
+        if anim.slot:find("keybind") then slotColor = TH.yellow end
+
+        local header = Instance.new("TextLabel")
+        header.Size = UDim2.new(1, -30, 0, 16)
+        header.BackgroundTransparency = 1
+        header.Text = anim.slot:upper() .. "  |  " .. #anim.frames .. " frames  |  " .. string.format("%.3fs", anim.tween) .. " tween"
+        header.TextColor3 = slotColor
+        header.TextSize = 11
+        header.Font = Enum.Font.GothamBold
+        header.TextXAlignment = Enum.TextXAlignment.Left
+        header.Parent = row
+
+        -- Delete button
+        local del = Instance.new("TextButton")
+        del.Size = UDim2.new(0, 22, 0, 16)
+        del.Position = UDim2.new(1, -22, 0, 4)
+        del.BackgroundColor3 = TH.red
+        del.BorderSizePixel = 0
+        del.Text = "X"
+        del.TextColor3 = TH.text
+        del.TextSize = 10
+        del.Font = Enum.Font.GothamBold
+        del.Parent = row
+        Instance.new("UICorner", del).CornerRadius = UDim.new(0, 3)
+        del.MouseButton1Click:Connect(function()
+            table.remove(animations, idx)
+            refreshList()
+        end)
+
+        -- Keybind input for keybind attacks/animations
+        if anim.slot == "keybind attack" or anim.slot == "keybind animation" then
+            local kbRow = Instance.new("Frame")
+            kbRow.Size = UDim2.new(1, 0, 0, 20)
+            kbRow.BackgroundTransparency = 1
+            kbRow.Parent = row
+
+            local kbLbl = Instance.new("TextLabel")
+            kbLbl.Size = UDim2.new(0, 60, 1, 0)
+            kbLbl.BackgroundTransparency = 1
+            kbLbl.Text = "Keybind:"
+            kbLbl.TextColor3 = TH.muted
+            kbLbl.TextSize = 10
+            kbLbl.Font = Enum.Font.Gotham
+            kbLbl.TextXAlignment = Enum.TextXAlignment.Left
+            kbLbl.Parent = kbRow
+
+            local kbBtn = Instance.new("TextButton")
+            kbBtn.Size = UDim2.new(0, 80, 0, 18)
+            kbBtn.Position = UDim2.new(0, 62, 0, 1)
+            kbBtn.BackgroundColor3 = TH.btn
+            kbBtn.BorderSizePixel = 0
+            kbBtn.Text = anim.keybind or "Click to set"
+            kbBtn.TextColor3 = anim.keybind and TH.text or TH.muted
+            kbBtn.TextSize = 10
+            kbBtn.Font = Enum.Font.GothamBold
+            kbBtn.Parent = kbRow
+            Instance.new("UICorner", kbBtn).CornerRadius = UDim.new(0, 3)
+
+            local listening = false
+            kbBtn.MouseButton1Click:Connect(function()
+                listening = true
+                kbBtn.Text = "Press key..."
+                kbBtn.TextColor3 = TH.accent
+            end)
+
+            local kbConn
+            kbConn = UIS.InputBegan:Connect(function(input, gpe)
+                if not listening then return end
+                if input.UserInputType == Enum.UserInputType.Keyboard then
+                    anim.keybind = tostring(input.KeyCode):gsub("Enum.KeyCode.", "")
+                    kbBtn.Text = anim.keybind
+                    kbBtn.TextColor3 = TH.text
+                    listening = false
+                end
+            end)
+            table.insert(connections, kbConn)
+        end
+
+        -- Hitbox range for attacks
+        if anim.slot == "attack" or anim.slot == "keybind attack" or anim.slot == "ranged attack" then
+            local hbRow = Instance.new("Frame")
+            hbRow.Size = UDim2.new(1, 0, 0, 20)
+            hbRow.BackgroundTransparency = 1
+            hbRow.Parent = row
+
+            local hbLbl = Instance.new("TextLabel")
+            hbLbl.Size = UDim2.new(0, 70, 1, 0)
+            hbLbl.BackgroundTransparency = 1
+            hbLbl.Text = "Hit range:"
+            hbLbl.TextColor3 = TH.muted
+            hbLbl.TextSize = 10
+            hbLbl.Font = Enum.Font.Gotham
+            hbLbl.TextXAlignment = Enum.TextXAlignment.Left
+            hbLbl.Parent = hbRow
+
+            local hbBox = Instance.new("TextBox")
+            hbBox.Size = UDim2.new(0, 50, 0, 18)
+            hbBox.Position = UDim2.new(0, 72, 0, 1)
+            hbBox.BackgroundColor3 = TH.btn
+            hbBox.BorderSizePixel = 0
+            hbBox.Text = tostring(anim.hitRange or 10)
+            hbBox.TextColor3 = TH.text
+            hbBox.TextSize = 10
+            hbBox.Font = Enum.Font.Gotham
+            hbBox.ClearTextOnFocus = false
+            hbBox.Parent = hbRow
+            Instance.new("UICorner", hbBox).CornerRadius = UDim.new(0, 3)
+            Instance.new("UIPadding", hbBox).PaddingLeft = UDim.new(0, 4)
+
+            hbBox.FocusLost:Connect(function()
+                local val = tonumber(hbBox.Text)
+                if val and val > 0 then anim.hitRange = val else hbBox.Text = tostring(anim.hitRange or 10) end
+            end)
+
+            -- Hit frame
+            local hfLbl = Instance.new("TextLabel")
+            hfLbl.Size = UDim2.new(0, 60, 1, 0)
+            hfLbl.Position = UDim2.new(0, 130, 0, 0)
+            hfLbl.BackgroundTransparency = 1
+            hfLbl.Text = "Hit frame:"
+            hfLbl.TextColor3 = TH.muted
+            hfLbl.TextSize = 10
+            hfLbl.Font = Enum.Font.Gotham
+            hfLbl.TextXAlignment = Enum.TextXAlignment.Left
+            hfLbl.Parent = hbRow
+
+            local hfBox = Instance.new("TextBox")
+            hfBox.Size = UDim2.new(0, 40, 0, 18)
+            hfBox.Position = UDim2.new(0, 192, 0, 1)
+            hfBox.BackgroundColor3 = TH.btn
+            hfBox.BorderSizePixel = 0
+            hfBox.Text = tostring(anim.hitFrame or math.floor(#anim.frames / 2))
+            hfBox.TextColor3 = TH.text
+            hfBox.TextSize = 10
+            hfBox.Font = Enum.Font.Gotham
+            hfBox.ClearTextOnFocus = false
+            hfBox.Parent = hbRow
+            Instance.new("UICorner", hfBox).CornerRadius = UDim.new(0, 3)
+            Instance.new("UIPadding", hfBox).PaddingLeft = UDim.new(0, 4)
+
+            hfBox.FocusLost:Connect(function()
+                local val = tonumber(hfBox.Text)
+                if val and val > 0 then anim.hitFrame = val else hfBox.Text = tostring(anim.hitFrame or 4) end
+            end)
+        end
+    end
+end
+
+---------- ADD ANIMATION POPUP ----------
+
+local function showAddPopup()
+    -- Popup overlay
+    local popup = Instance.new("Frame")
+    popup.Size = UDim2.new(1, 0, 1, 0)
+    popup.BackgroundColor3 = Color3.new(0, 0, 0)
+    popup.BackgroundTransparency = 0.5
+    popup.BorderSizePixel = 0
+    popup.Parent = gui
+
+    local popupWin = Instance.new("Frame")
+    popupWin.Size = UDim2.new(0, 280, 0, 0)
+    popupWin.AutomaticSize = Enum.AutomaticSize.Y
+    popupWin.Position = UDim2.new(0.5, -140, 0.5, -150)
+    popupWin.BackgroundColor3 = TH.bg
+    popupWin.BorderSizePixel = 0
+    popupWin.Parent = popup
+    Instance.new("UICorner", popupWin).CornerRadius = UDim.new(0, 8)
+    Instance.new("UIStroke", popupWin).Color = TH.accent
+    Instance.new("UIListLayout", popupWin).Padding = UDim.new(0, 2)
+    local pp = Instance.new("UIPadding", popupWin)
+    pp.PaddingTop = UDim.new(0, 8); pp.PaddingBottom = UDim.new(0, 8)
+    pp.PaddingLeft = UDim.new(0, 8); pp.PaddingRight = UDim.new(0, 8)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 20)
+    title.BackgroundTransparency = 1
+    title.Text = "Select Animation Type"
+    title.TextColor3 = TH.accent
+    title.TextSize = 12
+    title.Font = Enum.Font.GothamBold
+    title.Parent = popupWin
+
+    for _, slot in ipairs(ALL_SLOTS) do
+        -- Skip single slots that are already filled
+        if isSingleSlot(slot) and hasSlot(slot) then continue end
+
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 28)
+        btn.BackgroundColor3 = TH.btn
+        btn.BorderSizePixel = 0
+        btn.Text = "  " .. slot:sub(1, 1):upper() .. slot:sub(2)
+        btn.TextColor3 = TH.text
+        btn.TextSize = 11
+        btn.Font = Enum.Font.GothamBold
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.Parent = popupWin
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+        btn.MouseButton1Click:Connect(function()
+            popup:Destroy()
+            -- Now ask for animation ID
+            showAnimIdInput(slot)
+        end)
+    end
+
+    -- Cancel
+    local cancel = Instance.new("TextButton")
+    cancel.Size = UDim2.new(1, 0, 0, 24)
+    cancel.BackgroundColor3 = TH.red
+    cancel.BorderSizePixel = 0
+    cancel.Text = "Cancel"
+    cancel.TextColor3 = TH.text
+    cancel.TextSize = 11
+    cancel.Font = Enum.Font.GothamBold
+    cancel.Parent = popupWin
+    Instance.new("UICorner", cancel).CornerRadius = UDim.new(0, 4)
+    cancel.MouseButton1Click:Connect(function() popup:Destroy() end)
+end
+
+---------- ANIMATION ID INPUT ----------
+
+function showAnimIdInput(slot)
+    local popup = Instance.new("Frame")
+    popup.Size = UDim2.new(1, 0, 1, 0)
+    popup.BackgroundColor3 = Color3.new(0, 0, 0)
+    popup.BackgroundTransparency = 0.5
+    popup.BorderSizePixel = 0
+    popup.Parent = gui
+
+    local popupWin = Instance.new("Frame")
+    popupWin.Size = UDim2.new(0, 300, 0, 0)
+    popupWin.AutomaticSize = Enum.AutomaticSize.Y
+    popupWin.Position = UDim2.new(0.5, -150, 0.5, -80)
+    popupWin.BackgroundColor3 = TH.bg
+    popupWin.BorderSizePixel = 0
+    popupWin.Parent = popup
+    Instance.new("UICorner", popupWin).CornerRadius = UDim.new(0, 8)
+    Instance.new("UIStroke", popupWin).Color = TH.green
+    Instance.new("UIListLayout", popupWin).Padding = UDim.new(0, 6)
+    local pp = Instance.new("UIPadding", popupWin)
+    pp.PaddingTop = UDim.new(0, 10); pp.PaddingBottom = UDim.new(0, 10)
+    pp.PaddingLeft = UDim.new(0, 10); pp.PaddingRight = UDim.new(0, 10)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 18)
+    title.BackgroundTransparency = 1
+    title.Text = "Add " .. slot:sub(1, 1):upper() .. slot:sub(2) .. " Animation"
+    title.TextColor3 = TH.green
+    title.TextSize = 12
+    title.Font = Enum.Font.GothamBold
+    title.Parent = popupWin
+
+    local info = Instance.new("TextLabel")
+    info.Size = UDim2.new(1, 0, 0, 14)
+    info.BackgroundTransparency = 1
+    info.Text = "Enter animation ID or paste frame data"
+    info.TextColor3 = TH.muted
+    info.TextSize = 9
+    info.Font = Enum.Font.Gotham
+    info.TextXAlignment = Enum.TextXAlignment.Left
+    info.Parent = popupWin
+
+    local idBox = Instance.new("TextBox")
+    idBox.Size = UDim2.new(1, 0, 0, 28)
+    idBox.BackgroundColor3 = TH.btn
+    idBox.BorderSizePixel = 0
+    idBox.Text = ""
+    idBox.PlaceholderText = "Animation ID"
+    idBox.PlaceholderColor3 = TH.muted
+    idBox.TextColor3 = TH.text
+    idBox.TextSize = 12
+    idBox.Font = Enum.Font.Gotham
+    idBox.ClearTextOnFocus = false
+    idBox.Parent = popupWin
+    Instance.new("UICorner", idBox).CornerRadius = UDim.new(0, 4)
+    Instance.new("UIPadding", idBox).PaddingLeft = UDim.new(0, 8)
+
+    local statusLbl = Instance.new("TextLabel")
+    statusLbl.Size = UDim2.new(1, 0, 0, 14)
+    statusLbl.BackgroundTransparency = 1
+    statusLbl.Text = ""
+    statusLbl.TextColor3 = TH.muted
+    statusLbl.TextSize = 9
+    statusLbl.Font = Enum.Font.Gotham
+    statusLbl.TextXAlignment = Enum.TextXAlignment.Left
+    statusLbl.Parent = popupWin
+
+    local btnRow = Instance.new("Frame")
+    btnRow.Size = UDim2.new(1, 0, 0, 26)
+    btnRow.BackgroundTransparency = 1
+    btnRow.Parent = popupWin
+
+    local loadBtn = Instance.new("TextButton")
+    loadBtn.Size = UDim2.new(0.48, 0, 1, 0)
+    loadBtn.BackgroundColor3 = TH.green
+    loadBtn.BorderSizePixel = 0
+    loadBtn.Text = "Load from ID"
+    loadBtn.TextColor3 = Color3.fromRGB(20, 20, 20)
+    loadBtn.TextSize = 11
+    loadBtn.Font = Enum.Font.GothamBold
+    loadBtn.Parent = btnRow
+    Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 4)
+
+    local cancelBtn = Instance.new("TextButton")
+    cancelBtn.Size = UDim2.new(0.48, 0, 1, 0)
+    cancelBtn.Position = UDim2.new(0.52, 0, 0, 0)
+    cancelBtn.BackgroundColor3 = TH.red
+    cancelBtn.BorderSizePixel = 0
+    cancelBtn.Text = "Cancel"
+    cancelBtn.TextColor3 = TH.text
+    cancelBtn.TextSize = 11
+    cancelBtn.Font = Enum.Font.GothamBold
+    cancelBtn.Parent = btnRow
+    Instance.new("UICorner", cancelBtn).CornerRadius = UDim.new(0, 4)
+
+    cancelBtn.MouseButton1Click:Connect(function() popup:Destroy() end)
+
+    loadBtn.MouseButton1Click:Connect(function()
+        local animId = idBox.Text:match("%d+")
+        if not animId then statusLbl.Text = "Enter a valid animation ID"; return end
+
+        statusLbl.Text = "Loading animation..."
+        loadBtn.Text = "..."
+        task.spawn(function()
+            local frames, tw = sampleAnimation(tonumber(animId), statusLbl)
+            if frames and #frames > 0 then
+                local entry = {
+                    slot = slot,
+                    tween = tw,
+                    frames = frames,
+                    hitRange = 10,
+                    hitFrame = math.floor(#frames / 3),
+                }
+                table.insert(animations, entry)
+                popup:Destroy()
+                refreshList()
+            else
+                loadBtn.Text = "Load from ID"
+            end
+        end)
+    end)
+end
+
+---------- SAMPLE ANIMATION (same Animator method as poser) ----------
+
+function sampleAnimation(animId, statusLbl)
+    local real = player.Character
+    if not real then if statusLbl then statusLbl.Text = "No character" end; return nil end
+    local hum = real:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.RigType ~= Enum.HumanoidRigType.R6 then if statusLbl then statusLbl.Text = "R6 only" end; return nil end
+
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then animator = Instance.new("Animator"); animator.Parent = hum end
+
+    local anim = Instance.new("Animation")
+    anim.AnimationId = "rbxassetid://" .. tostring(animId)
+
+    local ok2, track = pcall(function() return animator:LoadAnimation(anim) end)
+    if not ok2 or not track then if statusLbl then statusLbl.Text = "Failed: " .. tostring(track) end; return nil end
+
+    for _, t in ipairs(animator:GetPlayingAnimationTracks()) do t:Stop(0) end
+    task.wait(0.1)
+
+    track.Priority = Enum.AnimationPriority.Action4
+    track:Play()
+
+    local waited = 0
+    while track.Length <= 0 and waited < 5 do task.wait(0.1); waited = waited + 0.1 end
+
+    if track.Length <= 0 then track:Stop(); if statusLbl then statusLbl.Text = "Animation failed to load" end; return nil end
+
+    local length = track.Length
+    if statusLbl then statusLbl.Text = "Sampling " .. string.format("%.2f", length) .. "s..." end
+
+    local torso = real:FindFirstChild("Torso")
+    local hrpReal = real:FindFirstChild("HumanoidRootPart")
+    local sampledFrames = {}
+
+    local startTime = tick()
+    while tick() - startTime < length + 0.03 do
+        local pose = {}
+        if torso then
+            for _, m in ipairs(torso:GetChildren()) do
+                if m:IsA("Motor6D") then pose[m.Name] = m.C0 * m.Transform end
+            end
+        end
+        if hrpReal then
+            local rj = hrpReal:FindFirstChild("RootJoint")
+            if rj then pose["RootJoint"] = rj.C0 * rj.Transform end
+        end
+        table.insert(sampledFrames, pose)
+        RunService.Heartbeat:Wait()
+    end
+
+    track:Stop(0)
+
+    -- Exact-match dedup + loop detection
+    local function framesEqual(a, b)
+        for name, cfA in pairs(a) do
+            local cfB = b[name]
+            if not cfB or cfA ~= cfB then return false end
+        end
+        for name in pairs(b) do if not a[name] then return false end end
+        return true
+    end
+
+    local cutPoint = nil
+    for i = 2, #sampledFrames do
+        for j = 1, i - 1 do
+            if framesEqual(sampledFrames[i], sampledFrames[j]) then cutPoint = i; break end
+        end
+        if cutPoint then break end
+    end
+
+    if cutPoint and cutPoint > 2 then
+        local trimmed = {}
+        for i = 1, cutPoint - 1 do table.insert(trimmed, sampledFrames[i]) end
+        sampledFrames = trimmed
+    end
+
+    local tw = length / math.max(#sampledFrames - 1, 1)
+    if statusLbl then statusLbl.Text = "Done: " .. #sampledFrames .. " frames" end
+    return sampledFrames, tw
+end
+
+---------- COMPILE OUTPUT ----------
+
+local function compileScript()
+    if #animations == 0 then print("[Compiler] No animations added"); return end
+
+    local out = {}
+    local function w(s) table.insert(out, s) end
+
+    w("--[[ Reanimate Script — Generated by Reanim Compiler ]]")
+    w("")
+    w("local Players = game:GetService('Players')")
+    w("local RunService = game:GetService('RunService')")
+    w("local UIS = game:GetService('UserInputService')")
+    w("local player = Players.LocalPlayer")
+    w("local char = player.Character")
+    w("if not char then return end")
+    w("local hum = char:FindFirstChildOfClass('Humanoid')")
+    w("local rootP = char:FindFirstChild('HumanoidRootPart')")
+    w("if not hum or not rootP then return end")
+    w("if hum.RigType ~= Enum.HumanoidRigType.R6 then warn('R6 only'); return end")
+    w("")
+    w("local active = true")
+    w("local rEvents = {}")
+    w("local shp = sethiddenproperty or set_hidden_property or function() end")
+    w("")
+
+    -- Output animation data
+    for idx, anim in ipairs(animations) do
+        local varName = anim.slot:gsub(" ", "_") .. (isMultiSlot(anim.slot) and ("_" .. idx) or "")
+        w("local " .. varName .. "Tween = " .. anim.tween)
+        w("local " .. varName .. "Frames = {")
+        for _, frame in ipairs(anim.frames) do
+            local parts = {}
+            for name, cf in pairs(frame) do
+                local c = {cf:GetComponents()}
+                local nums = {}
+                for _, n in ipairs(c) do table.insert(nums, string.format("%.4f", n)) end
+                table.insert(parts, '["' .. name .. '"]=CFrame.new(' .. table.concat(nums, ",") .. ")")
+            end
+            w("    {" .. table.concat(parts, ",") .. "},")
+        end
+        w("}")
+        w("")
+    end
+
+    -- Reanimate setup
+    w("---------- FE REANIMATE ----------")
+    w("")
+    w("char.Archivable = true")
+    w("if char:FindFirstChild('Animate') then char.Animate.Disabled = true; for _,t in pairs(hum:GetPlayingAnimationTracks()) do t:Stop() end end")
+    w("hum:ChangeState('Physics')")
+    w("pcall(function() player.ReplicationFocus = workspace; settings().Physics.AllowSleep = false; shp(workspace, 'PhysicsSteppingMethod', Enum.PhysicsSteppingMethod.Fixed) end)")
+    w("")
+    w("local fakeRig = char:Clone(); fakeRig.Name = 'CompiledReanim'")
+    w("for _,v in pairs(fakeRig:GetDescendants()) do if v:IsA('BasePart') or v:IsA('Decal') then v.Transparency=1 elseif v:IsA('SpecialMesh') then v.MeshId='' elseif v:IsA('LocalScript') or v:IsA('Script') then v:Destroy() end end")
+    w("fakeRig.HumanoidRootPart.CFrame = rootP.CFrame; fakeRig.Parent = workspace")
+    w("")
+    w("local fakeHum = fakeRig:FindFirstChildOfClass('Humanoid')")
+    w("fakeHum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None")
+    w("fakeHum.BreakJointsOnDeath = false; fakeHum.PlatformStand = false")
+    w("fakeHum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)")
+    w("fakeHum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)")
+    w("fakeHum:ChangeState(Enum.HumanoidStateType.GettingUp)")
+    w("")
+    w("char.Parent = fakeRig; workspace.CurrentCamera.CameraSubject = fakeHum; hum.PlatformStand = true")
+    w("")
+    w("local vel = Vector3.new(0, 0, -25.8); local bvs = {}")
+    w("for _,v in pairs(char:GetDescendants()) do if v:IsA('BasePart') then v.CustomPhysicalProperties=PhysicalProperties.new(0,0,0,0,0); v.Massless=true; v.RootPriority=127; local abv=Instance.new('BodyAngularVelocity'); abv.P=math.huge; abv.MaxTorque=Vector3.new(math.huge,math.huge,math.huge); abv.AngularVelocity=Vector3.zero; abv.Parent=v; local bv=Instance.new('BodyVelocity'); bv.P=math.huge; bv.MaxForce=Vector3.new(math.huge,math.huge,math.huge); bv.Velocity=Vector3.zero; bv.Parent=v; table.insert(bvs,bv) end end")
+    w("")
+    w("local offsets = {['Torso']=fakeRig:FindFirstChild('Torso'),['Right Arm']=fakeRig:FindFirstChild('Right Arm'),['Left Arm']=fakeRig:FindFirstChild('Left Arm'),['Right Leg']=fakeRig:FindFirstChild('Right Leg'),['Left Leg']=fakeRig:FindFirstChild('Left Leg')}")
+    w("local rootOff = 0.02; task.spawn(function() while active do task.wait(0.05); rootOff=rootOff*-1 end end)")
+    w("local charDesc = char:GetDescendants()")
+    w("")
+    w("local flingTargetHRP = nil; local FLING_POWER = 250")
+    w("")
+    w("table.insert(rEvents, RunService.PreSimulation:Connect(function() if not active then return end; for _,v in pairs(charDesc) do if v:IsA('BasePart') and v.Parent then v.CanCollide=false; v.CanQuery=false; v.CanTouch=false end end; pcall(function() fakeRig.Head.CanCollide=false; fakeRig.Torso.CanCollide=false end) end))")
+    w("")
+    w("table.insert(rEvents, RunService.Heartbeat:Connect(function() if not active then return end; pcall(function() settings().Physics.AllowSleep=false; shp(player,'MaximumSimulationRadius',math.huge); shp(player,'SimulationRadius',math.huge) end); pcall(function() local t=char:FindFirstChild('Torso'); if t then t.AssemblyLinearVelocity=vel end end)")
+    w("    if flingTargetHRP and flingTargetHRP.Parent then local dir=(flingTargetHRP.Position-rootP.Position); if dir.Magnitude>1 then dir=dir.Unit end; local fv=dir*FLING_POWER+Vector3.new(0,FLING_POWER*0.4,0); for _,bv in pairs(bvs) do bv.Velocity=fv end; rootP.CFrame=flingTargetHRP.CFrame*CFrame.new(0,0,-1); return end")
+    w("    for _,bv in pairs(bvs) do bv.Velocity=vel end; for name,fakePart in pairs(offsets) do local realPart=char:FindFirstChild(name); if realPart and fakePart and realPart.Parent and fakePart.Parent then realPart.CFrame=fakePart.CFrame end end")
+    w("    for _,v in pairs(char:GetChildren()) do if v:IsA('Accessory') and v:FindFirstChild('Handle') then local fa=fakeRig:FindFirstChild(v.Name); if fa and fa:FindFirstChild('Handle') then v.Handle.CFrame=fa.Handle.CFrame end end end")
+    w("    rootP.CFrame=(char:FindFirstChild('Torso') or rootP).CFrame*CFrame.new(0,rootOff,0) end))")
+    w("")
+    w("local function onDeath() active=false; char.Parent=workspace; player.Character=workspace:FindFirstChild(char.Name); hum:ChangeState(15); pcall(function() hum.PlatformStand=false end); if fakeRig then fakeRig:Destroy() end; for _,e in pairs(rEvents) do pcall(function() e:Disconnect() end) end end")
+    w("table.insert(rEvents, fakeHum.Died:Connect(onDeath))")
+    w("player.Character = fakeRig")
+    w("task.spawn(function() task.wait(Players.RespawnTime+0.5); pcall(function() local h=char:FindFirstChild('Head'); if h then h:BreakJoints() end end); offsets['Head']=fakeRig:FindFirstChild('Head') end)")
+    w("")
+    w("task.wait(0.3)")
+    w("")
+
+    -- Animation player setup
+    w("---------- ANIMATION PLAYER ----------")
+    w("")
+    w("local fakeTorso = fakeRig:FindFirstChild('Torso')")
+    w("local fakeHRP = fakeRig:FindFirstChild('HumanoidRootPart')")
+    w("if not fakeTorso or not fakeHRP then return end")
+    w("local jMap = {}; for _,m in ipairs(fakeTorso:GetChildren()) do if m:IsA('Motor6D') then jMap[m.Name]=m end end")
+    w("local fakeRJ = fakeHRP:FindFirstChild('RootJoint'); if fakeRJ then jMap['RootJoint']=fakeRJ end")
+    w("")
+    w("local currentAnim = 'idle'")
+    w("local attacking = false")
+    w("")
+    w("local function playCycle(frames, tween, animName)")
+    w("    for i = 1, #frames - 1 do")
+    w("        if not active or currentAnim ~= animName then return end")
+    w("        local from, to = frames[i], frames[i+1]")
+    w("        local st = tick()")
+    w("        while tick() - st < tween do")
+    w("            if not active or currentAnim ~= animName then return end")
+    w("            local a = math.clamp((tick()-st)/tween, 0, 1)")
+    w("            for name, motor in pairs(jMap) do if from[name] and to[name] then motor.C0 = from[name]:Lerp(to[name], a) end end")
+    w("            RunService.Heartbeat:Wait()")
+    w("        end")
+    w("        for name, motor in pairs(jMap) do if to[name] then motor.C0 = to[name] end end")
+    w("    end")
+    w("end")
+    w("")
+
+    -- Fling helper for attacks
+    local hasAttacks = false
+    for _, a in ipairs(animations) do if a.slot:find("attack") then hasAttacks = true; break end end
+
+    if hasAttacks then
+        w("local function findTargets(radius)")
+        w("    if not fakeHRP then return {} end")
+        w("    local pos, look = fakeHRP.Position, fakeHRP.CFrame.LookVector")
+        w("    local targets = {}")
+        w("    for _, p in ipairs(Players:GetPlayers()) do")
+        w("        if p ~= player and p.Character then")
+        w("            local tHRP = p.Character:FindFirstChild('HumanoidRootPart')")
+        w("            if tHRP then local off = tHRP.Position - pos; if off.Magnitude < radius and look:Dot(off.Unit) > 0.2 then table.insert(targets, tHRP) end end")
+        w("        end")
+        w("    end")
+        w("    return targets")
+        w("end")
+        w("")
+    end
+
+    -- Build attacks list
+    local m1Attacks = {}
+    local keybindAnims = {}
+    for _, a in ipairs(animations) do
+        if a.slot == "attack" then table.insert(m1Attacks, a) end
+        if a.slot == "keybind attack" or a.slot == "keybind animation" then table.insert(keybindAnims, a) end
+    end
+
+    -- M1 combo system
+    if #m1Attacks > 0 then
+        w("local m1Attacks = {")
+        for i, a in ipairs(m1Attacks) do
+            local varName = "attack_" .. (i + ({} and 0 or 0)) -- find actual index
+            for idx2, a2 in ipairs(animations) do if a2 == a then varName = a2.slot:gsub(" ", "_") .. "_" .. idx2; break end end
+            w("    { frames=" .. varName .. "Frames, tween=" .. varName .. "Tween, hitFrame=" .. (a.hitFrame or 4) .. ", hitRange=" .. (a.hitRange or 10) .. " },")
+        end
+        w("}")
+        w("local comboIndex = 1; local lastAttackTime = 0; local COMBO_WINDOW = 0.8")
+        w("")
+        w("local function playAttack(atk)")
+        w("    attacking = true; currentAnim = 'attack'")
+        w("    for i = 1, #atk.frames - 1 do")
+        w("        if not active then break end")
+        w("        if i == atk.hitFrame then local targets = findTargets(atk.hitRange); for _,tHRP in ipairs(targets) do task.spawn(function() flingTargetHRP=tHRP; task.wait(0.15); flingTargetHRP=nil end) end end")
+        w("        local from, to = atk.frames[i], atk.frames[i+1]; local st = tick()")
+        w("        while tick()-st < atk.tween do if not active then break end; local a=math.clamp((tick()-st)/atk.tween,0,1); for name,motor in pairs(jMap) do if from[name] and to[name] then motor.C0=from[name]:Lerp(to[name],a) end end; RunService.Heartbeat:Wait() end")
+        w("        for name,motor in pairs(jMap) do if to[name] then motor.C0=to[name] end end")
+        w("    end")
+        w("    lastAttackTime = tick(); attacking = false")
+        w("end")
+        w("")
+        w("table.insert(rEvents, UIS.InputBegan:Connect(function(input, gpe) if gpe or not active then return end; if input.UserInputType == Enum.UserInputType.MouseButton1 then if attacking then return end; if tick()-lastAttackTime > COMBO_WINDOW then comboIndex=1 end; playAttack(m1Attacks[comboIndex]); comboIndex=(comboIndex%#m1Attacks)+1 end end))")
+        w("")
+    end
+
+    -- Keybind attacks/animations
+    for _, a in ipairs(keybindAnims) do
+        if a.keybind then
+            local varName
+            for idx2, a2 in ipairs(animations) do if a2 == a then varName = a2.slot:gsub(" ", "_") .. "_" .. idx2; break end end
+            if a.slot == "keybind attack" then
+                w("table.insert(rEvents, UIS.InputBegan:Connect(function(input, gpe) if gpe or not active or attacking then return end")
+                w("    if input.KeyCode == Enum.KeyCode." .. a.keybind .. " then")
+                w("        attacking = true; currentAnim = 'attack'")
+                w("        for i = 1, #" .. varName .. "Frames - 1 do")
+                w("            if not active then break end")
+                w("            if i == " .. (a.hitFrame or 4) .. " then local targets = findTargets(" .. (a.hitRange or 10) .. "); for _,tHRP in ipairs(targets) do task.spawn(function() flingTargetHRP=tHRP; task.wait(0.15); flingTargetHRP=nil end) end end")
+                w("            local from, to = " .. varName .. "Frames[i], " .. varName .. "Frames[i+1]; local st = tick()")
+                w("            while tick()-st < " .. varName .. "Tween do if not active then break end; local a=math.clamp((tick()-st)/" .. varName .. "Tween,0,1); for name,motor in pairs(jMap) do if from[name] and to[name] then motor.C0=from[name]:Lerp(to[name],a) end end; RunService.Heartbeat:Wait() end")
+                w("            for name,motor in pairs(jMap) do if to[name] then motor.C0=to[name] end end")
+                w("        end")
+                w("        attacking = false")
+                w("    end")
+                w("end))")
+            else
+                w("table.insert(rEvents, UIS.InputBegan:Connect(function(input, gpe) if gpe or not active or attacking then return end")
+                w("    if input.KeyCode == Enum.KeyCode." .. a.keybind .. " then")
+                w("        attacking = true; currentAnim = 'keybind'")
+                w("        playCycle(" .. varName .. "Frames, " .. varName .. "Tween, 'keybind')")
+                w("        attacking = false")
+                w("    end")
+                w("end))")
+            end
+            w("")
+        end
+    end
+
+    -- Movement detection
+    w("table.insert(rEvents, RunService.Heartbeat:Connect(function() if not active or attacking then return end; local moving = fakeHum.MoveDirection.Magnitude > 0.1; currentAnim = moving and 'walk' or 'idle' end))")
+    w("")
+
+    -- Main animation loop
+    w("task.spawn(function()")
+    w("    while active do")
+    w("        if attacking then RunService.Heartbeat:Wait()")
+
+    -- Walk
+    local walkAnim = nil; local idleAnim = nil
+    for _, a in ipairs(animations) do
+        if a.slot == "idle" then idleAnim = a end
+        if a.slot == "walk" then walkAnim = a end
+    end
+
+    if walkAnim then
+        local varName; for idx2, a2 in ipairs(animations) do if a2 == walkAnim then varName = "walk_" .. idx2; break end end
+        w("        elseif currentAnim == 'walk' then playCycle(" .. varName .. "Frames, " .. varName .. "Tween, 'walk')")
+    end
+    if idleAnim then
+        local varName; for idx2, a2 in ipairs(animations) do if a2 == idleAnim then varName = "idle_" .. idx2; break end end
+        w("        else playCycle(" .. varName .. "Frames, " .. varName .. "Tween, 'idle')")
+    else
+        w("        else RunService.Heartbeat:Wait()")
+    end
+
+    w("        end")
+    w("    end")
+    w("end)")
+    w("")
+    w("print('[Reanim] Compiled script loaded — ' .. " .. #animations .. " .. ' animations')")
+
+    local result = table.concat(out, "\n")
+
+    -- Copy to clipboard
+    pcall(function()
+        if setclipboard then setclipboard(result)
+        elseif toclipboard then toclipboard(result) end
+    end)
+
+    -- Also save to file
+    pcall(function()
+        if writefile then writefile("CompiledReanim.lua", result) end
+    end)
+
+    print("[Compiler] Script compiled (" .. #result .. " chars, " .. #animations .. " animations) — copied to clipboard + saved to CompiledReanim.lua")
+    return result
+end
+
+---------- BOTTOM BUTTONS ----------
+
+local addBtn = Instance.new("TextButton")
+addBtn.Size = UDim2.new(0, 120, 1, 0)
+addBtn.BackgroundColor3 = TH.green
+addBtn.BorderSizePixel = 0
+addBtn.Text = "+ Animation"
+addBtn.TextColor3 = Color3.fromRGB(20, 20, 20)
+addBtn.TextSize = 12
+addBtn.Font = Enum.Font.GothamBold
+addBtn.Parent = bottomBar
+Instance.new("UICorner", addBtn).CornerRadius = UDim.new(0, 4)
+addBtn.MouseButton1Click:Connect(showAddPopup)
+
+local compileBtn = Instance.new("TextButton")
+compileBtn.Size = UDim2.new(0, 120, 1, 0)
+compileBtn.BackgroundColor3 = TH.accent
+compileBtn.BorderSizePixel = 0
+compileBtn.Text = "Finish & Compile"
+compileBtn.TextColor3 = Color3.new(1, 1, 1)
+compileBtn.TextSize = 12
+compileBtn.Font = Enum.Font.GothamBold
+compileBtn.Parent = bottomBar
+Instance.new("UICorner", compileBtn).CornerRadius = UDim.new(0, 4)
+compileBtn.MouseButton1Click:Connect(compileScript)
+
+local clearBtn = Instance.new("TextButton")
+clearBtn.Size = UDim2.new(0, 80, 1, 0)
+clearBtn.BackgroundColor3 = TH.red
+clearBtn.BorderSizePixel = 0
+clearBtn.Text = "Clear All"
+clearBtn.TextColor3 = TH.text
+clearBtn.TextSize = 11
+clearBtn.Font = Enum.Font.GothamBold
+clearBtn.Parent = bottomBar
+Instance.new("UICorner", clearBtn).CornerRadius = UDim.new(0, 4)
+clearBtn.MouseButton1Click:Connect(function()
+    animations = {}
+    refreshList()
+end)
+
+---------- SIXZEROHUB REGISTRATION ----------
+
+local function cleanup()
+    active = false
+    for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
+    connections = {}
+    pcall(function() gui:Destroy() end)
+end
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Reanim Compiler", "[Dev]reanim_compiler", cleanup, "dev")
+end
+
+refreshList()
+print("[Reanim Compiler] Ready — add animations and click Finish to compile")
