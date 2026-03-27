@@ -1330,6 +1330,7 @@ local DEV_SCRIPTS = {
     { name = "Game ID Copier", file = "[Dev]gameid_copier" },
     { name = "Dex", file = "[Dev]dex" },
     { name = "Remote Spy", file = "[Dev]remote_spy" },
+    { name = "Anim Logger", file = "[Dev]anim_logger" },
 }
 
 local SPEC_SCRIPTS = {
