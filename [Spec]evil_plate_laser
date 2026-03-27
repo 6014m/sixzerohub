@@ -104,6 +104,14 @@ local function isGrounded()
         or st == Enum.HumanoidStateType.Landed
 end
 
+-- Beam-shape gate: lasers are long and thin — this filters out platforms, walls, etc.
+local function isBeamShaped(part)
+    local sx, sy, sz = part.Size.X, part.Size.Y, part.Size.Z
+    local longest = math.max(sx, sy, sz)
+    local shortest = math.max(math.min(sx, sy, sz), 0.01)
+    return longest >= MIN_LENGTH and longest / shortest >= 3
+end
+
 -- OBB closest-point distance
 local function closestDistOBB(cf, halfSize, point)
     local lp = cf:PointToObjectSpace(point)
@@ -140,8 +148,11 @@ local conn = RunService.Heartbeat:Connect(function(dt)
         end
         lastPos[part] = pos
 
-        -- skip stationary parts — only jump at parts that are actually moving
-        if vel.Magnitude < 1 then continue end
+        -- skip stationary low-confidence parts
+        if vel.Magnitude < 1 and score < SCORE_ACTIVE then continue end
+
+        -- must be beam-shaped to trigger a jump (filters platforms, walls, etc.)
+        if not isBeamShaped(part) then continue end
 
         -- predict where the laser will be shortly
         local predY = pos.Y + vel.Y * PREDICT_SEC
