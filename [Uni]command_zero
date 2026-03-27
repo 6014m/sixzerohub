@@ -2596,6 +2596,46 @@ addcmd("unesp", {"noesp"}, "Disable ESP", function(args)
     notify("ESP", "Disabled")
 end)
 
+addcmd("hide", {"invisible"}, "Make a player invisible locally", function(args)
+    local targets = getPlayers(args[1])
+    if #targets == 0 then return end
+    for _, t in ipairs(targets) do
+        if not t.Character then continue end
+        for _, v in ipairs(t.Character:GetDescendants()) do
+            if v:IsA("BasePart") or v:IsA("Decal") or v:IsA("Texture") then
+                if not v:GetAttribute("CZ_HiddenTransparency") then
+                    v:SetAttribute("CZ_HiddenTransparency", v.Transparency)
+                end
+                v.Transparency = 1
+            elseif v:IsA("BillboardGui") or v:IsA("SurfaceGui") then
+                if not v:GetAttribute("CZ_HiddenVisible") then
+                    v:SetAttribute("CZ_HiddenVisible", v.Enabled)
+                end
+                v.Enabled = false
+            end
+        end
+        notify("Hide", t.Name .. " is now invisible")
+    end
+end)
+
+addcmd("unhide", {"visible", "nohide"}, "Make a player visible again", function(args)
+    local targets = getPlayers(args[1])
+    if #targets == 0 then return end
+    for _, t in ipairs(targets) do
+        if not t.Character then continue end
+        for _, v in ipairs(t.Character:GetDescendants()) do
+            if v:IsA("BasePart") or v:IsA("Decal") or v:IsA("Texture") then
+                local orig = v:GetAttribute("CZ_HiddenTransparency")
+                if orig ~= nil then v.Transparency = orig; v:SetAttribute("CZ_HiddenTransparency", nil) end
+            elseif v:IsA("BillboardGui") or v:IsA("SurfaceGui") then
+                local orig = v:GetAttribute("CZ_HiddenVisible")
+                if orig ~= nil then v.Enabled = orig; v:SetAttribute("CZ_HiddenVisible", nil) end
+            end
+        end
+        notify("Unhide", t.Name .. " is now visible")
+    end
+end)
+
 addcmd("xray", {"x"}, "Make all parts transparent", function(args)
     for _, p in ipairs(workspace:GetDescendants()) do
         if p:IsA("BasePart") and p.Transparency < 1 then
