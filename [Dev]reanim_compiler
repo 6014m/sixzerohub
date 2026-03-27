@@ -12,6 +12,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local active = true
 local connections = {}
 local animations = {} -- { { slot="walk", name="...", tween=0.1, frames={...} }, ... }
+local reanimMode = "normal" -- "normal" or "deathcycle"
 
 ---------- THEME ----------
 
@@ -143,6 +144,7 @@ local function refreshList()
         rPad.PaddingTop = UDim.new(0, 4); rPad.PaddingBottom = UDim.new(0, 4)
         rPad.PaddingLeft = UDim.new(0, 6); rPad.PaddingRight = UDim.new(0, 6)
         Instance.new("UIListLayout", row).Padding = UDim.new(0, 3)
+        if not anim.selfFlings then anim.selfFlings = {} end
 
         -- Slot label + frame count
         local slotColor = TH.accent
@@ -224,6 +226,43 @@ local function refreshList()
                 end
             end)
             table.insert(connections, kbConn)
+
+            -- Double tap toggle
+            if anim.doubleTap == nil then anim.doubleTap = false end
+
+            local dtRow = Instance.new("Frame")
+            dtRow.Size = UDim2.new(1, 0, 0, 20)
+            dtRow.BackgroundTransparency = 1
+            dtRow.Parent = row
+
+            local dtLbl = Instance.new("TextLabel")
+            dtLbl.Size = UDim2.new(0, 65, 1, 0)
+            dtLbl.BackgroundTransparency = 1
+            dtLbl.Text = "Double Tap:"
+            dtLbl.TextColor3 = TH.muted
+            dtLbl.TextSize = 10
+            dtLbl.Font = Enum.Font.Gotham
+            dtLbl.TextXAlignment = Enum.TextXAlignment.Left
+            dtLbl.Parent = dtRow
+
+            local dtBtn = Instance.new("TextButton")
+            dtBtn.Size = UDim2.new(0, 40, 0, 16)
+            dtBtn.Position = UDim2.new(0, 67, 0, 2)
+            dtBtn.BackgroundColor3 = anim.doubleTap and TH.green or TH.btn
+            dtBtn.BorderSizePixel = 0
+            dtBtn.Text = anim.doubleTap and "ON" or "OFF"
+            dtBtn.TextColor3 = anim.doubleTap and Color3.fromRGB(20, 20, 20) or TH.muted
+            dtBtn.TextSize = 9
+            dtBtn.Font = Enum.Font.GothamBold
+            dtBtn.Parent = dtRow
+            Instance.new("UICorner", dtBtn).CornerRadius = UDim.new(0, 3)
+
+            dtBtn.MouseButton1Click:Connect(function()
+                anim.doubleTap = not anim.doubleTap
+                dtBtn.BackgroundColor3 = anim.doubleTap and TH.green or TH.btn
+                dtBtn.Text = anim.doubleTap and "ON" or "OFF"
+                dtBtn.TextColor3 = anim.doubleTap and Color3.fromRGB(20, 20, 20) or TH.muted
+            end)
         end
 
         -- Attack config: hitbox + preview scrubber
@@ -232,6 +271,7 @@ local function refreshList()
             if not anim.hitboxPos then anim.hitboxPos = "Front" end
             if not anim.hitboxSize then anim.hitboxSize = Vector3.new(6, 6, 6) end
             if not anim.hitboxOffset then anim.hitboxOffset = Vector3.new(0, 0, -5) end
+            if not anim.hitboxDuration then anim.hitboxDuration = 1 end
 
             -- Row 1: Hitbox position preset
             local posRow = Instance.new("Frame")
@@ -317,6 +357,36 @@ local function refreshList()
                 if v and v > 0 then anim.hitboxSize = Vector3.new(v, v, v + 2) end
             end)
 
+            -- Hitbox duration
+            local durLbl = Instance.new("TextLabel")
+            durLbl.Size = UDim2.new(0, 24, 1, 0)
+            durLbl.Position = UDim2.new(0, 184, 0, 0)
+            durLbl.BackgroundTransparency = 1
+            durLbl.Text = "Dur:"
+            durLbl.TextColor3 = TH.muted
+            durLbl.TextSize = 9
+            durLbl.Font = Enum.Font.Gotham
+            durLbl.TextXAlignment = Enum.TextXAlignment.Left
+            durLbl.Parent = posRow
+
+            local durBox = Instance.new("TextBox")
+            durBox.Size = UDim2.new(0, 28, 0, 18)
+            durBox.Position = UDim2.new(0, 210, 0, 1)
+            durBox.BackgroundColor3 = TH.btn
+            durBox.BorderSizePixel = 0
+            durBox.Text = tostring(anim.hitboxDuration)
+            durBox.TextColor3 = TH.text
+            durBox.TextSize = 10
+            durBox.Font = Enum.Font.Gotham
+            durBox.ClearTextOnFocus = false
+            durBox.Parent = posRow
+            Instance.new("UICorner", durBox).CornerRadius = UDim.new(0, 3)
+
+            durBox.FocusLost:Connect(function()
+                local v = tonumber(durBox.Text)
+                if v and v >= 1 then anim.hitboxDuration = math.floor(v); durBox.Text = tostring(anim.hitboxDuration) end
+            end)
+
             -- Row 2: Frame scrubber + hit frame marker
             local scrubRow = Instance.new("Frame")
             scrubRow.Size = UDim2.new(1, 0, 0, 34)
@@ -326,7 +396,7 @@ local function refreshList()
             local frameLbl = Instance.new("TextLabel")
             frameLbl.Size = UDim2.new(1, 0, 0, 12)
             frameLbl.BackgroundTransparency = 1
-            frameLbl.Text = "Frame: 1 / " .. #anim.frames .. "  |  Hit: " .. (anim.hitFrame or "?")
+            frameLbl.Text = "Frame: 1 / " .. #anim.frames .. "  |  Hit: " .. (anim.hitFrame or "?") .. " (+" .. ((anim.hitboxDuration or 1) - 1) .. "f)"
             frameLbl.TextColor3 = TH.muted
             frameLbl.TextSize = 9
             frameLbl.Font = Enum.Font.Gotham
@@ -376,6 +446,7 @@ local function refreshList()
             -- Preview state for this anim
             local previewClone = nil
             local previewHitbox = nil
+            local previewArrows = {}
             local currentFrame = 1
 
             local function updatePreview()
@@ -395,14 +466,40 @@ local function refreshList()
                     if rj and frame["RootJoint"] then rj.C0 = frame["RootJoint"] end
                 end
 
-                -- Update hitbox position
+                -- Update hitbox position + active state based on duration
                 if previewHitbox and hrp then
                     local off = anim.hitboxOffset or Vector3.new(0, 0, -5)
                     previewHitbox.Size = anim.hitboxSize or Vector3.new(6, 6, 6)
                     previewHitbox.CFrame = hrp.CFrame * CFrame.new(off)
+                    local hitStart = anim.hitFrame or 1
+                    local hitEnd = hitStart + (anim.hitboxDuration or 1) - 1
+                    local inRange = currentFrame >= hitStart and currentFrame <= hitEnd
+                    previewHitbox.Color = inRange and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(80, 80, 80)
+                    previewHitbox.Transparency = inRange and 0.4 or 0.8
                 end
 
-                frameLbl.Text = "Frame: " .. currentFrame .. " / " .. #anim.frames .. "  |  Hit: " .. (anim.hitFrame or "?")
+                -- Update self fling arrows
+                for arrowIdx, arrow in ipairs(previewArrows) do
+                    if arrow.Parent and anim.selfFlings[arrowIdx] then
+                        local sf = anim.selfFlings[arrowIdx]
+                        local show = math.abs(currentFrame - sf.frame) <= 2
+                        arrow.Transparency = show and 0.3 or 0.9
+                        if hrp then
+                            local arrowDir
+                            if sf.type == "camera" then
+                                arrowDir = hrp.CFrame.LookVector
+                            else
+                                local dirs = {Forward=hrp.CFrame.LookVector, Backward=-hrp.CFrame.LookVector, Left=-hrp.CFrame.RightVector, Right=hrp.CFrame.RightVector, Up=hrp.CFrame.UpVector, Down=-hrp.CFrame.UpVector}
+                                arrowDir = dirs[sf.direction] or hrp.CFrame.LookVector
+                            end
+                            local len = math.clamp(sf.strength / 50, 1, 10)
+                            arrow.Size = Vector3.new(0.3, 0.3, len)
+                            arrow.CFrame = CFrame.lookAt(hrp.Position + arrowDir * (len/2 + 2), hrp.Position + arrowDir * (len + 2))
+                        end
+                    end
+                end
+
+                frameLbl.Text = "Frame: " .. currentFrame .. " / " .. #anim.frames .. "  |  Hit: " .. (anim.hitFrame or "?") .. " (+" .. (anim.hitboxDuration or 1) - 1 .. "f)"
             end
 
             local function spawnPreview()
@@ -438,12 +535,30 @@ local function refreshList()
                 previewHitbox.Material = Enum.Material.ForceField
                 previewHitbox.Parent = workspace
 
+                -- Create self fling preview arrows
+                for _, arrow in ipairs(previewArrows) do pcall(function() arrow:Destroy() end) end
+                previewArrows = {}
+                for ai, sf in ipairs(anim.selfFlings) do
+                    local arrow = Instance.new("Part")
+                    arrow.Name = "FlingArrow_" .. ai
+                    arrow.Anchored = true
+                    arrow.CanCollide = false
+                    arrow.Material = Enum.Material.Neon
+                    arrow.Color = sf.type == "camera" and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(50, 255, 255)
+                    arrow.Transparency = 0.9
+                    arrow.Size = Vector3.new(0.3, 0.3, math.clamp(sf.strength / 50, 1, 10))
+                    arrow.Parent = workspace
+                    table.insert(previewArrows, arrow)
+                end
+
                 updatePreview()
             end
 
             local function destroyPreview()
                 if previewClone then pcall(function() previewClone:Destroy() end); previewClone = nil end
                 if previewHitbox then pcall(function() previewHitbox:Destroy() end); previewHitbox = nil end
+                for _, arrow in ipairs(previewArrows) do pcall(function() arrow:Destroy() end) end
+                previewArrows = {}
             end
 
             -- Scrub drag logic
@@ -477,13 +592,244 @@ local function refreshList()
                 anim.hitFrame = currentFrame
                 local hf = math.clamp((currentFrame - 1) / math.max(#anim.frames - 1, 1), 0, 1)
                 hitMarker.Position = UDim2.new(hf, 0, 0, 0)
-                frameLbl.Text = "Frame: " .. currentFrame .. " / " .. #anim.frames .. "  |  Hit: " .. anim.hitFrame
+                frameLbl.Text = "Frame: " .. currentFrame .. " / " .. #anim.frames .. "  |  Hit: " .. anim.hitFrame .. " (+" .. ((anim.hitboxDuration or 1) - 1) .. "f)"
             end)
 
             -- Cleanup preview when row is destroyed
             row.AncestryChanged:Connect(function()
                 if not row.Parent then destroyPreview() end
             end)
+
+            -- ========== SELF FLINGS SECTION ==========
+            local sfHeader = Instance.new("Frame")
+            sfHeader.Size = UDim2.new(1, 0, 0, 20)
+            sfHeader.BackgroundTransparency = 1
+            sfHeader.Parent = row
+
+            local sfLbl = Instance.new("TextLabel")
+            sfLbl.Size = UDim2.new(0, 80, 1, 0)
+            sfLbl.BackgroundTransparency = 1
+            sfLbl.Text = "Self Flings:"
+            sfLbl.TextColor3 = TH.green
+            sfLbl.TextSize = 10
+            sfLbl.Font = Enum.Font.GothamBold
+            sfLbl.TextXAlignment = Enum.TextXAlignment.Left
+            sfLbl.Parent = sfHeader
+
+            local sfAddBtn = Instance.new("TextButton")
+            sfAddBtn.Size = UDim2.new(0, 40, 0, 16)
+            sfAddBtn.Position = UDim2.new(0, 82, 0, 2)
+            sfAddBtn.BackgroundColor3 = TH.green
+            sfAddBtn.BorderSizePixel = 0
+            sfAddBtn.Text = "+ Add"
+            sfAddBtn.TextColor3 = Color3.fromRGB(20, 20, 20)
+            sfAddBtn.TextSize = 9
+            sfAddBtn.Font = Enum.Font.GothamBold
+            sfAddBtn.Parent = sfHeader
+            Instance.new("UICorner", sfAddBtn).CornerRadius = UDim.new(0, 3)
+
+            local sfContainer = Instance.new("Frame")
+            sfContainer.Size = UDim2.new(1, 0, 0, 0)
+            sfContainer.AutomaticSize = Enum.AutomaticSize.Y
+            sfContainer.BackgroundTransparency = 1
+            sfContainer.Parent = row
+            Instance.new("UIListLayout", sfContainer).Padding = UDim.new(0, 2)
+
+            local function refreshSelfFlings()
+                for _, c in ipairs(sfContainer:GetChildren()) do
+                    if c:IsA("Frame") then c:Destroy() end
+                end
+                -- Rebuild preview arrows
+                for _, arrow in ipairs(previewArrows) do pcall(function() arrow:Destroy() end) end
+                previewArrows = {}
+                if previewClone and previewClone.Parent then
+                    for ai, sf in ipairs(anim.selfFlings) do
+                        local arrow = Instance.new("Part")
+                        arrow.Name = "FlingArrow_" .. ai
+                        arrow.Anchored = true; arrow.CanCollide = false
+                        arrow.Material = Enum.Material.Neon
+                        arrow.Color = sf.type == "camera" and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(50, 255, 255)
+                        arrow.Transparency = 0.9
+                        arrow.Size = Vector3.new(0.3, 0.3, math.clamp(sf.strength / 50, 1, 10))
+                        arrow.Parent = workspace
+                        table.insert(previewArrows, arrow)
+                    end
+                end
+
+                for sfIdx, sf in ipairs(anim.selfFlings) do
+                    local sfRow = Instance.new("Frame")
+                    sfRow.Size = UDim2.new(1, 0, 0, 0)
+                    sfRow.AutomaticSize = Enum.AutomaticSize.Y
+                    sfRow.BackgroundColor3 = Color3.fromRGB(35, 40, 35)
+                    sfRow.BackgroundTransparency = 0.3
+                    sfRow.BorderSizePixel = 0
+                    sfRow.Parent = sfContainer
+                    Instance.new("UICorner", sfRow).CornerRadius = UDim.new(0, 3)
+                    local sfPad = Instance.new("UIPadding", sfRow)
+                    sfPad.PaddingTop = UDim.new(0, 2); sfPad.PaddingBottom = UDim.new(0, 2)
+                    sfPad.PaddingLeft = UDim.new(0, 4); sfPad.PaddingRight = UDim.new(0, 4)
+                    Instance.new("UIListLayout", sfRow).Padding = UDim.new(0, 2)
+
+                    -- Line 1: Type + Direction + Delete
+                    local line1 = Instance.new("Frame")
+                    line1.Size = UDim2.new(1, 0, 0, 16)
+                    line1.BackgroundTransparency = 1
+                    line1.Parent = sfRow
+
+                    local typeBtn = Instance.new("TextButton")
+                    typeBtn.Size = UDim2.new(0, 60, 0, 14)
+                    typeBtn.Position = UDim2.new(0, 0, 0, 1)
+                    typeBtn.BackgroundColor3 = sf.type == "camera" and TH.green or Color3.fromRGB(0, 200, 200)
+                    typeBtn.BorderSizePixel = 0
+                    typeBtn.Text = sf.type == "camera" and "Camera" or "Player"
+                    typeBtn.TextColor3 = Color3.fromRGB(20, 20, 20)
+                    typeBtn.TextSize = 9
+                    typeBtn.Font = Enum.Font.GothamBold
+                    typeBtn.Parent = line1
+                    Instance.new("UICorner", typeBtn).CornerRadius = UDim.new(0, 3)
+
+                    local dirBtn = Instance.new("TextButton")
+                    dirBtn.Size = UDim2.new(0, 58, 0, 14)
+                    dirBtn.Position = UDim2.new(0, 64, 0, 1)
+                    dirBtn.BackgroundColor3 = TH.btn
+                    dirBtn.BorderSizePixel = 0
+                    dirBtn.Text = sf.direction or "Forward"
+                    dirBtn.TextColor3 = TH.text
+                    dirBtn.TextSize = 8
+                    dirBtn.Font = Enum.Font.Gotham
+                    dirBtn.Visible = sf.type == "player"
+                    dirBtn.Parent = line1
+                    Instance.new("UICorner", dirBtn).CornerRadius = UDim.new(0, 3)
+
+                    local sfDel = Instance.new("TextButton")
+                    sfDel.Size = UDim2.new(0, 16, 0, 14)
+                    sfDel.Position = UDim2.new(1, -16, 0, 1)
+                    sfDel.BackgroundColor3 = TH.red
+                    sfDel.BorderSizePixel = 0
+                    sfDel.Text = "X"
+                    sfDel.TextColor3 = TH.text
+                    sfDel.TextSize = 8
+                    sfDel.Font = Enum.Font.GothamBold
+                    sfDel.Parent = line1
+                    Instance.new("UICorner", sfDel).CornerRadius = UDim.new(0, 2)
+
+                    -- Line 2: Strength + Frame + Until Contact
+                    local line2 = Instance.new("Frame")
+                    line2.Size = UDim2.new(1, 0, 0, 16)
+                    line2.BackgroundTransparency = 1
+                    line2.Parent = sfRow
+
+                    local strLbl = Instance.new("TextLabel")
+                    strLbl.Size = UDim2.new(0, 20, 1, 0)
+                    strLbl.BackgroundTransparency = 1
+                    strLbl.Text = "Str:"
+                    strLbl.TextColor3 = TH.muted
+                    strLbl.TextSize = 8
+                    strLbl.Font = Enum.Font.Gotham
+                    strLbl.TextXAlignment = Enum.TextXAlignment.Left
+                    strLbl.Parent = line2
+
+                    local strBox = Instance.new("TextBox")
+                    strBox.Size = UDim2.new(0, 34, 0, 14)
+                    strBox.Position = UDim2.new(0, 20, 0, 1)
+                    strBox.BackgroundColor3 = TH.btn
+                    strBox.BorderSizePixel = 0
+                    strBox.Text = tostring(sf.strength)
+                    strBox.TextColor3 = TH.text
+                    strBox.TextSize = 9
+                    strBox.Font = Enum.Font.Gotham
+                    strBox.ClearTextOnFocus = false
+                    strBox.Parent = line2
+                    Instance.new("UICorner", strBox).CornerRadius = UDim.new(0, 2)
+
+                    local frmLbl = Instance.new("TextLabel")
+                    frmLbl.Size = UDim2.new(0, 32, 1, 0)
+                    frmLbl.Position = UDim2.new(0, 60, 0, 0)
+                    frmLbl.BackgroundTransparency = 1
+                    frmLbl.Text = "Frame:"
+                    frmLbl.TextColor3 = TH.muted
+                    frmLbl.TextSize = 8
+                    frmLbl.Font = Enum.Font.Gotham
+                    frmLbl.TextXAlignment = Enum.TextXAlignment.Left
+                    frmLbl.Parent = line2
+
+                    local frmBox = Instance.new("TextBox")
+                    frmBox.Size = UDim2.new(0, 28, 0, 14)
+                    frmBox.Position = UDim2.new(0, 92, 0, 1)
+                    frmBox.BackgroundColor3 = TH.btn
+                    frmBox.BorderSizePixel = 0
+                    frmBox.Text = tostring(sf.frame)
+                    frmBox.TextColor3 = TH.text
+                    frmBox.TextSize = 9
+                    frmBox.Font = Enum.Font.Gotham
+                    frmBox.ClearTextOnFocus = false
+                    frmBox.Parent = line2
+                    Instance.new("UICorner", frmBox).CornerRadius = UDim.new(0, 2)
+
+                    local contactBtn = Instance.new("TextButton")
+                    contactBtn.Size = UDim2.new(0, 76, 0, 14)
+                    contactBtn.Position = UDim2.new(0, 126, 0, 1)
+                    contactBtn.BackgroundColor3 = sf.untilContact and TH.green or TH.btn
+                    contactBtn.BorderSizePixel = 0
+                    contactBtn.Text = sf.untilContact and "Contact: ON" or "Contact: OFF"
+                    contactBtn.TextColor3 = sf.untilContact and Color3.fromRGB(20, 20, 20) or TH.muted
+                    contactBtn.TextSize = 8
+                    contactBtn.Font = Enum.Font.GothamBold
+                    contactBtn.Parent = line2
+                    Instance.new("UICorner", contactBtn).CornerRadius = UDim.new(0, 2)
+
+                    -- Event handlers
+                    typeBtn.MouseButton1Click:Connect(function()
+                        sf.type = sf.type == "camera" and "player" or "camera"
+                        if sf.type == "player" and not sf.direction then sf.direction = "Forward" end
+                        refreshSelfFlings()
+                    end)
+
+                    local dirOptions = {"Forward", "Backward", "Left", "Right", "Up", "Down"}
+                    dirBtn.MouseButton1Click:Connect(function()
+                        local curI = 1
+                        for i, d in ipairs(dirOptions) do if d == sf.direction then curI = i end end
+                        curI = (curI % #dirOptions) + 1
+                        sf.direction = dirOptions[curI]
+                        dirBtn.Text = sf.direction
+                    end)
+
+                    strBox.FocusLost:Connect(function()
+                        local v = tonumber(strBox.Text)
+                        if v and v > 0 then sf.strength = v end
+                    end)
+
+                    frmBox.FocusLost:Connect(function()
+                        local v = tonumber(frmBox.Text)
+                        if v and v >= 1 and v <= #anim.frames then sf.frame = math.floor(v) end
+                    end)
+
+                    contactBtn.MouseButton1Click:Connect(function()
+                        sf.untilContact = not sf.untilContact
+                        contactBtn.BackgroundColor3 = sf.untilContact and TH.green or TH.btn
+                        contactBtn.Text = sf.untilContact and "Contact: ON" or "Contact: OFF"
+                        contactBtn.TextColor3 = sf.untilContact and Color3.fromRGB(20, 20, 20) or TH.muted
+                    end)
+
+                    sfDel.MouseButton1Click:Connect(function()
+                        table.remove(anim.selfFlings, sfIdx)
+                        refreshSelfFlings()
+                    end)
+                end
+            end
+
+            sfAddBtn.MouseButton1Click:Connect(function()
+                table.insert(anim.selfFlings, {
+                    type = "camera",
+                    direction = "Forward",
+                    strength = 150,
+                    frame = math.max(1, math.floor(#anim.frames / 4)),
+                    untilContact = false,
+                })
+                refreshSelfFlings()
+            end)
+
+            refreshSelfFlings()
         end
     end
 end
@@ -713,6 +1059,8 @@ function showAnimIdInput(slot)
             frames = result.frames,
             hitRange = 10,
             hitFrame = math.floor(#result.frames / 3),
+            hitboxDuration = 1,
+            selfFlings = {},
         }
         table.insert(animations, entry)
         popup:Destroy()
@@ -829,9 +1177,14 @@ local function compileScript()
     w("local shp = sethiddenproperty or set_hidden_property or function() end")
     w("")
 
+    -- Helper to get consistent variable name for an animation
+    local function getVarName(anim)
+        return (anim.name or anim.slot):gsub("[^%w]", "_"):gsub("_+", "_"):gsub("^_", ""):gsub("_$", "")
+    end
+
     -- Output animation data
     for idx, anim in ipairs(animations) do
-        local varName = (anim.name or anim.slot):gsub("[^%w]", "_"):gsub("_+", "_"):gsub("^_", ""):gsub("_$", "")
+        local varName = getVarName(anim)
         w("-- " .. (anim.name or anim.slot) .. " (" .. anim.slot .. ", " .. #anim.frames .. " frames)")
         w("local " .. varName .. "Tween = " .. anim.tween)
         w("local " .. varName .. "Frames = {")
@@ -890,7 +1243,74 @@ local function compileScript()
     w("local function onDeath() active=false; char.Parent=workspace; player.Character=workspace:FindFirstChild(char.Name); hum:ChangeState(15); pcall(function() hum.PlatformStand=false end); if fakeRig then fakeRig:Destroy() end; for _,e in pairs(rEvents) do pcall(function() e:Disconnect() end) end end")
     w("table.insert(rEvents, fakeHum.Died:Connect(onDeath))")
     w("player.Character = fakeRig")
-    w("task.spawn(function() task.wait(Players.RespawnTime+0.5); pcall(function() local h=char:FindFirstChild('Head'); if h then h:BreakJoints() end end); offsets['Head']=fakeRig:FindFirstChild('Head') end)")
+
+    if reanimMode == "deathcycle" then
+        w("")
+        w("-- [Death Cycle Reanimate] — kills character to free accessories, respawn loop")
+        w("pcall(function() workspace.FallenPartsDestroyHeight = 0/0 end)")
+        w("offsets['Head'] = fakeRig:FindFirstChild('Head')")
+        w("")
+        w("table.insert(rEvents, RunService.RenderStepped:Connect(function()")
+        w("    if not active then return end")
+        w("    pcall(function() workspace.CurrentCamera.CameraSubject = fakeHum; player.Character = fakeRig end)")
+        w("end))")
+        w("")
+        w("player.CharacterAdded:Connect(function(newChar)")
+        w("    if not active or newChar == fakeRig then return end")
+        w("    task.spawn(function()")
+        w("        pcall(function()")
+        w("            local hrp = newChar:WaitForChild('HumanoidRootPart', 5)")
+        w("            if not hrp then return end")
+        w("            local newHum = newChar:FindFirstChildOfClass('Humanoid')")
+        w("            local fakeHRP = fakeRig:FindFirstChild('HumanoidRootPart')")
+        w("            if fakeHRP then hrp.CFrame = fakeHRP.CFrame end")
+        w("            char = newChar; hum = newHum; rootP = hrp")
+        w("            pcall(function() if newChar:FindFirstChild('Animate') then newChar.Animate.Disabled = true end; for _, t in ipairs(newHum:GetPlayingAnimationTracks()) do t:Stop() end end)")
+        w("            bvs = {}")
+        w("            for _, v in ipairs(newChar:GetDescendants()) do")
+        w("                if v:IsA('BasePart') then")
+        w("                    v.CustomPhysicalProperties = PhysicalProperties.new(0,0,0,0,0)")
+        w("                    v.Massless = true; v.CanCollide = false")
+        w("                    local abv = Instance.new('BodyAngularVelocity'); abv.P = math.huge; abv.MaxTorque = Vector3.new(math.huge,math.huge,math.huge); abv.AngularVelocity = Vector3.zero; abv.Parent = v")
+        w("                    local bv = Instance.new('BodyVelocity'); bv.P = math.huge; bv.MaxForce = Vector3.new(math.huge,math.huge,math.huge); bv.Velocity = vel; bv.Parent = v")
+        w("                    table.insert(bvs, bv)")
+        w("                end")
+        w("            end")
+        w("            rootBV = nil; for _, bv in ipairs(bvs) do if bv.Parent == rootP then rootBV = bv; break end end")
+        w("            for _, name in ipairs({'HumanoidRootPart','Torso','Head','Right Arm','Left Arm','Right Leg','Left Leg'}) do")
+        w("                local real = newChar:FindFirstChild(name); local fake = fakeRig:FindFirstChild(name)")
+        w("                if real and fake then real.CFrame = fake.CFrame end")
+        w("            end")
+        w("            newHum:ChangeState('Physics'); newHum.PlatformStand = true")
+        w("            newChar.Parent = fakeRig; charDesc = newChar:GetDescendants()")
+        w("            newChar:BreakJoints()")
+        w("            for _, name in ipairs({'HumanoidRootPart','Torso','Head','Right Arm','Left Arm','Right Leg','Left Leg'}) do")
+        w("                local real = newChar:FindFirstChild(name); local fake = fakeRig:FindFirstChild(name)")
+        w("                if real and fake then real.CFrame = fake.CFrame; real.AssemblyLinearVelocity = Vector3.zero; real.AssemblyAngularVelocity = Vector3.zero end")
+        w("            end")
+        w("        end)")
+        w("        player.Character = fakeRig")
+        w("    end)")
+        w("end)")
+        w("")
+        w("task.spawn(function()")
+        w("    task.wait(0.5)")
+        w("    pcall(function()")
+        w("        for _, name in ipairs({'HumanoidRootPart','Torso','Head','Right Arm','Left Arm','Right Leg','Left Leg'}) do")
+        w("            local real = char:FindFirstChild(name); local fake = fakeRig:FindFirstChild(name)")
+        w("            if real and fake then real.CFrame = fake.CFrame end")
+        w("        end")
+        w("        char:BreakJoints()")
+        w("        for _, name in ipairs({'HumanoidRootPart','Torso','Head','Right Arm','Left Arm','Right Leg','Left Leg'}) do")
+        w("            local real = char:FindFirstChild(name); local fake = fakeRig:FindFirstChild(name)")
+        w("            if real and fake then real.CFrame = fake.CFrame; real.AssemblyLinearVelocity = Vector3.zero; real.AssemblyAngularVelocity = Vector3.zero end")
+        w("        end")
+        w("    end)")
+        w("end)")
+    else
+        w("task.spawn(function() task.wait(Players.RespawnTime+0.5); pcall(function() local h=char:FindFirstChild('Head'); if h then h:BreakJoints() end end); offsets['Head']=fakeRig:FindFirstChild('Head') end)")
+    end
+
     w("")
     w("task.wait(0.3)")
     w("")
@@ -906,14 +1326,15 @@ local function compileScript()
     w("")
     w("local currentAnim = 'idle'")
     w("local attacking = false")
+    w("local pendingAttack = nil")
     w("")
     w("local function playCycle(frames, tween, animName)")
     w("    for i = 1, #frames - 1 do")
-    w("        if not active or currentAnim ~= animName then return end")
+    w("        if not active or attacking or pendingAttack or currentAnim ~= animName then return end")
     w("        local from, to = frames[i], frames[i+1]")
     w("        local st = tick()")
     w("        while tick() - st < tween do")
-    w("            if not active or currentAnim ~= animName then return end")
+    w("            if not active or attacking or pendingAttack or currentAnim ~= animName then return end")
     w("            local a = math.clamp((tick()-st)/tween, 0, 1)")
     w("            for name, motor in pairs(jMap) do if from[name] and to[name] then motor.C0 = from[name]:Lerp(to[name], a) end end")
     w("            RunService.Heartbeat:Wait()")
@@ -945,6 +1366,8 @@ local function compileScript()
         w("    return targets")
         w("end")
         w("")
+        w("local function flingTarget(tHRP) flingTargetHRP=tHRP; task.delay(0.5, function() if flingTargetHRP==tHRP then flingTargetHRP=nil end end) end")
+        w("")
     end
 
     -- Build attacks list
@@ -955,77 +1378,176 @@ local function compileScript()
         if a.slot == "keybind attack" or a.slot == "keybind animation" then table.insert(keybindAnims, a) end
     end
 
+    -- Frame playback helper
+    w("local function playFrameRange(frames, tween, onFrame)")
+    w("    for i = 1, #frames - 1 do")
+    w("        if not active then return end")
+    w("        if onFrame then onFrame(i) end")
+    w("        local from, to = frames[i], frames[i+1]; local st = tick()")
+    w("        while tick()-st < tween do if not active then return end; local a=math.clamp((tick()-st)/tween,0,1); for name,motor in pairs(jMap) do if from[name] and to[name] then motor.C0=from[name]:Lerp(to[name],a) end end; RunService.Heartbeat:Wait() end")
+    w("        for name,motor in pairs(jMap) do if to[name] then motor.C0=to[name] end end")
+    w("    end")
+    w("end")
+    w("")
+    w("-- Self fling system")
+    w("local selfFlingBV = nil")
+    w("local function stopSelfFling() if selfFlingBV and selfFlingBV.Parent then selfFlingBV:Destroy() end; selfFlingBV = nil end")
+    w("local function applySelfFling(sfType, sfDir, sfStrength, sfUntilContact)")
+    w("    stopSelfFling()")
+    w("    local dir")
+    w("    if sfType == 'camera' then")
+    w("        local cam = workspace.CurrentCamera")
+    w("        dir = cam.CFrame.LookVector")
+    w("    else")
+    w("        local cf = fakeHRP.CFrame")
+    w("        local dirs = {Forward=cf.LookVector, Backward=-cf.LookVector, Left=-cf.RightVector, Right=cf.RightVector, Up=cf.UpVector, Down=-cf.UpVector}")
+    w("        dir = dirs[sfDir] or cf.LookVector")
+    w("    end")
+    w("    local flingVel = dir * sfStrength")
+    w("    selfFlingBV = Instance.new('BodyVelocity')")
+    w("    selfFlingBV.P = 10000")
+    w("    selfFlingBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)")
+    w("    selfFlingBV.Velocity = flingVel")
+    w("    selfFlingBV.Parent = fakeHRP")
+    w("    if sfUntilContact then")
+    w("        task.spawn(function()")
+    w("            task.wait(0.1)")
+    w("            local lastPos = fakeHRP.Position")
+    w("            local maxTime = tick() + 5")
+    w("            while selfFlingBV and selfFlingBV.Parent and tick() < maxTime do")
+    w("                RunService.Heartbeat:Wait()")
+    w("                local currPos = fakeHRP.Position")
+    w("                if (currPos - lastPos).Magnitude < 0.3 then break end")
+    w("                lastPos = currPos")
+    w("            end")
+    w("            stopSelfFling()")
+    w("        end)")
+    w("    else")
+    w("        task.delay(0.4, stopSelfFling)")
+    w("    end")
+    w("end")
+    w("")
+
     -- M1 combo system
     if #m1Attacks > 0 then
         w("local m1Attacks = {")
         for i, a in ipairs(m1Attacks) do
-            local varName = "attack_" .. (i + ({} and 0 or 0)) -- find actual index
-            for idx2, a2 in ipairs(animations) do if a2 == a then varName = a2.slot:gsub(" ", "_") .. "_" .. idx2; break end end
+            local varName = getVarName(a)
             local off = a.hitboxOffset or Vector3.new(0,0,-5)
             local sz = a.hitboxSize or Vector3.new(6,6,6)
-            w("    { frames=" .. varName .. "Frames, tween=" .. varName .. "Tween, hitFrame=" .. (a.hitFrame or 4) .. ", hitOffset=Vector3.new(" .. off.X .. "," .. off.Y .. "," .. off.Z .. "), hitSize=Vector3.new(" .. sz.X .. "," .. sz.Y .. "," .. sz.Z .. ") },")
+            local hitDur = a.hitboxDuration or 1
+            -- Serialize self flings
+            local sfParts = {}
+            for _, sf in ipairs(a.selfFlings or {}) do
+                table.insert(sfParts, "{type='" .. sf.type .. "',dir='" .. (sf.direction or "Forward") .. "',strength=" .. sf.strength .. ",frame=" .. sf.frame .. ",untilContact=" .. tostring(sf.untilContact) .. "}")
+            end
+            local sfStr = "selfFlings={" .. table.concat(sfParts, ",") .. "}"
+            w("    { frames=" .. varName .. "Frames, tween=" .. varName .. "Tween, hitFrame=" .. (a.hitFrame or 4) .. ", hitDuration=" .. hitDur .. ", hitOffset=Vector3.new(" .. off.X .. "," .. off.Y .. "," .. off.Z .. "), hitSize=Vector3.new(" .. sz.X .. "," .. sz.Y .. "," .. sz.Z .. "), " .. sfStr .. " },")
         end
         w("}")
-        w("local comboIndex = 1; local lastAttackTime = 0; local COMBO_WINDOW = 0.8")
-        w("")
-        w("local function playAttack(atk)")
-        w("    attacking = true; currentAnim = 'attack'")
-        w("    for i = 1, #atk.frames - 1 do")
-        w("        if not active then break end")
-        w("        if i == atk.hitFrame then local targets = findTargets(atk.hitOffset, atk.hitSize); for _,tHRP in ipairs(targets) do task.spawn(function() flingTargetHRP=tHRP; task.wait(0.15); flingTargetHRP=nil end) end end")
-        w("        local from, to = atk.frames[i], atk.frames[i+1]; local st = tick()")
-        w("        while tick()-st < atk.tween do if not active then break end; local a=math.clamp((tick()-st)/atk.tween,0,1); for name,motor in pairs(jMap) do if from[name] and to[name] then motor.C0=from[name]:Lerp(to[name],a) end end; RunService.Heartbeat:Wait() end")
-        w("        for name,motor in pairs(jMap) do if to[name] then motor.C0=to[name] end end")
-        w("    end")
-        w("    lastAttackTime = tick(); attacking = false")
-        w("end")
-        w("")
-        w("table.insert(rEvents, UIS.InputBegan:Connect(function(input, gpe) if gpe or not active then return end; if input.UserInputType == Enum.UserInputType.MouseButton1 then if attacking then return end; if tick()-lastAttackTime > COMBO_WINDOW then comboIndex=1 end; playAttack(m1Attacks[comboIndex]); comboIndex=(comboIndex%#m1Attacks)+1 end end))")
+        w("local comboIndex = 1; local lastAttackTime = 0; local COMBO_WINDOW = 3")
         w("")
     end
 
-    -- Keybind attacks/animations
+    -- Double tap tracking
+    local hasDoubleTap = false
+    for _, a in ipairs(keybindAnims) do if a.doubleTap then hasDoubleTap = true; break end end
+    if hasDoubleTap then
+        w("local lastKeyTimes = {}")
+    end
+
+    -- Input handler — never yields, just sets pendingAttack
+    w("table.insert(rEvents, UIS.InputBegan:Connect(function(input, gpe)")
+    w("    if gpe or not active or attacking then return end")
+    if #m1Attacks > 0 then
+        w("    if input.UserInputType == Enum.UserInputType.MouseButton1 then")
+        w("        if tick()-lastAttackTime > COMBO_WINDOW then comboIndex=1 end")
+        w("        pendingAttack = {type='m1', atk=m1Attacks[comboIndex]}")
+        w("        comboIndex=(comboIndex%#m1Attacks)+1")
+    end
     for _, a in ipairs(keybindAnims) do
         if a.keybind then
-            local varName
-            for idx2, a2 in ipairs(animations) do if a2 == a then varName = a2.slot:gsub(" ", "_") .. "_" .. idx2; break end end
-            if a.slot == "keybind attack" then
-                w("table.insert(rEvents, UIS.InputBegan:Connect(function(input, gpe) if gpe or not active or attacking then return end")
-                w("    if input.KeyCode == Enum.KeyCode." .. a.keybind .. " then")
-                w("        attacking = true; currentAnim = 'attack'")
-                w("        for i = 1, #" .. varName .. "Frames - 1 do")
-                w("            if not active then break end")
-                local koff = a.hitboxOffset or Vector3.new(0,0,-5)
-                local ksz = a.hitboxSize or Vector3.new(6,6,6)
-                w("            if i == " .. (a.hitFrame or 4) .. " then local targets = findTargets(Vector3.new(" .. koff.X .. "," .. koff.Y .. "," .. koff.Z .. "), Vector3.new(" .. ksz.X .. "," .. ksz.Y .. "," .. ksz.Z .. ")); for _,tHRP in ipairs(targets) do task.spawn(function() flingTargetHRP=tHRP; task.wait(0.15); flingTargetHRP=nil end) end end")
-                w("            local from, to = " .. varName .. "Frames[i], " .. varName .. "Frames[i+1]; local st = tick()")
-                w("            while tick()-st < " .. varName .. "Tween do if not active then break end; local a=math.clamp((tick()-st)/" .. varName .. "Tween,0,1); for name,motor in pairs(jMap) do if from[name] and to[name] then motor.C0=from[name]:Lerp(to[name],a) end end; RunService.Heartbeat:Wait() end")
-                w("            for name,motor in pairs(jMap) do if to[name] then motor.C0=to[name] end end")
-                w("        end")
-                w("        attacking = false")
-                w("    end")
-                w("end))")
+            w("    elseif input.KeyCode == Enum.KeyCode." .. a.keybind .. " then")
+            if a.doubleTap then
+                w("        local now = tick(); local last = lastKeyTimes['" .. a.keybind .. "'] or 0")
+                w("        if now - last < 0.35 then pendingAttack = {type='" .. a.keybind .. "'}; lastKeyTimes['" .. a.keybind .. "'] = 0")
+                w("        else lastKeyTimes['" .. a.keybind .. "'] = now end")
             else
-                w("table.insert(rEvents, UIS.InputBegan:Connect(function(input, gpe) if gpe or not active or attacking then return end")
-                w("    if input.KeyCode == Enum.KeyCode." .. a.keybind .. " then")
-                w("        attacking = true; currentAnim = 'keybind'")
-                w("        playCycle(" .. varName .. "Frames, " .. varName .. "Tween, 'keybind')")
-                w("        attacking = false")
-                w("    end")
-                w("end))")
+                w("        pendingAttack = {type='" .. a.keybind .. "'}")
             end
-            w("")
         end
     end
+    if #m1Attacks > 0 or #keybindAnims > 0 then
+        w("    end")
+    end
+    w("end))")
+    w("")
 
     -- Movement detection
     w("table.insert(rEvents, RunService.Heartbeat:Connect(function() if not active or attacking then return end; local moving = fakeHum.MoveDirection.Magnitude > 0.1; currentAnim = moving and 'walk' or 'idle' end))")
     w("")
 
-    -- Main animation loop
+    -- Main animation loop — single thread handles cycling anims and attacks
     w("task.spawn(function()")
     w("    while active do")
-    w("        if attacking then RunService.Heartbeat:Wait()")
+    w("        if pendingAttack then")
+    w("            local pa = pendingAttack; pendingAttack = nil")
+    w("            attacking = true; currentAnim = 'attack'")
+
+    -- M1 attacks
+    if #m1Attacks > 0 then
+        w("            if pa.type == 'm1' then")
+        w("                local atk = pa.atk")
+        if hasAttacks then
+            w("                playFrameRange(atk.frames, atk.tween, function(i)")
+            w("                    if i >= atk.hitFrame and i <= atk.hitFrame + atk.hitDuration - 1 then pcall(function() local targets = findTargets(atk.hitOffset, atk.hitSize); for _,tHRP in ipairs(targets) do flingTarget(tHRP) end end) end")
+            w("                    for _,sf in ipairs(atk.selfFlings) do if i == sf.frame then applySelfFling(sf.type, sf.dir, sf.strength, sf.untilContact) end end")
+            w("                end)")
+        else
+            w("                playFrameRange(atk.frames, atk.tween)")
+        end
+        w("                lastAttackTime = tick()")
+    end
+
+    -- Keybind attacks
+    local first = #m1Attacks > 0
+    for _, a in ipairs(keybindAnims) do
+        if a.keybind then
+            local varName = getVarName(a)
+            local prefix = first and "            elseif" or "            if"
+            w(prefix .. " pa.type == '" .. a.keybind .. "' then")
+            if a.slot == "keybind attack" and hasAttacks then
+                local koff = a.hitboxOffset or Vector3.new(0,0,-5)
+                local ksz = a.hitboxSize or Vector3.new(6,6,6)
+                local hitDur = a.hitboxDuration or 1
+                local hitEnd = (a.hitFrame or 4) + hitDur - 1
+                w("                playFrameRange(" .. varName .. "Frames, " .. varName .. "Tween, function(i)")
+                w("                    if i >= " .. (a.hitFrame or 4) .. " and i <= " .. hitEnd .. " then pcall(function() local targets = findTargets(Vector3.new(" .. koff.X .. "," .. koff.Y .. "," .. koff.Z .. "), Vector3.new(" .. ksz.X .. "," .. ksz.Y .. "," .. ksz.Z .. ")); for _,tHRP in ipairs(targets) do flingTarget(tHRP) end end) end")
+                for _, sf in ipairs(a.selfFlings or {}) do
+                    w("                    if i == " .. sf.frame .. " then applySelfFling('" .. sf.type .. "', '" .. (sf.direction or "Forward") .. "', " .. sf.strength .. ", " .. tostring(sf.untilContact) .. ") end")
+                end
+                w("                end)")
+            else
+                -- Keybind animation or attack without hitbox — still support self flings
+                if a.selfFlings and #a.selfFlings > 0 then
+                    w("                playFrameRange(" .. varName .. "Frames, " .. varName .. "Tween, function(i)")
+                    for _, sf in ipairs(a.selfFlings) do
+                        w("                    if i == " .. sf.frame .. " then applySelfFling('" .. sf.type .. "', '" .. (sf.direction or "Forward") .. "', " .. sf.strength .. ", " .. tostring(sf.untilContact) .. ") end")
+                    end
+                    w("                end)")
+                else
+                    w("                playFrameRange(" .. varName .. "Frames, " .. varName .. "Tween)")
+                end
+            end
+            first = true
+        end
+    end
+
+    if first then
+        w("            end")
+    end
+
+    w("            attacking = false; currentAnim = 'idle'")
 
     -- Walk
     local walkAnim = nil; local idleAnim = nil
@@ -1035,11 +1557,11 @@ local function compileScript()
     end
 
     if walkAnim then
-        local varName; for idx2, a2 in ipairs(animations) do if a2 == walkAnim then varName = "walk_" .. idx2; break end end
+        local varName = getVarName(walkAnim)
         w("        elseif currentAnim == 'walk' then playCycle(" .. varName .. "Frames, " .. varName .. "Tween, 'walk')")
     end
     if idleAnim then
-        local varName; for idx2, a2 in ipairs(animations) do if a2 == idleAnim then varName = "idle_" .. idx2; break end end
+        local varName = getVarName(idleAnim)
         w("        else playCycle(" .. varName .. "Frames, " .. varName .. "Tween, 'idle')")
     else
         w("        else RunService.Heartbeat:Wait()")
@@ -1064,7 +1586,7 @@ local function compileScript()
         if writefile then writefile("CompiledReanim.lua", result) end
     end)
 
-    print("[Compiler] Script compiled (" .. #result .. " chars, " .. #animations .. " animations) — copied to clipboard + saved to CompiledReanim.lua")
+    print("[Compiler] Script compiled (" .. #result .. " chars, " .. #animations .. " animations, " .. reanimMode .. " mode) — copied to clipboard + saved to CompiledReanim.lua")
     return result
 end
 
@@ -1107,6 +1629,31 @@ Instance.new("UICorner", clearBtn).CornerRadius = UDim.new(0, 4)
 clearBtn.MouseButton1Click:Connect(function()
     animations = {}
     refreshList()
+end)
+
+local modeBtn = Instance.new("TextButton")
+modeBtn.Size = UDim2.new(0, 120, 1, 0)
+modeBtn.BackgroundColor3 = TH.panel
+modeBtn.BorderSizePixel = 0
+modeBtn.Text = "Mode: Normal"
+modeBtn.TextColor3 = TH.muted
+modeBtn.TextSize = 10
+modeBtn.Font = Enum.Font.GothamBold
+modeBtn.Parent = bottomBar
+Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0, 4)
+Instance.new("UIStroke", modeBtn).Color = TH.muted
+modeBtn.MouseButton1Click:Connect(function()
+    if reanimMode == "normal" then
+        reanimMode = "deathcycle"
+        modeBtn.Text = "Mode: Death Cycle"
+        modeBtn.TextColor3 = TH.orange
+        modeBtn:FindFirstChildOfClass("UIStroke").Color = TH.orange
+    else
+        reanimMode = "normal"
+        modeBtn.Text = "Mode: Normal"
+        modeBtn.TextColor3 = TH.muted
+        modeBtn:FindFirstChildOfClass("UIStroke").Color = TH.muted
+    end
 end)
 
 ---------- SIXZEROHUB REGISTRATION ----------
