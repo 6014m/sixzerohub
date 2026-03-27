@@ -1,0 +1,259 @@
+-- [Dev] Animation Logger
+-- Logs all animations played on any character, shows ID + name + length
+-- Click an entry to copy the animation ID
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local localPlayer = Players.LocalPlayer
+local connections = {}
+local active = true
+
+local logged = {} -- { { id, name, player, length, time } }
+local seen = {} -- dedup: id_playerName -> true
+local MAX_LOG = 200
+
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "AnimLogger"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 10
+local ok, hui = pcall(gethui)
+gui.Parent = ok and hui or localPlayer:WaitForChild("PlayerGui")
+
+local panel = Instance.new("Frame")
+panel.Size = UDim2.new(0, 320, 0, 340)
+panel.Position = UDim2.new(1, -330, 0, 10)
+panel.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+panel.BackgroundTransparency = 0.05
+panel.BorderSizePixel = 0
+panel.Parent = gui
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", panel).Color = Color3.fromRGB(0, 170, 255)
+
+-- Title bar (draggable)
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 26)
+titleBar.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = panel
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 8)
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(1, -60, 1, 0)
+titleLbl.Position = UDim2.new(0, 8, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "Animation Logger"
+titleLbl.TextColor3 = Color3.fromRGB(0, 170, 255)
+titleLbl.TextSize = 11
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Parent = titleBar
+
+local countLbl = Instance.new("TextLabel")
+countLbl.Size = UDim2.new(0, 40, 1, 0)
+countLbl.Position = UDim2.new(1, -60, 0, 0)
+countLbl.BackgroundTransparency = 1
+countLbl.Text = "0"
+countLbl.TextColor3 = Color3.fromRGB(140, 140, 140)
+countLbl.TextSize = 10
+countLbl.Font = Enum.Font.Gotham
+countLbl.Parent = titleBar
+
+-- Drag
+local dragging, dragStart, dragPos = false, nil, nil
+titleBar.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; dragStart = i.Position; dragPos = panel.Position end end)
+game:GetService("UserInputService").InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then local d = i.Position - dragStart; panel.Position = UDim2.new(dragPos.X.Scale, dragPos.X.Offset + d.X, dragPos.Y.Scale, dragPos.Y.Offset + d.Y) end end)
+game:GetService("UserInputService").InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+
+-- Filter row
+local filterRow = Instance.new("Frame")
+filterRow.Size = UDim2.new(1, -8, 0, 22)
+filterRow.Position = UDim2.new(0, 4, 0, 28)
+filterRow.BackgroundTransparency = 1
+filterRow.Parent = panel
+
+local filterBox = Instance.new("TextBox")
+filterBox.Size = UDim2.new(1, -50, 1, 0)
+filterBox.BackgroundColor3 = Color3.fromRGB(36, 36, 40)
+filterBox.BorderSizePixel = 0
+filterBox.Text = ""
+filterBox.PlaceholderText = "Filter..."
+filterBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
+filterBox.TextColor3 = Color3.new(1, 1, 1)
+filterBox.TextSize = 10
+filterBox.Font = Enum.Font.Gotham
+filterBox.ClearTextOnFocus = false
+filterBox.Parent = filterRow
+Instance.new("UICorner", filterBox).CornerRadius = UDim.new(0, 4)
+Instance.new("UIPadding", filterBox).PaddingLeft = UDim.new(0, 6)
+
+local clearBtn = Instance.new("TextButton")
+clearBtn.Size = UDim2.new(0, 44, 1, 0)
+clearBtn.Position = UDim2.new(1, -44, 0, 0)
+clearBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+clearBtn.BorderSizePixel = 0
+clearBtn.Text = "Clear"
+clearBtn.TextColor3 = Color3.new(1, 1, 1)
+clearBtn.TextSize = 10
+clearBtn.Font = Enum.Font.GothamBold
+clearBtn.Parent = filterRow
+Instance.new("UICorner", clearBtn).CornerRadius = UDim.new(0, 4)
+
+-- Scroll list
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, -8, 1, -56)
+scroll.Position = UDim2.new(0, 4, 0, 52)
+scroll.BackgroundColor3 = Color3.fromRGB(28, 28, 32)
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 3
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.Parent = panel
+Instance.new("UICorner", scroll).CornerRadius = UDim.new(0, 6)
+Instance.new("UIListLayout", scroll).Padding = UDim.new(0, 1)
+
+local function refreshList()
+    for _, c in ipairs(scroll:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    local filter = filterBox.Text:lower()
+    local shown = 0
+    for i = #logged, 1, -1 do
+        local entry = logged[i]
+        local searchStr = (entry.name .. " " .. entry.id .. " " .. entry.player):lower()
+        if filter == "" or searchStr:find(filter, 1, true) then
+            shown = shown + 1
+            local row = Instance.new("TextButton")
+            row.Size = UDim2.new(1, 0, 0, 36)
+            row.BackgroundColor3 = (shown % 2 == 0) and Color3.fromRGB(32, 32, 38) or Color3.fromRGB(26, 26, 30)
+            row.BorderSizePixel = 0
+            row.Text = ""
+            row.AutoButtonColor = false
+            row.Parent = scroll
+
+            local idLbl = Instance.new("TextLabel")
+            idLbl.Size = UDim2.new(1, -8, 0, 16)
+            idLbl.Position = UDim2.new(0, 6, 0, 2)
+            idLbl.BackgroundTransparency = 1
+            idLbl.Text = entry.id .. "  |  " .. string.format("%.1fs", entry.length) .. "  |  " .. entry.player
+            idLbl.TextColor3 = Color3.fromRGB(0, 170, 255)
+            idLbl.TextSize = 10
+            idLbl.Font = Enum.Font.GothamBold
+            idLbl.TextXAlignment = Enum.TextXAlignment.Left
+            idLbl.Parent = row
+
+            local nameLbl = Instance.new("TextLabel")
+            nameLbl.Size = UDim2.new(1, -8, 0, 14)
+            nameLbl.Position = UDim2.new(0, 6, 0, 18)
+            nameLbl.BackgroundTransparency = 1
+            nameLbl.Text = entry.name
+            nameLbl.TextColor3 = Color3.fromRGB(160, 160, 170)
+            nameLbl.TextSize = 9
+            nameLbl.Font = Enum.Font.Gotham
+            nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+            nameLbl.Parent = row
+
+            -- Click to copy ID
+            row.MouseButton1Click:Connect(function()
+                pcall(function()
+                    if setclipboard then setclipboard(entry.id)
+                    elseif toclipboard then toclipboard(entry.id) end
+                end)
+                idLbl.Text = "Copied!"
+                task.delay(1, function()
+                    if idLbl.Parent then
+                        idLbl.Text = entry.id .. "  |  " .. string.format("%.1fs", entry.length) .. "  |  " .. entry.player
+                    end
+                end)
+            end)
+        end
+    end
+    countLbl.Text = tostring(#logged)
+end
+
+clearBtn.MouseButton1Click:Connect(function()
+    logged = {}
+    seen = {}
+    refreshList()
+end)
+
+filterBox:GetPropertyChangedSignal("Text"):Connect(refreshList)
+
+-- Animation tracking
+local function onAnimPlayed(track, playerName)
+    if not active then return end
+    local animObj = track.Animation
+    if not animObj then return end
+    local rawId = animObj.AnimationId or ""
+    local id = rawId:match("%d+") or "?"
+    if id == "?" or id == "0" then return end
+
+    -- Dedup per player
+    local key = id .. "_" .. playerName
+    if seen[key] then return end
+    seen[key] = true
+
+    -- Wait briefly for length to populate
+    task.spawn(function()
+        local waited = 0
+        while track.Length <= 0 and waited < 2 do task.wait(0.1); waited = waited + 0.1 end
+        local entry = {
+            id = id,
+            name = track.Name ~= "" and track.Name or animObj.Name,
+            player = playerName,
+            length = track.Length,
+            time = os.clock(),
+        }
+        if #logged >= MAX_LOG then table.remove(logged, 1) end
+        table.insert(logged, entry)
+        refreshList()
+    end)
+end
+
+local function hookAnimator(animator, playerName)
+    local conn = animator.AnimationPlayed:Connect(function(track)
+        onAnimPlayed(track, playerName)
+    end)
+    table.insert(connections, conn)
+    -- Catch already-playing tracks
+    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+        onAnimPlayed(track, playerName)
+    end
+end
+
+local function hookCharacter(char, playerName)
+    task.spawn(function()
+        local hum = char:WaitForChild("Humanoid", 10)
+        if not hum or not active then return end
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if not animator then animator = hum:WaitForChild("Animator", 5) end
+        if animator and active then hookAnimator(animator, playerName) end
+    end)
+end
+
+local function hookPlayer(plr)
+    if plr.Character then hookCharacter(plr.Character, plr.Name) end
+    local conn = plr.CharacterAdded:Connect(function(char)
+        hookCharacter(char, plr.Name)
+    end)
+    table.insert(connections, conn)
+end
+
+for _, plr in ipairs(Players:GetPlayers()) do hookPlayer(plr) end
+local joinConn = Players.PlayerAdded:Connect(function(plr) hookPlayer(plr) end)
+table.insert(connections, joinConn)
+
+---------- SIXZEROHUB REGISTRATION ----------
+
+local function cleanup()
+    active = false
+    for _, c in ipairs(connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    connections = {}
+    pcall(function() gui:Destroy() end)
+end
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Anim Logger", "[Dev]anim_logger", cleanup, "dev")
+end
