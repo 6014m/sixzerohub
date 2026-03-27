@@ -4214,7 +4214,7 @@ end)
 local reanimAnims = {}
 
 addcmd("animate", {"animgui", "reanimanims"}, "Open GUI to browse and play reanimate animations", function(args)
-    if not _G.czReanimateActive then notify("Animate", "You need to be reanimated first (;reanimate or ;reanim2)"); return end
+    if not findFakeRig() then notify("Animate", "You need to be reanimated first"); return end
 
     -- Kill existing gui if open
     local existing = gui:FindFirstChild("AnimatePanel")
@@ -4374,6 +4374,23 @@ local loadedEmotes = {} -- name -> { tween, frames }
 local currentEmote = nil -- name of currently playing emote (nil = none)
 local emoteWheelOpen = false
 
+-- Detect any active reanimate (CZ or external) by finding the fakeRig
+local function findFakeRig()
+    if _G.czReanimateActive and _G.czReanimateFakeRig and _G.czReanimateFakeRig.Parent then
+        return _G.czReanimateFakeRig
+    end
+    -- External reanimate detection: player.Character is the fakeRig with a nested real character inside
+    local char = player.Character
+    if not char then return nil end
+    if not char:FindFirstChild("Torso") then return nil end
+    for _, child in ipairs(char:GetChildren()) do
+        if child:IsA("Model") and child:FindFirstChildOfClass("Humanoid") and child:FindFirstChild("HumanoidRootPart") then
+            return char
+        end
+    end
+    return nil
+end
+
 local function loadEmote(entry)
     if loadedEmotes[entry.name] then return loadedEmotes[entry.name] end
     local ok, data = pcall(function()
@@ -4388,8 +4405,8 @@ local function loadEmote(entry)
 end
 
 local function playEmote(emoteData, emoteName)
-    if not _G.czReanimateActive or not _G.czReanimateFakeRig then return end
-    local fakeRig = _G.czReanimateFakeRig
+    local fakeRig = findFakeRig()
+    if not fakeRig then return end
     local fakeTorso = fakeRig:FindFirstChild("Torso")
     local fakeHRP = fakeRig:FindFirstChild("HumanoidRootPart")
     local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
@@ -4432,7 +4449,7 @@ local function destroyEmoteWheel()
 end
 
 local function createEmoteWheel()
-    if not _G.czReanimateActive then notify("Emote", "You need to be reanimated first"); return end
+    if not findFakeRig() then notify("Emote", "You need to be reanimated first"); return end
     if emoteWheelOpen then destroyEmoteWheel(); return end
     emoteWheelOpen = true
 
