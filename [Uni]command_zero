@@ -4376,15 +4376,31 @@ local emoteWheelOpen = false
 
 -- Detect any active reanimate (CZ or external) by finding the fakeRig
 local function findFakeRig()
+    -- CZ's own reanimate
     if _G.czReanimateActive and _G.czReanimateFakeRig and _G.czReanimateFakeRig.Parent then
         return _G.czReanimateFakeRig
     end
-    -- External reanimate detection: player.Character is the fakeRig with a nested real character inside
     local char = player.Character
-    if not char then return nil end
-    if not char:FindFirstChild("Torso") then return nil end
+    if not char or not char:FindFirstChild("Torso") then return nil end
+    -- Method 1: nested Model with a Humanoid inside (real char parented in fakeRig)
     for _, child in ipairs(char:GetChildren()) do
-        if child:IsA("Model") and child:FindFirstChildOfClass("Humanoid") and child:FindFirstChild("HumanoidRootPart") then
+        if child:IsA("Model") and child:FindFirstChildOfClass("Humanoid") then
+            return char
+        end
+    end
+    -- Method 2: character name differs from player name (compiled reanimates rename it)
+    if char.Name ~= player.Name and char.Name ~= player.DisplayName then
+        return char
+    end
+    -- Method 3: fakeRig has all-transparent visible parts (head + torso both invisible)
+    local head = char:FindFirstChild("Head")
+    local torso = char:FindFirstChild("Torso")
+    if head and torso and head.Transparency >= 0.99 and torso.Transparency >= 0.99 then
+        return char
+    end
+    -- Method 4: descendant BasePart has BodyVelocity (real char physics setup)
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("BodyVelocity") and v.Parent and v.Parent:IsA("BasePart") then
             return char
         end
     end
