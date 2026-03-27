@@ -4420,33 +4420,45 @@ local function loadEmote(entry)
     return nil
 end
 
--- Emote override: applies emote C0 AFTER all Heartbeat processing via task.defer,
--- guaranteeing the emote wins over any reanimate animation loop.
-local emoteOverrideCFs = nil -- { motorName -> CFrame } set by emote loop
-local emoteOverrideJMap = nil
-local emoteOverrideConn = nil
+-- Emote override: swaps Motor6Ds so the reanimate's writes go to disconnected joints
+-- and the emote has exclusive control. No timing fight possible.
+local emoteMotors = nil -- { name -> new Motor6D }
+local originalPart0s = nil -- { original Motor6D -> original Part0 }
 
-local function startEmoteOverride(jMap)
+local function startEmoteOverride(origJMap)
     stopEmoteOverride()
-    emoteOverrideJMap = jMap
-    emoteOverrideCFs = {}
-    -- task.defer inside Heartbeat runs after ALL Heartbeat callbacks and Wait resumptions,
-    -- so this is the absolute last C0 write before the next frame renders.
-    emoteOverrideConn = RunService.Heartbeat:Connect(function()
-        task.defer(function()
-            if not emoteOverrideCFs or not emoteOverrideJMap then return end
-            for name, cf in pairs(emoteOverrideCFs) do
-                local motor = emoteOverrideJMap[name]
-                if motor then motor.C0 = cf end
-            end
-        end)
-    end)
+    originalPart0s = {}
+    emoteMotors = {}
+    for name, motor in pairs(origJMap) do
+        -- Save original's Part0
+        originalPart0s[motor] = motor.Part0
+        -- Create replacement Motor6D for the emote
+        local newMotor = Instance.new("Motor6D")
+        newMotor.Name = "CZ_Emote_" .. motor.Name
+        newMotor.Part0 = motor.Part0
+        newMotor.Part1 = motor.Part1
+        newMotor.C0 = motor.C0
+        newMotor.C1 = motor.C1
+        newMotor.Parent = motor.Parent
+        -- Disconnect the original (Part0=nil → joint inactive, reanimate writes do nothing)
+        motor.Part0 = nil
+        emoteMotors[name] = newMotor
+    end
 end
 
 local function stopEmoteOverride()
-    if emoteOverrideConn then pcall(function() emoteOverrideConn:Disconnect() end); emoteOverrideConn = nil end
-    emoteOverrideCFs = nil
-    emoteOverrideJMap = nil
+    -- Reconnect originals first (before destroying replacements, so limbs never detach)
+    if originalPart0s then
+        for motor, part0 in pairs(originalPart0s) do
+            pcall(function() motor.Part0 = part0 end)
+        end
+        originalPart0s = nil
+    end
+    -- Then destroy replacements
+    if emoteMotors then
+        for _, m in pairs(emoteMotors) do pcall(function() m:Destroy() end) end
+        emoteMotors = nil
+    end
 end
 
 local function playEmote(emoteData, emoteName)
@@ -4457,15 +4469,17 @@ local function playEmote(emoteData, emoteName)
     local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
     if not fakeTorso or not fakeHRP then return end
 
-    local jMap = {}
+    -- Build jMap from current Motor6Ds
+    local origJMap = {}
     for _, m in ipairs(fakeTorso:GetChildren()) do
-        if m:IsA("Motor6D") then jMap[m.Name] = m end
+        if m:IsA("Motor6D") then origJMap[m.Name] = m end
     end
     local rj = fakeHRP:FindFirstChild("RootJoint")
-    if rj then jMap["RootJoint"] = rj end
+    if rj then origJMap["RootJoint"] = rj end
 
-    -- Start RenderStepped override so emote always wins over reanimate's Heartbeat loop
-    startEmoteOverride(jMap)
+    -- Swap Motor6Ds: disconnects originals, creates emote-controlled replacements
+    startEmoteOverride(origJMap)
+    local jMap = emoteMotors
 
     currentEmote = emoteName
     while currentEmote == emoteName do
@@ -4478,21 +4492,12 @@ local function playEmote(emoteData, emoteName)
                 if currentEmote ~= emoteName then break end
                 if fakeHum and fakeHum.MoveDirection.Magnitude > 0.1 then currentEmote = nil; break end
                 local a = math.clamp((tick() - st) / emoteData.tween, 0, 1)
-                -- Update target CFs — the RenderStepped connection applies them before render
-                if emoteOverrideCFs then
-                    for name, _ in pairs(jMap) do
-                        if from[name] and to[name] then
-                            emoteOverrideCFs[name] = from[name]:Lerp(to[name], a)
-                        end
-                    end
+                for name, motor in pairs(jMap) do
+                    if from[name] and to[name] then motor.C0 = from[name]:Lerp(to[name], a) end
                 end
                 RunService.Heartbeat:Wait()
             end
-            if emoteOverrideCFs then
-                for name, _ in pairs(jMap) do
-                    if to[name] then emoteOverrideCFs[name] = to[name] end
-                end
-            end
+            for name, motor in pairs(jMap) do if to[name] then motor.C0 = to[name] end end
         end
     end
     stopEmoteOverride()
