@@ -68,13 +68,18 @@ local function copyAnimCode()
     out = out .. "local keyframes = {\n"
     for i, cd in ipairs(clonesList) do
         out = out .. "    { -- Frame " .. i .. "\n"
-        for _, j in ipairs(cd.joints) do
-            if j.motor then
-                local cs = {j.motor.C0:GetComponents()}
-                local pts = {}
-                for _, v in ipairs(cs) do table.insert(pts, string.format("%.4f", v)) end
-                out = out .. string.format('        ["%s"] = CFrame.new(%s),\n', j.name, table.concat(pts, ", "))
+        -- Use stored pose data (works even if model is despawned)
+        local poseSource = cd.pose or {}
+        if cd.joints then
+            for _, j in ipairs(cd.joints) do
+                if j.motor then poseSource[j.name] = j.motor.C0 end
             end
+        end
+        for name, cf in pairs(poseSource) do
+            local cs = {cf:GetComponents()}
+            local pts = {}
+            for _, v in ipairs(cs) do table.insert(pts, string.format("%.4f", v)) end
+            out = out .. string.format('        ["%s"] = CFrame.new(%s),\n', name, table.concat(pts, ", "))
         end
         out = out .. "    },\n"
     end
@@ -418,10 +423,16 @@ local function playAnimation()
     if #clonesList < 2 then print("[Pose] Need at least 2 frames"); return end
     if playing then stopPlayback(); return end
 
-    -- Create temp clone from first keyframe
-    local firstModel = clonesList[1].model
-    firstModel.Archivable = true
-    tempClone = firstModel:Clone()
+    -- Create temp clone from player character (frame models may be despawned)
+    local real = player.Character; if not real then return end
+    real.Archivable = true
+    tempClone = real:Clone()
+    for _,v in pairs(tempClone:GetDescendants()) do
+        if v:IsA("LocalScript") or v:IsA("Script") then v:Destroy()
+        elseif v:IsA("BasePart") then v.Anchored=(v.Name=="HumanoidRootPart"); v.CanCollide=false end
+    end
+    local tch = tempClone:FindFirstChildOfClass("Humanoid")
+    if tch then tch.PlatformStand=true; for _,t in pairs(tch:GetPlayingAnimationTracks()) do t:Stop() end end
     tempClone.Name = "PoseAnim_Preview"
 
     -- Remove frame label, add "PLAYING" label
@@ -460,10 +471,16 @@ local function playAnimation()
     playing = true
 
     task.spawn(function()
-        -- Gather all keyframe poses
+        -- Gather all keyframe poses from stored data (works even if models are despawned)
         local keyframes = {}
         for _, cd in ipairs(clonesList) do
-            table.insert(keyframes, captureFrom(cd.joints))
+            -- Use stored pose if available, fall back to reading from joints
+            if cd.pose and next(cd.pose) then
+                table.insert(keyframes, cd.pose)
+            elseif cd.joints then
+                local p = captureFrom(cd.joints)
+                if p then table.insert(keyframes, p) end
+            end
         end
 
         while playing do
