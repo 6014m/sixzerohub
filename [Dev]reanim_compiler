@@ -152,7 +152,8 @@ local function refreshList()
         local header = Instance.new("TextLabel")
         header.Size = UDim2.new(1, -30, 0, 16)
         header.BackgroundTransparency = 1
-        header.Text = anim.slot:upper() .. "  |  " .. #anim.frames .. " frames  |  " .. string.format("%.3fs", anim.tween) .. " tween"
+        local displayName = anim.name or anim.slot
+        header.Text = anim.slot:upper() .. ": " .. displayName .. "  |  " .. #anim.frames .. "f  |  " .. string.format("%.3fs", anim.tween)
         header.TextColor3 = slotColor
         header.TextSize = 11
         header.Font = Enum.Font.GothamBold
@@ -410,6 +411,21 @@ function showAnimIdInput(slot)
     info.TextWrapped = true
     info.Parent = popupWin
 
+    local nameBox = Instance.new("TextBox")
+    nameBox.Size = UDim2.new(1, 0, 0, 24)
+    nameBox.BackgroundColor3 = TH.btn
+    nameBox.BorderSizePixel = 0
+    nameBox.Text = ""
+    nameBox.PlaceholderText = "Name (e.g. Diable Jambe, Concasse)"
+    nameBox.PlaceholderColor3 = TH.muted
+    nameBox.TextColor3 = TH.text
+    nameBox.TextSize = 11
+    nameBox.Font = Enum.Font.Gotham
+    nameBox.ClearTextOnFocus = false
+    nameBox.Parent = popupWin
+    Instance.new("UICorner", nameBox).CornerRadius = UDim.new(0, 4)
+    Instance.new("UIPadding", nameBox).PaddingLeft = UDim.new(0, 6)
+
     local dataBox = Instance.new("TextBox")
     dataBox.Size = UDim2.new(1, 0, 0, 80)
     dataBox.BackgroundColor3 = TH.btn
@@ -497,8 +513,10 @@ function showAnimIdInput(slot)
             return
         end
 
+        local animName = nameBox.Text ~= "" and nameBox.Text or (slot .. " " .. (#animations + 1))
         local entry = {
             slot = slot,
+            name = animName,
             tween = result.tween or 0.016,
             frames = result.frames,
             hitRange = 10,
@@ -621,7 +639,8 @@ local function compileScript()
 
     -- Output animation data
     for idx, anim in ipairs(animations) do
-        local varName = anim.slot:gsub(" ", "_") .. (isMultiSlot(anim.slot) and ("_" .. idx) or "")
+        local varName = (anim.name or anim.slot):gsub("[^%w]", "_"):gsub("_+", "_"):gsub("^_", ""):gsub("_$", "")
+        w("-- " .. (anim.name or anim.slot) .. " (" .. anim.slot .. ", " .. #anim.frames .. " frames)")
         w("local " .. varName .. "Tween = " .. anim.tween)
         w("local " .. varName .. "Frames = {")
         for _, frame in ipairs(anim.frames) do
