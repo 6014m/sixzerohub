@@ -9259,6 +9259,340 @@ end)
 
 
 --================================================================
+-- R6 POSE BUILDER
+--================================================================
+
+addcmd("posebuilder", {"r6pose", "posebuilder"}, "R6 Pose Builder — spawn & pose clones, drag limbs, Ctrl+C/V to copy poses", function(args)
+    if _G.czPoseCleanup then _G.czPoseCleanup() end
+
+    local mouse = player:GetMouse()
+    local pConns = {}
+    local clones = {}
+    local selectedClone = nil
+    local selectedLimb = nil
+    local copiedPose = nil
+    local dragging = false
+    local dragJoint = nil
+    local dragC0 = nil
+    local dragOrigin = nil
+
+    -- GUI
+    local pgui = Instance.new("ScreenGui")
+    pgui.Name = "PoseBuilderGUI"
+    pgui.ResetOnSpawn = false
+    local ok, hui = pcall(gethui)
+    pgui.Parent = ok and hui or player:WaitForChild("PlayerGui")
+
+    local panel = Instance.new("Frame")
+    panel.Size = UDim2.new(0, 160, 0, 0)
+    panel.AutomaticSize = Enum.AutomaticSize.Y
+    panel.Position = UDim2.new(0, 10, 0.5, -80)
+    panel.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    panel.BackgroundTransparency = 0.05
+    panel.BorderSizePixel = 0
+    panel.Parent = pgui
+    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 6)
+    local pLayout = Instance.new("UIListLayout", panel)
+    pLayout.Padding = UDim.new(0, 4)
+    pLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    local pPad = Instance.new("UIPadding", panel)
+    pPad.PaddingTop = UDim.new(0, 8)
+    pPad.PaddingBottom = UDim.new(0, 8)
+    pPad.PaddingLeft = UDim.new(0, 6)
+    pPad.PaddingRight = UDim.new(0, 6)
+
+    local function makeLabel(text, size, color, parent)
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(1, 0, 0, size)
+        l.BackgroundTransparency = 1
+        l.Text = text
+        l.TextColor3 = color or Color3.new(1, 1, 1)
+        l.TextSize = size
+        l.Font = Enum.Font.GothamBold
+        l.Parent = parent or panel
+        return l
+    end
+
+    local function makeBtn(text, color, parent)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, 0, 0, 26)
+        b.BackgroundColor3 = color
+        b.BorderSizePixel = 0
+        b.Text = text
+        b.TextColor3 = Color3.new(1, 1, 1)
+        b.TextSize = 12
+        b.Font = Enum.Font.GothamBold
+        b.Parent = parent or panel
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        return b
+    end
+
+    makeLabel("R6 Pose Builder", 13, Color3.new(1, 1, 1))
+    local statusLbl = makeLabel("Click a clone to select", 10, Color3.fromRGB(160, 160, 170))
+    local spawnBtn = makeBtn("Spawn Clone", Color3.fromRGB(0, 130, 255))
+    local deleteBtn = makeBtn("Delete Selected", Color3.fromRGB(180, 50, 50))
+    local deleteAllBtn = makeBtn("Delete All Clones", Color3.fromRGB(120, 40, 40))
+    makeLabel("Drag limb to rotate X/Y", 9, Color3.fromRGB(120, 120, 130))
+    makeLabel("Scroll wheel = rotate Z", 9, Color3.fromRGB(120, 120, 130))
+    makeLabel("Ctrl+C / Ctrl+V = copy/paste", 9, Color3.fromRGB(120, 120, 130))
+
+    -- Selection indicators
+    local selBox = Instance.new("SelectionBox")
+    selBox.Color3 = Color3.fromRGB(0, 150, 255)
+    selBox.LineThickness = 0.03
+    selBox.Parent = pgui
+
+    local limbBox = Instance.new("SelectionBox")
+    limbBox.Color3 = Color3.fromRGB(255, 200, 0)
+    limbBox.LineThickness = 0.05
+    limbBox.Parent = pgui
+
+    -- Helpers
+    local R6_LIMBS = { "Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg" }
+
+    local function findCloneForPart(part)
+        for _, clone in ipairs(clones) do
+            if part:IsDescendantOf(clone) then return clone end
+        end
+        return nil
+    end
+
+    local function getJointForLimb(clone, limb)
+        local torso = clone:FindFirstChild("Torso")
+        if limb.Name == "Head" then return torso and torso:FindFirstChild("Neck") end
+        if limb.Name == "Right Arm" then return torso and torso:FindFirstChild("Right Shoulder") end
+        if limb.Name == "Left Arm" then return torso and torso:FindFirstChild("Left Shoulder") end
+        if limb.Name == "Right Leg" then return torso and torso:FindFirstChild("Right Hip") end
+        if limb.Name == "Left Leg" then return torso and torso:FindFirstChild("Left Hip") end
+        if limb.Name == "Torso" then
+            local hrp = clone:FindFirstChild("HumanoidRootPart")
+            return hrp and hrp:FindFirstChild("RootJoint")
+        end
+        return nil
+    end
+
+    local function recalcPose(clone)
+        local hrp = clone:FindFirstChild("HumanoidRootPart")
+        local torso = clone:FindFirstChild("Torso")
+        if not hrp or not torso then return end
+        local rj = hrp:FindFirstChild("RootJoint")
+        if rj then torso.CFrame = hrp.CFrame * rj.C0 * rj.C1:Inverse() end
+        for _, motor in ipairs(torso:GetChildren()) do
+            if motor:IsA("Motor6D") and motor.Part1 then
+                motor.Part1.CFrame = torso.CFrame * motor.C0 * motor.C1:Inverse()
+            end
+        end
+    end
+
+    local function getPose(clone)
+        local pose = {}
+        local torso = clone:FindFirstChild("Torso")
+        if torso then
+            for _, m in ipairs(torso:GetChildren()) do
+                if m:IsA("Motor6D") then pose[m.Name] = { C0 = m.C0, C1 = m.C1 } end
+            end
+        end
+        local hrp = clone:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local rj = hrp:FindFirstChild("RootJoint")
+            if rj then pose["RootJoint"] = { C0 = rj.C0, C1 = rj.C1 } end
+        end
+        return pose
+    end
+
+    local function applyPose(clone, pose)
+        local torso = clone:FindFirstChild("Torso")
+        if torso then
+            for _, m in ipairs(torso:GetChildren()) do
+                if m:IsA("Motor6D") and pose[m.Name] then
+                    m.C0 = pose[m.Name].C0
+                    m.C1 = pose[m.Name].C1
+                end
+            end
+        end
+        local hrp = clone:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local rj = hrp:FindFirstChild("RootJoint")
+            if rj and pose["RootJoint"] then
+                rj.C0 = pose["RootJoint"].C0
+                rj.C1 = pose["RootJoint"].C1
+            end
+        end
+        recalcPose(clone)
+    end
+
+    local function selectClone(clone, limb)
+        selectedClone = clone
+        selBox.Adornee = clone
+        if limb then
+            selectedLimb = limb
+            limbBox.Adornee = limb
+            statusLbl.Text = "Clone #" .. (table.find(clones, clone) or "?") .. " > " .. limb.Name
+        else
+            selectedLimb = nil
+            limbBox.Adornee = nil
+            statusLbl.Text = "Clone #" .. (table.find(clones, clone) or "?") .. " selected"
+        end
+    end
+
+    local function deselect()
+        selectedClone = nil
+        selectedLimb = nil
+        selBox.Adornee = nil
+        limbBox.Adornee = nil
+        statusLbl.Text = "Click a clone to select"
+    end
+
+    -- Spawn clone
+    spawnBtn.MouseButton1Click:Connect(function()
+        local char = getChar()
+        local hum = myHumanoid()
+        if not char or not hum then notify("PoseBuilder", "No character"); return end
+        if hum.RigType ~= Enum.HumanoidRigType.R6 then
+            notify("PoseBuilder", "R6 only"); return
+        end
+        char.Archivable = true
+        local clone = char:Clone()
+        clone.Name = "PoseClone_" .. (#clones + 1)
+
+        -- Strip humanoid, scripts, animate
+        local ch = clone:FindFirstChildOfClass("Humanoid")
+        if ch then ch:Destroy() end
+        local anim = clone:FindFirstChild("Animate")
+        if anim then anim:Destroy() end
+        for _, d in ipairs(clone:GetDescendants()) do
+            if d:IsA("Script") or d:IsA("LocalScript") then d:Destroy() end
+        end
+
+        -- Anchor all parts
+        for _, p in ipairs(clone:GetDescendants()) do
+            if p:IsA("BasePart") then p.Anchored = true end
+        end
+
+        -- Place in front of player
+        local root = myRoot()
+        if root then
+            local hrp = clone:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.CFrame = root.CFrame * CFrame.new(0, 0, -6 - (#clones * 4))
+            end
+        end
+        clone.Parent = workspace
+        recalcPose(clone)
+        table.insert(clones, clone)
+        selectClone(clone)
+        notify("PoseBuilder", "Clone #" .. #clones .. " spawned")
+    end)
+
+    -- Delete selected
+    deleteBtn.MouseButton1Click:Connect(function()
+        if not selectedClone then notify("PoseBuilder", "Nothing selected"); return end
+        local idx = table.find(clones, selectedClone)
+        if idx then table.remove(clones, idx) end
+        pcall(function() selectedClone:Destroy() end)
+        deselect()
+        notify("PoseBuilder", "Clone deleted")
+    end)
+
+    -- Delete all
+    deleteAllBtn.MouseButton1Click:Connect(function()
+        for _, c in ipairs(clones) do pcall(function() c:Destroy() end) end
+        clones = {}
+        deselect()
+        notify("PoseBuilder", "All clones deleted")
+    end)
+
+    -- Click to select clone/limb + start drag
+    table.insert(pConns, mouse.Button1Down:Connect(function()
+        local target = mouse.Target
+        if not target then return end
+
+        -- Ignore clicks on the GUI panel
+        if target:IsDescendantOf(pgui) then return end
+
+        local clone = findCloneForPart(target)
+        if not clone then deselect(); return end
+
+        -- Check if it's a valid R6 limb
+        local isLimb = false
+        for _, name in ipairs(R6_LIMBS) do
+            if target.Name == name then isLimb = true; break end
+        end
+
+        selectClone(clone, isLimb and target or nil)
+
+        if isLimb then
+            local joint = getJointForLimb(clone, target)
+            if joint then
+                dragging = true
+                dragJoint = joint
+                dragC0 = joint.C0
+                dragOrigin = Vector2.new(mouse.X, mouse.Y)
+            end
+        end
+    end))
+
+    -- Drag to rotate limb
+    table.insert(pConns, mouse.Move:Connect(function()
+        if not dragging or not dragJoint or not selectedClone then return end
+        local dx = mouse.X - dragOrigin.X
+        local dy = mouse.Y - dragOrigin.Y
+        if math.abs(dx) < 2 and math.abs(dy) < 2 then return end
+        dragJoint.C0 = dragC0 * CFrame.Angles(math.rad(dy * 0.3), math.rad(dx * 0.3), 0)
+        recalcPose(selectedClone)
+    end))
+
+    -- Release drag
+    table.insert(pConns, mouse.Button1Up:Connect(function()
+        dragging = false
+        dragJoint = nil
+    end))
+
+    -- Scroll wheel = Z rotation on selected limb
+    table.insert(pConns, UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType ~= Enum.UserInputType.MouseWheel then return end
+        if not selectedLimb or not selectedClone then return end
+        local joint = getJointForLimb(selectedClone, selectedLimb)
+        if not joint then return end
+        local delta = input.Position.Z * 5
+        joint.C0 = joint.C0 * CFrame.Angles(0, 0, math.rad(delta))
+        recalcPose(selectedClone)
+    end))
+
+    -- Ctrl+C / Ctrl+V
+    table.insert(pConns, UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
+        local ctrl = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl)
+            or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+        if not ctrl then return end
+        if input.KeyCode == Enum.KeyCode.C and selectedClone then
+            copiedPose = getPose(selectedClone)
+            notify("PoseBuilder", "Pose copied from Clone #" .. (table.find(clones, selectedClone) or "?"))
+        elseif input.KeyCode == Enum.KeyCode.V and selectedClone and copiedPose then
+            applyPose(selectedClone, copiedPose)
+            notify("PoseBuilder", "Pose pasted to Clone #" .. (table.find(clones, selectedClone) or "?"))
+        end
+    end))
+
+    -- Cleanup
+    local function cleanup()
+        for _, c in ipairs(pConns) do pcall(function() c:Disconnect() end) end
+        pConns = {}
+        for _, c in ipairs(clones) do pcall(function() c:Destroy() end) end
+        clones = {}
+        pcall(function() pgui:Destroy() end)
+        _G.czPoseCleanup = nil
+    end
+    _G.czPoseCleanup = cleanup
+    notify("PoseBuilder", "Opened — spawn clones and pose them")
+end)
+
+addcmd("unposebuilder", {"unr6pose", "unposebuilder"}, "Close R6 Pose Builder and delete all clones", function(args)
+    if _G.czPoseCleanup then _G.czPoseCleanup() end
+    notify("PoseBuilder", "Closed")
+end)
+
+--================================================================
 -- KEYBIND SYSTEM
 --================================================================
 
