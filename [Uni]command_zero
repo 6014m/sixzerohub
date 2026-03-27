@@ -4420,22 +4420,26 @@ local function loadEmote(entry)
     return nil
 end
 
--- RenderStepped override: applies emote C0 right before frame renders,
--- so it always wins over the reanimate's Heartbeat-based animation loop.
+-- Emote override: applies emote C0 AFTER all Heartbeat processing via task.defer,
+-- guaranteeing the emote wins over any reanimate animation loop.
 local emoteOverrideCFs = nil -- { motorName -> CFrame } set by emote loop
 local emoteOverrideJMap = nil
 local emoteOverrideConn = nil
 
 local function startEmoteOverride(jMap)
-    if emoteOverrideConn then pcall(function() emoteOverrideConn:Disconnect() end) end
+    stopEmoteOverride()
     emoteOverrideJMap = jMap
     emoteOverrideCFs = {}
-    emoteOverrideConn = RunService.RenderStepped:Connect(function()
-        if not emoteOverrideCFs or not emoteOverrideJMap then return end
-        for name, cf in pairs(emoteOverrideCFs) do
-            local motor = emoteOverrideJMap[name]
-            if motor then motor.C0 = cf end
-        end
+    -- task.defer inside Heartbeat runs after ALL Heartbeat callbacks and Wait resumptions,
+    -- so this is the absolute last C0 write before the next frame renders.
+    emoteOverrideConn = RunService.Heartbeat:Connect(function()
+        task.defer(function()
+            if not emoteOverrideCFs or not emoteOverrideJMap then return end
+            for name, cf in pairs(emoteOverrideCFs) do
+                local motor = emoteOverrideJMap[name]
+                if motor then motor.C0 = cf end
+            end
+        end)
     end)
 end
 
