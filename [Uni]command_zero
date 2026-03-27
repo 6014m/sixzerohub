@@ -4420,6 +4420,31 @@ local function loadEmote(entry)
     return nil
 end
 
+-- RenderStepped override: applies emote C0 right before frame renders,
+-- so it always wins over the reanimate's Heartbeat-based animation loop.
+local emoteOverrideCFs = nil -- { motorName -> CFrame } set by emote loop
+local emoteOverrideJMap = nil
+local emoteOverrideConn = nil
+
+local function startEmoteOverride(jMap)
+    if emoteOverrideConn then pcall(function() emoteOverrideConn:Disconnect() end) end
+    emoteOverrideJMap = jMap
+    emoteOverrideCFs = {}
+    emoteOverrideConn = RunService.RenderStepped:Connect(function()
+        if not emoteOverrideCFs or not emoteOverrideJMap then return end
+        for name, cf in pairs(emoteOverrideCFs) do
+            local motor = emoteOverrideJMap[name]
+            if motor then motor.C0 = cf end
+        end
+    end)
+end
+
+local function stopEmoteOverride()
+    if emoteOverrideConn then pcall(function() emoteOverrideConn:Disconnect() end); emoteOverrideConn = nil end
+    emoteOverrideCFs = nil
+    emoteOverrideJMap = nil
+end
+
 local function playEmote(emoteData, emoteName)
     local fakeRig = findFakeRig()
     if not fakeRig then return end
@@ -4435,25 +4460,38 @@ local function playEmote(emoteData, emoteName)
     local rj = fakeHRP:FindFirstChild("RootJoint")
     if rj then jMap["RootJoint"] = rj end
 
+    -- Start RenderStepped override so emote always wins over reanimate's Heartbeat loop
+    startEmoteOverride(jMap)
+
     currentEmote = emoteName
     while currentEmote == emoteName do
         for i = 1, #emoteData.frames - 1 do
-            if currentEmote ~= emoteName then return end
-            if fakeHum and fakeHum.MoveDirection.Magnitude > 0.1 then currentEmote = nil; return end
+            if currentEmote ~= emoteName then break end
+            if fakeHum and fakeHum.MoveDirection.Magnitude > 0.1 then currentEmote = nil; break end
             local from, to = emoteData.frames[i], emoteData.frames[i + 1]
             local st = tick()
             while tick() - st < emoteData.tween do
-                if currentEmote ~= emoteName then return end
-                if fakeHum and fakeHum.MoveDirection.Magnitude > 0.1 then currentEmote = nil; return end
+                if currentEmote ~= emoteName then break end
+                if fakeHum and fakeHum.MoveDirection.Magnitude > 0.1 then currentEmote = nil; break end
                 local a = math.clamp((tick() - st) / emoteData.tween, 0, 1)
-                for name, motor in pairs(jMap) do
-                    if from[name] and to[name] then motor.C0 = from[name]:Lerp(to[name], a) end
+                -- Update target CFs — the RenderStepped connection applies them before render
+                if emoteOverrideCFs then
+                    for name, _ in pairs(jMap) do
+                        if from[name] and to[name] then
+                            emoteOverrideCFs[name] = from[name]:Lerp(to[name], a)
+                        end
+                    end
                 end
                 RunService.Heartbeat:Wait()
             end
-            for name, motor in pairs(jMap) do if to[name] then motor.C0 = to[name] end end
+            if emoteOverrideCFs then
+                for name, _ in pairs(jMap) do
+                    if to[name] then emoteOverrideCFs[name] = to[name] end
+                end
+            end
         end
     end
+    stopEmoteOverride()
 end
 
 -- Emote wheel GUI
@@ -4617,6 +4655,7 @@ end)
 
 addcmd("stopemote", {"unemote"}, "Stop playing current emote", function(args)
     currentEmote = nil
+    stopEmoteOverride()
     notify("Emote", "Stopped")
 end)
 
