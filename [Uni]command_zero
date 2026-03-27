@@ -4363,6 +4363,230 @@ function registerReanimAnim(name, description, loadFn)
 end
 _G.registerReanimAnim = registerReanimAnim
 
+---------- EMOTE WHEEL (B key) ----------
+
+local EMOTE_REPO = "https://raw.githubusercontent.com/6014m/sixzerohub/main/"
+local emoteRegistry = {
+    { name = "Hakari", file = "[Data]emote_hakari", icon = "dance" },
+}
+
+local loadedEmotes = {} -- name -> { tween, frames }
+local currentEmote = nil -- name of currently playing emote (nil = none)
+local emoteWheelOpen = false
+
+local function loadEmote(entry)
+    if loadedEmotes[entry.name] then return loadedEmotes[entry.name] end
+    local ok, data = pcall(function()
+        local raw = game:HttpGet(EMOTE_REPO .. entry.file)
+        return loadstring(raw)()
+    end)
+    if ok and data and data.frames then
+        loadedEmotes[entry.name] = data
+        return data
+    end
+    return nil
+end
+
+local function playEmote(emoteData, emoteName)
+    if not _G.czReanimateActive or not _G.czReanimateFakeRig then return end
+    local fakeRig = _G.czReanimateFakeRig
+    local fakeTorso = fakeRig:FindFirstChild("Torso")
+    local fakeHRP = fakeRig:FindFirstChild("HumanoidRootPart")
+    local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
+    if not fakeTorso or not fakeHRP then return end
+
+    local jMap = {}
+    for _, m in ipairs(fakeTorso:GetChildren()) do
+        if m:IsA("Motor6D") then jMap[m.Name] = m end
+    end
+    local rj = fakeHRP:FindFirstChild("RootJoint")
+    if rj then jMap["RootJoint"] = rj end
+
+    currentEmote = emoteName
+    while currentEmote == emoteName do
+        for i = 1, #emoteData.frames - 1 do
+            if currentEmote ~= emoteName then return end
+            if fakeHum and fakeHum.MoveDirection.Magnitude > 0.1 then currentEmote = nil; return end
+            local from, to = emoteData.frames[i], emoteData.frames[i + 1]
+            local st = tick()
+            while tick() - st < emoteData.tween do
+                if currentEmote ~= emoteName then return end
+                if fakeHum and fakeHum.MoveDirection.Magnitude > 0.1 then currentEmote = nil; return end
+                local a = math.clamp((tick() - st) / emoteData.tween, 0, 1)
+                for name, motor in pairs(jMap) do
+                    if from[name] and to[name] then motor.C0 = from[name]:Lerp(to[name], a) end
+                end
+                RunService.Heartbeat:Wait()
+            end
+            for name, motor in pairs(jMap) do if to[name] then motor.C0 = to[name] end end
+        end
+    end
+end
+
+-- Emote wheel GUI
+local emoteWheelGui = nil
+
+local function destroyEmoteWheel()
+    emoteWheelOpen = false
+    if emoteWheelGui then pcall(function() emoteWheelGui:Destroy() end); emoteWheelGui = nil end
+end
+
+local function createEmoteWheel()
+    if not _G.czReanimateActive then notify("Emote", "You need to be reanimated first"); return end
+    if emoteWheelOpen then destroyEmoteWheel(); return end
+    emoteWheelOpen = true
+
+    emoteWheelGui = Instance.new("Frame")
+    emoteWheelGui.Name = "EmoteWheel"
+    emoteWheelGui.Size = UDim2.new(0, 280, 0, 280)
+    emoteWheelGui.Position = UDim2.new(0.5, -140, 0.5, -140)
+    emoteWheelGui.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+    emoteWheelGui.BackgroundTransparency = 0.15
+    emoteWheelGui.BorderSizePixel = 0
+    emoteWheelGui.Parent = gui
+    Instance.new("UICorner", emoteWheelGui).CornerRadius = UDim.new(0.5, 0)
+    local stroke = Instance.new("UIStroke", emoteWheelGui)
+    stroke.Color = THEME.accent; stroke.Thickness = 2; stroke.Transparency = 0.3
+
+    -- Center label
+    local centerLbl = Instance.new("TextLabel")
+    centerLbl.Size = UDim2.new(0, 80, 0, 80)
+    centerLbl.Position = UDim2.new(0.5, -40, 0.5, -40)
+    centerLbl.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    centerLbl.BorderSizePixel = 0
+    centerLbl.Text = "Emotes"
+    centerLbl.TextColor3 = THEME.accent
+    centerLbl.TextSize = 13
+    centerLbl.Font = Enum.Font.GothamBold
+    centerLbl.Parent = emoteWheelGui
+    Instance.new("UICorner", centerLbl).CornerRadius = UDim.new(0.5, 0)
+    Instance.new("UIStroke", centerLbl).Color = Color3.fromRGB(40, 40, 50)
+
+    -- Close on center click
+    local centerBtn = Instance.new("TextButton")
+    centerBtn.Size = UDim2.new(1, 0, 1, 0)
+    centerBtn.BackgroundTransparency = 1
+    centerBtn.Text = ""
+    centerBtn.Parent = centerLbl
+    centerBtn.MouseButton1Click:Connect(destroyEmoteWheel)
+
+    -- Place emote buttons in a ring
+    local count = #emoteRegistry
+    local radius = 90
+    for idx, entry in ipairs(emoteRegistry) do
+        local angle = (idx - 1) * (math.pi * 2 / math.max(count, 1)) - math.pi / 2
+        local cx = math.cos(angle) * radius
+        local cy = math.sin(angle) * radius
+
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 70, 0, 70)
+        btn.Position = UDim2.new(0.5, cx - 35, 0.5, cy - 35)
+        btn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+        btn.BorderSizePixel = 0
+        btn.AutoButtonColor = false
+        btn.Text = ""
+        btn.Parent = emoteWheelGui
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0.5, 0)
+        local btnStroke = Instance.new("UIStroke", btn)
+        btnStroke.Color = Color3.fromRGB(50, 50, 65); btnStroke.Thickness = 1.5
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size = UDim2.new(1, 0, 0.5, 0)
+        nameLbl.Position = UDim2.new(0, 0, 0.5, -2)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Text = entry.name
+        nameLbl.TextColor3 = THEME.text
+        nameLbl.TextSize = 10
+        nameLbl.Font = Enum.Font.GothamBold
+        nameLbl.Parent = btn
+
+        -- Icon hint at top
+        local iconLbl = Instance.new("TextLabel")
+        iconLbl.Size = UDim2.new(1, 0, 0.45, 0)
+        iconLbl.Position = UDim2.new(0, 0, 0.05, 0)
+        iconLbl.BackgroundTransparency = 1
+        iconLbl.Text = "♪"
+        iconLbl.TextColor3 = THEME.accent
+        iconLbl.TextSize = 20
+        iconLbl.Font = Enum.Font.GothamBold
+        iconLbl.Parent = btn
+
+        -- Playing indicator
+        local playingDot = Instance.new("Frame")
+        playingDot.Size = UDim2.new(0, 8, 0, 8)
+        playingDot.Position = UDim2.new(1, -12, 0, 4)
+        playingDot.BackgroundColor3 = THEME.success
+        playingDot.BorderSizePixel = 0
+        playingDot.Visible = currentEmote == entry.name
+        playingDot.Parent = btn
+        Instance.new("UICorner", playingDot).CornerRadius = UDim.new(0.5, 0)
+
+        btn.MouseEnter:Connect(function()
+            btn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+            btnStroke.Color = THEME.accent
+            centerLbl.Text = entry.name
+        end)
+        btn.MouseLeave:Connect(function()
+            btn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+            btnStroke.Color = currentEmote == entry.name and THEME.success or Color3.fromRGB(50, 50, 65)
+            centerLbl.Text = "Emotes"
+        end)
+
+        btn.MouseButton1Click:Connect(function()
+            if currentEmote == entry.name then
+                currentEmote = nil
+                playingDot.Visible = false
+                btnStroke.Color = Color3.fromRGB(50, 50, 65)
+                notify("Emote", entry.name .. " stopped")
+                return
+            end
+
+            -- Stop any current emote
+            currentEmote = nil
+            task.wait()
+
+            -- Load if needed
+            local data = loadEmote(entry)
+            if not data then notify("Emote", "Failed to load " .. entry.name); return end
+
+            playingDot.Visible = true
+            btnStroke.Color = THEME.success
+            notify("Emote", entry.name .. " — move to stop")
+            destroyEmoteWheel()
+
+            task.spawn(function()
+                playEmote(data, entry.name)
+                -- Emote ended
+                if emoteWheelGui and playingDot.Parent then
+                    playingDot.Visible = false
+                    btnStroke.Color = Color3.fromRGB(50, 50, 65)
+                end
+            end)
+        end)
+    end
+end
+
+-- B keybind to toggle emote wheel
+connect(UserInputService.InputBegan, function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.B then
+        if emoteWheelOpen then
+            destroyEmoteWheel()
+        else
+            createEmoteWheel()
+        end
+    end
+end)
+
+addcmd("emotewheel", {"ew"}, "Toggle emote wheel (or press B)", function(args)
+    if emoteWheelOpen then destroyEmoteWheel() else createEmoteWheel() end
+end)
+
+addcmd("stopemote", {"unemote"}, "Stop playing current emote", function(args)
+    currentEmote = nil
+    notify("Emote", "Stopped")
+end)
+
 addcmd("noclipcam", {"nccam"}, "Camera goes through walls", function(args)
     local sc = (debug and debug.setconstant) or setconstant
     local gc = (debug and debug.getconstants) or getconstants
