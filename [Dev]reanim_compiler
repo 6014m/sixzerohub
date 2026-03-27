@@ -226,71 +226,263 @@ local function refreshList()
             table.insert(connections, kbConn)
         end
 
-        -- Hitbox range for attacks
+        -- Attack config: hitbox + preview scrubber
         if anim.slot == "attack" or anim.slot == "keybind attack" or anim.slot == "ranged attack" then
-            local hbRow = Instance.new("Frame")
-            hbRow.Size = UDim2.new(1, 0, 0, 20)
-            hbRow.BackgroundTransparency = 1
-            hbRow.Parent = row
+            -- Initialize hitbox defaults
+            if not anim.hitboxPos then anim.hitboxPos = "Front" end
+            if not anim.hitboxSize then anim.hitboxSize = Vector3.new(6, 6, 6) end
+            if not anim.hitboxOffset then anim.hitboxOffset = Vector3.new(0, 0, -5) end
 
-            local hbLbl = Instance.new("TextLabel")
-            hbLbl.Size = UDim2.new(0, 70, 1, 0)
-            hbLbl.BackgroundTransparency = 1
-            hbLbl.Text = "Hit range:"
-            hbLbl.TextColor3 = TH.muted
-            hbLbl.TextSize = 10
-            hbLbl.Font = Enum.Font.Gotham
-            hbLbl.TextXAlignment = Enum.TextXAlignment.Left
-            hbLbl.Parent = hbRow
+            -- Row 1: Hitbox position preset
+            local posRow = Instance.new("Frame")
+            posRow.Size = UDim2.new(1, 0, 0, 20)
+            posRow.BackgroundTransparency = 1
+            posRow.Parent = row
 
-            local hbBox = Instance.new("TextBox")
-            hbBox.Size = UDim2.new(0, 50, 0, 18)
-            hbBox.Position = UDim2.new(0, 72, 0, 1)
-            hbBox.BackgroundColor3 = TH.btn
-            hbBox.BorderSizePixel = 0
-            hbBox.Text = tostring(anim.hitRange or 10)
-            hbBox.TextColor3 = TH.text
-            hbBox.TextSize = 10
-            hbBox.Font = Enum.Font.Gotham
-            hbBox.ClearTextOnFocus = false
-            hbBox.Parent = hbRow
-            Instance.new("UICorner", hbBox).CornerRadius = UDim.new(0, 3)
-            Instance.new("UIPadding", hbBox).PaddingLeft = UDim.new(0, 4)
+            local posLbl = Instance.new("TextLabel")
+            posLbl.Size = UDim2.new(0, 50, 1, 0)
+            posLbl.BackgroundTransparency = 1
+            posLbl.Text = "Hitbox:"
+            posLbl.TextColor3 = TH.muted
+            posLbl.TextSize = 10
+            posLbl.Font = Enum.Font.Gotham
+            posLbl.TextXAlignment = Enum.TextXAlignment.Left
+            posLbl.Parent = posRow
 
-            hbBox.FocusLost:Connect(function()
-                local val = tonumber(hbBox.Text)
-                if val and val > 0 then anim.hitRange = val else hbBox.Text = tostring(anim.hitRange or 10) end
+            local posOptions = {"Front", "Center", "Behind", "Above", "Wide"}
+            local posOffsets = {
+                Front = Vector3.new(0, 0, -5),
+                Center = Vector3.new(0, 0, 0),
+                Behind = Vector3.new(0, 0, 5),
+                Above = Vector3.new(0, 5, -3),
+                Wide = Vector3.new(0, 0, -4),
+            }
+            local posSizes = {
+                Front = Vector3.new(6, 6, 8),
+                Center = Vector3.new(8, 8, 8),
+                Behind = Vector3.new(6, 6, 8),
+                Above = Vector3.new(8, 8, 6),
+                Wide = Vector3.new(14, 6, 8),
+            }
+
+            local posBtn = Instance.new("TextButton")
+            posBtn.Size = UDim2.new(0, 60, 0, 18)
+            posBtn.Position = UDim2.new(0, 52, 0, 1)
+            posBtn.BackgroundColor3 = TH.accent
+            posBtn.BorderSizePixel = 0
+            posBtn.Text = anim.hitboxPos
+            posBtn.TextColor3 = TH.text
+            posBtn.TextSize = 9
+            posBtn.Font = Enum.Font.GothamBold
+            posBtn.Parent = posRow
+            Instance.new("UICorner", posBtn).CornerRadius = UDim.new(0, 3)
+
+            posBtn.MouseButton1Click:Connect(function()
+                local curIdx = 1
+                for i, v in ipairs(posOptions) do if v == anim.hitboxPos then curIdx = i end end
+                curIdx = (curIdx % #posOptions) + 1
+                anim.hitboxPos = posOptions[curIdx]
+                anim.hitboxOffset = posOffsets[anim.hitboxPos]
+                anim.hitboxSize = posSizes[anim.hitboxPos]
+                posBtn.Text = anim.hitboxPos
             end)
 
-            -- Hit frame
-            local hfLbl = Instance.new("TextLabel")
-            hfLbl.Size = UDim2.new(0, 60, 1, 0)
-            hfLbl.Position = UDim2.new(0, 130, 0, 0)
-            hfLbl.BackgroundTransparency = 1
-            hfLbl.Text = "Hit frame:"
-            hfLbl.TextColor3 = TH.muted
-            hfLbl.TextSize = 10
-            hfLbl.Font = Enum.Font.Gotham
-            hfLbl.TextXAlignment = Enum.TextXAlignment.Left
-            hfLbl.Parent = hbRow
+            -- Size label
+            local szLbl = Instance.new("TextLabel")
+            szLbl.Size = UDim2.new(0, 30, 1, 0)
+            szLbl.Position = UDim2.new(0, 118, 0, 0)
+            szLbl.BackgroundTransparency = 1
+            szLbl.Text = "Size:"
+            szLbl.TextColor3 = TH.muted
+            szLbl.TextSize = 9
+            szLbl.Font = Enum.Font.Gotham
+            szLbl.TextXAlignment = Enum.TextXAlignment.Left
+            szLbl.Parent = posRow
 
-            local hfBox = Instance.new("TextBox")
-            hfBox.Size = UDim2.new(0, 40, 0, 18)
-            hfBox.Position = UDim2.new(0, 192, 0, 1)
-            hfBox.BackgroundColor3 = TH.btn
-            hfBox.BorderSizePixel = 0
-            hfBox.Text = tostring(anim.hitFrame or math.floor(#anim.frames / 2))
-            hfBox.TextColor3 = TH.text
-            hfBox.TextSize = 10
-            hfBox.Font = Enum.Font.Gotham
-            hfBox.ClearTextOnFocus = false
-            hfBox.Parent = hbRow
-            Instance.new("UICorner", hfBox).CornerRadius = UDim.new(0, 3)
-            Instance.new("UIPadding", hfBox).PaddingLeft = UDim.new(0, 4)
+            local szBox = Instance.new("TextBox")
+            szBox.Size = UDim2.new(0, 30, 0, 18)
+            szBox.Position = UDim2.new(0, 148, 0, 1)
+            szBox.BackgroundColor3 = TH.btn
+            szBox.BorderSizePixel = 0
+            szBox.Text = tostring(math.floor(anim.hitboxSize.X))
+            szBox.TextColor3 = TH.text
+            szBox.TextSize = 10
+            szBox.Font = Enum.Font.Gotham
+            szBox.ClearTextOnFocus = false
+            szBox.Parent = posRow
+            Instance.new("UICorner", szBox).CornerRadius = UDim.new(0, 3)
 
-            hfBox.FocusLost:Connect(function()
-                local val = tonumber(hfBox.Text)
-                if val and val > 0 then anim.hitFrame = val else hfBox.Text = tostring(anim.hitFrame or 4) end
+            szBox.FocusLost:Connect(function()
+                local v = tonumber(szBox.Text)
+                if v and v > 0 then anim.hitboxSize = Vector3.new(v, v, v + 2) end
+            end)
+
+            -- Row 2: Frame scrubber + hit frame marker
+            local scrubRow = Instance.new("Frame")
+            scrubRow.Size = UDim2.new(1, 0, 0, 34)
+            scrubRow.BackgroundTransparency = 1
+            scrubRow.Parent = row
+
+            local frameLbl = Instance.new("TextLabel")
+            frameLbl.Size = UDim2.new(1, 0, 0, 12)
+            frameLbl.BackgroundTransparency = 1
+            frameLbl.Text = "Frame: 1 / " .. #anim.frames .. "  |  Hit: " .. (anim.hitFrame or "?")
+            frameLbl.TextColor3 = TH.muted
+            frameLbl.TextSize = 9
+            frameLbl.Font = Enum.Font.Gotham
+            frameLbl.TextXAlignment = Enum.TextXAlignment.Left
+            frameLbl.Parent = scrubRow
+
+            -- Scrub bar background
+            local scrubBg = Instance.new("Frame")
+            scrubBg.Size = UDim2.new(1, -60, 0, 14)
+            scrubBg.Position = UDim2.new(0, 0, 0, 14)
+            scrubBg.BackgroundColor3 = Color3.fromRGB(40, 40, 46)
+            scrubBg.BorderSizePixel = 0
+            scrubBg.Parent = scrubRow
+            Instance.new("UICorner", scrubBg).CornerRadius = UDim.new(0, 4)
+
+            -- Scrub handle
+            local scrubHandle = Instance.new("Frame")
+            scrubHandle.Size = UDim2.new(0, 4, 1, 0)
+            scrubHandle.Position = UDim2.new(0, 0, 0, 0)
+            scrubHandle.BackgroundColor3 = TH.accent
+            scrubHandle.BorderSizePixel = 0
+            scrubHandle.Parent = scrubBg
+            Instance.new("UICorner", scrubHandle).CornerRadius = UDim.new(0, 2)
+
+            -- Hit frame marker (red line)
+            local hitMarker = Instance.new("Frame")
+            local hitFrac = math.clamp(((anim.hitFrame or 1) - 1) / math.max(#anim.frames - 1, 1), 0, 1)
+            hitMarker.Size = UDim2.new(0, 2, 1, 0)
+            hitMarker.Position = UDim2.new(hitFrac, 0, 0, 0)
+            hitMarker.BackgroundColor3 = TH.red
+            hitMarker.BorderSizePixel = 0
+            hitMarker.Parent = scrubBg
+
+            -- Set hit frame button
+            local setHitBtn = Instance.new("TextButton")
+            setHitBtn.Size = UDim2.new(0, 54, 0, 14)
+            setHitBtn.Position = UDim2.new(1, -54, 0, 14)
+            setHitBtn.BackgroundColor3 = TH.red
+            setHitBtn.BorderSizePixel = 0
+            setHitBtn.Text = "Set Hit"
+            setHitBtn.TextColor3 = TH.text
+            setHitBtn.TextSize = 9
+            setHitBtn.Font = Enum.Font.GothamBold
+            setHitBtn.Parent = scrubRow
+            Instance.new("UICorner", setHitBtn).CornerRadius = UDim.new(0, 3)
+
+            -- Preview state for this anim
+            local previewClone = nil
+            local previewHitbox = nil
+            local currentFrame = 1
+
+            local function updatePreview()
+                if not previewClone or not previewClone.Parent then return end
+                local frame = anim.frames[currentFrame]
+                if not frame then return end
+
+                local torso = previewClone:FindFirstChild("Torso")
+                local hrp = previewClone:FindFirstChild("HumanoidRootPart")
+                if torso then
+                    for _, m in ipairs(torso:GetChildren()) do
+                        if m:IsA("Motor6D") and frame[m.Name] then m.C0 = frame[m.Name] end
+                    end
+                end
+                if hrp then
+                    local rj = hrp:FindFirstChild("RootJoint")
+                    if rj and frame["RootJoint"] then rj.C0 = frame["RootJoint"] end
+                end
+
+                -- Update hitbox position
+                if previewHitbox and hrp then
+                    local off = anim.hitboxOffset or Vector3.new(0, 0, -5)
+                    previewHitbox.Size = anim.hitboxSize or Vector3.new(6, 6, 6)
+                    previewHitbox.CFrame = hrp.CFrame * CFrame.new(off)
+                end
+
+                frameLbl.Text = "Frame: " .. currentFrame .. " / " .. #anim.frames .. "  |  Hit: " .. (anim.hitFrame or "?")
+            end
+
+            local function spawnPreview()
+                if previewClone then pcall(function() previewClone:Destroy() end) end
+                if previewHitbox then pcall(function() previewHitbox:Destroy() end) end
+
+                local real = player.Character; if not real then return end
+                real.Archivable = true
+                previewClone = real:Clone()
+                previewClone.Name = "CompilerPreview"
+                for _,v in pairs(previewClone:GetDescendants()) do
+                    if v:IsA("LocalScript") or v:IsA("Script") then v:Destroy()
+                    elseif v:IsA("BasePart") then v.Anchored = (v.Name == "HumanoidRootPart"); v.CanCollide = false end
+                end
+                local ch = previewClone:FindFirstChildOfClass("Humanoid")
+                if ch then ch.PlatformStand = true; for _,t in pairs(ch:GetPlayingAnimationTracks()) do t:Stop() end end
+
+                local root = real:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local phrp = previewClone:FindFirstChild("HumanoidRootPart")
+                    if phrp then phrp.CFrame = root.CFrame * CFrame.new(0, 0, -8) end
+                end
+                previewClone.Parent = workspace
+
+                -- Red transparent hitbox
+                previewHitbox = Instance.new("Part")
+                previewHitbox.Name = "HitboxPreview"
+                previewHitbox.Size = anim.hitboxSize or Vector3.new(6, 6, 6)
+                previewHitbox.Anchored = true
+                previewHitbox.CanCollide = false
+                previewHitbox.Transparency = 0.6
+                previewHitbox.Color = Color3.fromRGB(255, 50, 50)
+                previewHitbox.Material = Enum.Material.ForceField
+                previewHitbox.Parent = workspace
+
+                updatePreview()
+            end
+
+            local function destroyPreview()
+                if previewClone then pcall(function() previewClone:Destroy() end); previewClone = nil end
+                if previewHitbox then pcall(function() previewHitbox:Destroy() end); previewHitbox = nil end
+            end
+
+            -- Scrub drag logic
+            local scrubbing = false
+            scrubBg.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    scrubbing = true
+                    if not previewClone or not previewClone.Parent then spawnPreview() end
+                end
+            end)
+
+            UIS.InputChanged:Connect(function(input)
+                if not scrubbing then return end
+                if input.UserInputType == Enum.UserInputType.MouseMovement then
+                    local absPos = scrubBg.AbsolutePosition.X
+                    local absSize = scrubBg.AbsoluteSize.X
+                    local mouseX = input.Position.X
+                    local frac = math.clamp((mouseX - absPos) / absSize, 0, 1)
+                    currentFrame = math.clamp(math.floor(frac * (#anim.frames - 1)) + 1, 1, #anim.frames)
+                    scrubHandle.Position = UDim2.new(frac, -2, 0, 0)
+                    updatePreview()
+                end
+            end)
+
+            UIS.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then scrubbing = false end
+            end)
+
+            -- Set hit frame = current scrubbed frame
+            setHitBtn.MouseButton1Click:Connect(function()
+                anim.hitFrame = currentFrame
+                local hf = math.clamp((currentFrame - 1) / math.max(#anim.frames - 1, 1), 0, 1)
+                hitMarker.Position = UDim2.new(hf, 0, 0, 0)
+                frameLbl.Text = "Frame: " .. currentFrame .. " / " .. #anim.frames .. "  |  Hit: " .. anim.hitFrame
+            end)
+
+            -- Cleanup preview when row is destroyed
+            row.AncestryChanged:Connect(function()
+                if not row.Parent then destroyPreview() end
             end)
         end
     end
@@ -736,14 +928,18 @@ local function compileScript()
     for _, a in ipairs(animations) do if a.slot:find("attack") then hasAttacks = true; break end end
 
     if hasAttacks then
-        w("local function findTargets(radius)")
+        w("local function findTargets(offset, size)")
         w("    if not fakeHRP then return {} end")
-        w("    local pos, look = fakeHRP.Position, fakeHRP.CFrame.LookVector")
+        w("    local hitCF = fakeHRP.CFrame * CFrame.new(offset)")
+        w("    local half = size / 2")
         w("    local targets = {}")
         w("    for _, p in ipairs(Players:GetPlayers()) do")
         w("        if p ~= player and p.Character then")
         w("            local tHRP = p.Character:FindFirstChild('HumanoidRootPart')")
-        w("            if tHRP then local off = tHRP.Position - pos; if off.Magnitude < radius and look:Dot(off.Unit) > 0.2 then table.insert(targets, tHRP) end end")
+        w("            if tHRP then")
+        w("                local lp = hitCF:PointToObjectSpace(tHRP.Position)")
+        w("                if math.abs(lp.X) < half.X and math.abs(lp.Y) < half.Y and math.abs(lp.Z) < half.Z then table.insert(targets, tHRP) end")
+        w("            end")
         w("        end")
         w("    end")
         w("    return targets")
@@ -765,7 +961,9 @@ local function compileScript()
         for i, a in ipairs(m1Attacks) do
             local varName = "attack_" .. (i + ({} and 0 or 0)) -- find actual index
             for idx2, a2 in ipairs(animations) do if a2 == a then varName = a2.slot:gsub(" ", "_") .. "_" .. idx2; break end end
-            w("    { frames=" .. varName .. "Frames, tween=" .. varName .. "Tween, hitFrame=" .. (a.hitFrame or 4) .. ", hitRange=" .. (a.hitRange or 10) .. " },")
+            local off = a.hitboxOffset or Vector3.new(0,0,-5)
+            local sz = a.hitboxSize or Vector3.new(6,6,6)
+            w("    { frames=" .. varName .. "Frames, tween=" .. varName .. "Tween, hitFrame=" .. (a.hitFrame or 4) .. ", hitOffset=Vector3.new(" .. off.X .. "," .. off.Y .. "," .. off.Z .. "), hitSize=Vector3.new(" .. sz.X .. "," .. sz.Y .. "," .. sz.Z .. ") },")
         end
         w("}")
         w("local comboIndex = 1; local lastAttackTime = 0; local COMBO_WINDOW = 0.8")
@@ -774,7 +972,7 @@ local function compileScript()
         w("    attacking = true; currentAnim = 'attack'")
         w("    for i = 1, #atk.frames - 1 do")
         w("        if not active then break end")
-        w("        if i == atk.hitFrame then local targets = findTargets(atk.hitRange); for _,tHRP in ipairs(targets) do task.spawn(function() flingTargetHRP=tHRP; task.wait(0.15); flingTargetHRP=nil end) end end")
+        w("        if i == atk.hitFrame then local targets = findTargets(atk.hitOffset, atk.hitSize); for _,tHRP in ipairs(targets) do task.spawn(function() flingTargetHRP=tHRP; task.wait(0.15); flingTargetHRP=nil end) end end")
         w("        local from, to = atk.frames[i], atk.frames[i+1]; local st = tick()")
         w("        while tick()-st < atk.tween do if not active then break end; local a=math.clamp((tick()-st)/atk.tween,0,1); for name,motor in pairs(jMap) do if from[name] and to[name] then motor.C0=from[name]:Lerp(to[name],a) end end; RunService.Heartbeat:Wait() end")
         w("        for name,motor in pairs(jMap) do if to[name] then motor.C0=to[name] end end")
@@ -797,7 +995,9 @@ local function compileScript()
                 w("        attacking = true; currentAnim = 'attack'")
                 w("        for i = 1, #" .. varName .. "Frames - 1 do")
                 w("            if not active then break end")
-                w("            if i == " .. (a.hitFrame or 4) .. " then local targets = findTargets(" .. (a.hitRange or 10) .. "); for _,tHRP in ipairs(targets) do task.spawn(function() flingTargetHRP=tHRP; task.wait(0.15); flingTargetHRP=nil end) end end")
+                local koff = a.hitboxOffset or Vector3.new(0,0,-5)
+                local ksz = a.hitboxSize or Vector3.new(6,6,6)
+                w("            if i == " .. (a.hitFrame or 4) .. " then local targets = findTargets(Vector3.new(" .. koff.X .. "," .. koff.Y .. "," .. koff.Z .. "), Vector3.new(" .. ksz.X .. "," .. ksz.Y .. "," .. ksz.Z .. ")); for _,tHRP in ipairs(targets) do task.spawn(function() flingTargetHRP=tHRP; task.wait(0.15); flingTargetHRP=nil end) end end")
                 w("            local from, to = " .. varName .. "Frames[i], " .. varName .. "Frames[i+1]; local st = tick()")
                 w("            while tick()-st < " .. varName .. "Tween do if not active then break end; local a=math.clamp((tick()-st)/" .. varName .. "Tween,0,1); for name,motor in pairs(jMap) do if from[name] and to[name] then motor.C0=from[name]:Lerp(to[name],a) end end; RunService.Heartbeat:Wait() end")
                 w("            for name,motor in pairs(jMap) do if to[name] then motor.C0=to[name] end end")
