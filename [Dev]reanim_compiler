@@ -778,6 +778,19 @@ local function refreshList()
                     contactBtn.Parent = line2
                     Instance.new("UICorner", contactBtn).CornerRadius = UDim.new(0, 2)
 
+                    -- Recast toggle (same line as contact)
+                    local recastBtn = Instance.new("TextButton")
+                    recastBtn.Size = UDim2.new(0, 66, 0, 14)
+                    recastBtn.Position = UDim2.new(0, 206, 0, 1)
+                    recastBtn.BackgroundColor3 = sf.recastable and TH.yellow or TH.btn
+                    recastBtn.BorderSizePixel = 0
+                    recastBtn.Text = sf.recastable and "Recast: ON" or "Recast: OFF"
+                    recastBtn.TextColor3 = sf.recastable and Color3.fromRGB(20, 20, 20) or TH.muted
+                    recastBtn.TextSize = 8
+                    recastBtn.Font = Enum.Font.GothamBold
+                    recastBtn.Parent = line2
+                    Instance.new("UICorner", recastBtn).CornerRadius = UDim.new(0, 2)
+
                     -- Event handlers
                     typeBtn.MouseButton1Click:Connect(function()
                         sf.type = sf.type == "camera" and "player" or "camera"
@@ -811,6 +824,13 @@ local function refreshList()
                         contactBtn.TextColor3 = sf.untilContact and Color3.fromRGB(20, 20, 20) or TH.muted
                     end)
 
+                    recastBtn.MouseButton1Click:Connect(function()
+                        sf.recastable = not sf.recastable
+                        recastBtn.BackgroundColor3 = sf.recastable and TH.yellow or TH.btn
+                        recastBtn.Text = sf.recastable and "Recast: ON" or "Recast: OFF"
+                        recastBtn.TextColor3 = sf.recastable and Color3.fromRGB(20, 20, 20) or TH.muted
+                    end)
+
                     sfDel.MouseButton1Click:Connect(function()
                         table.remove(anim.selfFlings, sfIdx)
                         refreshSelfFlings()
@@ -825,6 +845,7 @@ local function refreshList()
                     strength = 150,
                     frame = math.max(1, math.floor(#anim.frames / 4)),
                     untilContact = false,
+                    recastable = false,
                 })
                 refreshSelfFlings()
             end)
@@ -1391,8 +1412,10 @@ local function compileScript()
     w("")
     w("-- Self fling system")
     w("local selfFlingBV = nil")
-    w("local function stopSelfFling() if selfFlingBV and selfFlingBV.Parent then selfFlingBV:Destroy() end; selfFlingBV = nil end")
-    w("local function applySelfFling(sfType, sfDir, sfStrength, sfUntilContact)")
+    w("local recastKey = nil")
+    w("local recastParams = nil")
+    w("local function stopSelfFling() if selfFlingBV and selfFlingBV.Parent then selfFlingBV:Destroy() end; selfFlingBV = nil; recastKey = nil; recastParams = nil end")
+    w("local function applySelfFling(sfType, sfDir, sfStrength, sfUntilContact, sfRecastable, sfKey)")
     w("    stopSelfFling()")
     w("    local dir")
     w("    if sfType == 'camera' then")
@@ -1409,6 +1432,7 @@ local function compileScript()
     w("    selfFlingBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)")
     w("    selfFlingBV.Velocity = flingVel")
     w("    selfFlingBV.Parent = fakeHRP")
+    w("    if sfRecastable and sfKey then recastKey = sfKey; recastParams = {sfType, sfDir, sfStrength, sfUntilContact, true, sfKey} end")
     w("    if sfUntilContact then")
     w("        task.spawn(function()")
     w("            task.wait(0.1)")
@@ -1439,7 +1463,7 @@ local function compileScript()
             -- Serialize self flings
             local sfParts = {}
             for _, sf in ipairs(a.selfFlings or {}) do
-                table.insert(sfParts, "{type='" .. sf.type .. "',dir='" .. (sf.direction or "Forward") .. "',strength=" .. sf.strength .. ",frame=" .. sf.frame .. ",untilContact=" .. tostring(sf.untilContact) .. "}")
+                table.insert(sfParts, "{type='" .. sf.type .. "',dir='" .. (sf.direction or "Forward") .. "',strength=" .. sf.strength .. ",frame=" .. sf.frame .. ",untilContact=" .. tostring(sf.untilContact) .. ",recastable=" .. tostring(sf.recastable or false) .. "}")
             end
             local sfStr = "selfFlings={" .. table.concat(sfParts, ",") .. "}"
             w("    { frames=" .. varName .. "Frames, tween=" .. varName .. "Tween, hitFrame=" .. (a.hitFrame or 4) .. ", hitDuration=" .. hitDur .. ", hitOffset=Vector3.new(" .. off.X .. "," .. off.Y .. "," .. off.Z .. "), hitSize=Vector3.new(" .. sz.X .. "," .. sz.Y .. "," .. sz.Z .. "), " .. sfStr .. " },")
@@ -1458,7 +1482,9 @@ local function compileScript()
 
     -- Input handler — never yields, just sets pendingAttack
     w("table.insert(rEvents, UIS.InputBegan:Connect(function(input, gpe)")
-    w("    if gpe or not active or attacking then return end")
+    w("    if gpe or not active then return end")
+    w("    if recastKey and input.UserInputType == Enum.UserInputType.Keyboard and tostring(input.KeyCode):gsub('Enum.KeyCode.', '') == recastKey then applySelfFling(recastParams[1], recastParams[2], recastParams[3], recastParams[4], recastParams[5], recastParams[6]); return end")
+    w("    if attacking then return end")
     if #m1Attacks > 0 then
         w("    if input.UserInputType == Enum.UserInputType.MouseButton1 then")
         w("        if tick()-lastAttackTime > COMBO_WINDOW then comboIndex=1 end")
@@ -1501,7 +1527,7 @@ local function compileScript()
         if hasAttacks then
             w("                playFrameRange(atk.frames, atk.tween, function(i)")
             w("                    if i >= atk.hitFrame and i <= atk.hitFrame + atk.hitDuration - 1 then pcall(function() local targets = findTargets(atk.hitOffset, atk.hitSize); for _,tHRP in ipairs(targets) do flingTarget(tHRP) end end) end")
-            w("                    for _,sf in ipairs(atk.selfFlings) do if i == sf.frame then applySelfFling(sf.type, sf.dir, sf.strength, sf.untilContact) end end")
+            w("                    for _,sf in ipairs(atk.selfFlings) do if i == sf.frame then applySelfFling(sf.type, sf.dir, sf.strength, sf.untilContact, sf.recastable) end end")
             w("                end)")
         else
             w("                playFrameRange(atk.frames, atk.tween)")
@@ -1524,7 +1550,7 @@ local function compileScript()
                 w("                playFrameRange(" .. varName .. "Frames, " .. varName .. "Tween, function(i)")
                 w("                    if i >= " .. (a.hitFrame or 4) .. " and i <= " .. hitEnd .. " then pcall(function() local targets = findTargets(Vector3.new(" .. koff.X .. "," .. koff.Y .. "," .. koff.Z .. "), Vector3.new(" .. ksz.X .. "," .. ksz.Y .. "," .. ksz.Z .. ")); for _,tHRP in ipairs(targets) do flingTarget(tHRP) end end) end")
                 for _, sf in ipairs(a.selfFlings or {}) do
-                    w("                    if i == " .. sf.frame .. " then applySelfFling('" .. sf.type .. "', '" .. (sf.direction or "Forward") .. "', " .. sf.strength .. ", " .. tostring(sf.untilContact) .. ") end")
+                    w("                    if i == " .. sf.frame .. " then applySelfFling('" .. sf.type .. "', '" .. (sf.direction or "Forward") .. "', " .. sf.strength .. ", " .. tostring(sf.untilContact) .. ", " .. tostring(sf.recastable or false) .. ", '" .. a.keybind .. "') end")
                 end
                 w("                end)")
             else
@@ -1532,7 +1558,7 @@ local function compileScript()
                 if a.selfFlings and #a.selfFlings > 0 then
                     w("                playFrameRange(" .. varName .. "Frames, " .. varName .. "Tween, function(i)")
                     for _, sf in ipairs(a.selfFlings) do
-                        w("                    if i == " .. sf.frame .. " then applySelfFling('" .. sf.type .. "', '" .. (sf.direction or "Forward") .. "', " .. sf.strength .. ", " .. tostring(sf.untilContact) .. ") end")
+                        w("                    if i == " .. sf.frame .. " then applySelfFling('" .. sf.type .. "', '" .. (sf.direction or "Forward") .. "', " .. sf.strength .. ", " .. tostring(sf.untilContact) .. ", " .. tostring(sf.recastable or false) .. ", '" .. a.keybind .. "') end")
                     end
                     w("                end)")
                 else

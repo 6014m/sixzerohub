@@ -140,8 +140,8 @@ local conn = RunService.Heartbeat:Connect(function(dt)
         end
         lastPos[part] = pos
 
-        -- skip stationary low-confidence parts (railings, decor)
-        if vel.Magnitude < 1 and score < SCORE_ACTIVE then continue end
+        -- skip stationary parts — only jump at parts that are actually moving
+        if vel.Magnitude < 1 then continue end
 
         -- predict where the laser will be shortly
         local predY = pos.Y + vel.Y * PREDICT_SEC
@@ -172,11 +172,7 @@ local conn = RunService.Heartbeat:Connect(function(dt)
             if hit and hit.Instance then
                 local s = scorePart(hit.Instance)
                 if s >= SCORE_MIN then
-                    tracked[hit.Instance] = s
-                    if isGrounded() then
-                        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                    end
-                    break
+                    tracked[hit.Instance] = s -- add to tracked; Phase 1 handles jump when it moves
                 end
             end
         end
