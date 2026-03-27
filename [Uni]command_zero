@@ -3977,12 +3977,37 @@ end)
 addcmd("unreanimate", {"unanimate", "unreanim", "dereanim"}, "Respawn from reanimated state", function(args)
     local fakeRig = _G.czReanimateFakeRig
     if fakeRig and fakeRig.Parent then
-        local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
-        if fakeHum then
-            -- Reanimate disables Dead state — re-enable so killing triggers rDeath cleanup
-            fakeHum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-            fakeHum.Health = 0
+        -- Find the real character (parented inside the fake rig by reanimate)
+        local realChar
+        for _, child in ipairs(fakeRig:GetChildren()) do
+            if child:IsA("Model") and child:FindFirstChildOfClass("Humanoid") then
+                realChar = child
+                break
+            end
         end
+        if realChar then
+            -- Move real char back to workspace (replicates rDeath)
+            realChar.Parent = workspace
+            player.Character = realChar
+            -- Remove reanimate body movers so leftover connections can't move us
+            for _, desc in ipairs(realChar:GetDescendants()) do
+                if desc:IsA("BodyVelocity") or desc:IsA("BodyAngularVelocity") then
+                    pcall(function() desc:Destroy() end)
+                end
+            end
+            local hum = realChar:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.PlatformStand = false
+                hum:ChangeState(15)
+            end
+        end
+        -- Destroy fake rig (kills leftover reanimate connections referencing it)
+        pcall(function() fakeRig:Destroy() end)
+        -- Reset camera
+        pcall(function()
+            workspace.CurrentCamera.CameraSubject = player.Character
+                and player.Character:FindFirstChildOfClass("Humanoid")
+        end)
         _G.czReanimateActive = false
         _G.czReanimateFakeRig = nil
         notify("Unreanimate", "Respawning...")
