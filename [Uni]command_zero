@@ -1104,30 +1104,38 @@ end)
 --================================================================
 
 local TextChatService = game:GetService("TextChatService")
-local RBXGeneral = nil
-pcall(function()
-    RBXGeneral = TextChatService:WaitForChild("TextChannels", 2)
-        and TextChatService.TextChannels:WaitForChild("RBXGeneral", 2)
-end)
 
+local lastChatCmd = 0
 local function onChat(msg)
     msg = msg:gsub("^/e ", "")
     if msg:sub(1, #prefix) == prefix then
+        local now = tick()
+        if now - lastChatCmd < 0.5 then return end
+        lastChatCmd = now
         execCmd(msg:sub(#prefix + 1), player, true)
     end
 end
 
+-- Legacy chat hook
 connect(player.Chatted, onChat)
 
--- TextChatService hook
+-- TextChatService hook: hook ALL channels (not just RBXGeneral)
 pcall(function()
-    if TextChatService and RBXGeneral then
-        connect(RBXGeneral.MessageReceived, function(msg)
+    local function hookChannel(channel)
+        if not channel:IsA("TextChannel") then return end
+        connect(channel.MessageReceived, function(msg)
             if msg.TextSource and msg.TextSource.UserId == player.UserId then
                 task.defer(function() onChat(msg.Text) end)
             end
         end)
     end
+    -- Wait for TextChannels in background so we don't block loading
+    task.spawn(function()
+        local channels = TextChatService:WaitForChild("TextChannels", 10)
+        if not channels then return end
+        for _, ch in ipairs(channels:GetChildren()) do hookChannel(ch) end
+        connect(channels.ChildAdded, hookChannel)
+    end)
 end)
 
 
