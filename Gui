@@ -1331,6 +1331,8 @@ local DEV_SCRIPTS = {
     { name = "Dex", file = "[Dev]dex" },
     { name = "Remote Spy", file = "[Dev]remote_spy" },
     { name = "Anim Logger", file = "[Dev]anim_logger" },
+    { name = "Reanim Poser", file = "[Dev]reanim_poser" },
+    { name = "Reanim Compiler", file = "[Dev]reanim_compiler" },
 }
 
 local SPEC_SCRIPTS = {

@@ -1,0 +1,1220 @@
+-- [Dev] Reanim Poser — Keyframe animation builder for SixZeroHub
+-- Each clone = one animation keyframe. Sequential loading + render radius.
+-- Ctrl+C/V copies per-selected-part. Animator-based import.
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local RENDER_RADIUS = 100 -- studs: frames beyond this are despawned but data kept
+local active = true
+
+-- Active clone references (point to currently selected keyframe clone)
+local clone, joints, defaults
+local gui, conns = nil, {}
+local mode = "Rotate"
+local moveHandles, arcHandles
+local selected = nil
+local selectedList = {}
+local selBoxes = {}
+local playing = false
+local axisMode = "local"
+local proxyPart = nil
+local selBox = nil
+
+-- Multi-clone / keyframe state
+local clonesList = {} -- each entry: { model, joints, defaults }
+local copiedParts = nil -- { jointName = C0 } for selected parts only
+local guiCreated = false
+local tweenDuration = 0.5 -- seconds between keyframes
+local tempClone = nil -- temporary playback clone
+local partBtns = {}
+local cloneHighlight = nil -- SelectionBox around active clone model
+local tweenBoxRef = nil -- reference to tween duration TextBox for updating after import
+
+local partMap = {
+    HumanoidRootPart="RootJoint",Torso="RootJoint",Head="Neck",
+    ["Right Arm"]="Right Shoulder",["Left Arm"]="Left Shoulder",
+    ["Right Leg"]="Right Hip",["Left Leg"]="Left Hip",
+}
+
+--================================================================
+-- POSE HELPERS
+--================================================================
+
+local function captureFrom(jts)
+    if not jts then return nil end
+    local p = {}
+    for _,j in ipairs(jts) do if j.motor then p[j.name] = j.motor.C0 end end
+    return p
+end
+
+local function capture() return captureFrom(joints) end
+
+local function applyTo(jts, pose)
+    if not jts or not pose then return end
+    for _,j in ipairs(jts) do if j.motor and pose[j.name] then j.motor.C0 = pose[j.name] end end
+end
+
+local function apply(pose) applyTo(joints, pose) end
+
+local function copyAnimCode()
+    if #clonesList < 1 then return end
+    local out = "-- R6 Animation — " .. #clonesList .. " keyframes, " .. tweenDuration .. "s tween\n"
+    out = out .. "local RunService = game:GetService('RunService')\n"
+    out = out .. "local tweenDuration = " .. tweenDuration .. "\n\n"
+    out = out .. "local keyframes = {\n"
+    for i, cd in ipairs(clonesList) do
+        out = out .. "    { -- Frame " .. i .. "\n"
+        for _, j in ipairs(cd.joints) do
+            if j.motor then
+                local cs = {j.motor.C0:GetComponents()}
+                local pts = {}
+                for _, v in ipairs(cs) do table.insert(pts, string.format("%.4f", v)) end
+                out = out .. string.format('        ["%s"] = CFrame.new(%s),\n', j.name, table.concat(pts, ", "))
+            end
+        end
+        out = out .. "    },\n"
+    end
+    out = out .. "}\n\n"
+    out = out .. "local function playAnim(character, loop)\n"
+    out = out .. "    local torso = character:FindFirstChild('Torso')\n"
+    out = out .. "    local hrp = character:FindFirstChild('HumanoidRootPart')\n"
+    out = out .. "    if not torso or not hrp then return end\n"
+    out = out .. "    local jMap = {}\n"
+    out = out .. "    for _, m in ipairs(torso:GetChildren()) do if m:IsA('Motor6D') then jMap[m.Name] = m end end\n"
+    out = out .. "    local rj = hrp:FindFirstChild('RootJoint'); if rj then jMap['RootJoint'] = rj end\n"
+    out = out .. "    repeat\n"
+    out = out .. "        for i = 1, #keyframes - 1 do\n"
+    out = out .. "            local from, to = keyframes[i], keyframes[i+1]\n"
+    out = out .. "            local start = tick()\n"
+    out = out .. "            while tick() - start < tweenDuration do\n"
+    out = out .. "                local a = math.clamp((tick() - start) / tweenDuration, 0, 1)\n"
+    out = out .. "                for name, motor in pairs(jMap) do\n"
+    out = out .. "                    if from[name] and to[name] then motor.C0 = from[name]:Lerp(to[name], a) end\n"
+    out = out .. "                end\n"
+    out = out .. "                RunService.Heartbeat:Wait()\n"
+    out = out .. "            end\n"
+    out = out .. "            for name, motor in pairs(jMap) do if to[name] then motor.C0 = to[name] end end\n"
+    out = out .. "        end\n"
+    out = out .. "    until not loop\n"
+    out = out .. "end\n\n"
+    out = out .. "-- Usage: playAnim(game.Players.LocalPlayer.Character, false)\n"
+    print("=== ANIMATION ==="); print(out); print("=================")
+    pcall(function() if setclipboard then setclipboard(out) elseif toclipboard then toclipboard(out) end end)
+end
+
+local function copySinglePose()
+    if not joints or not defaults then return end
+    local out = "-- R6 Pose Output\n"
+    for _,j in ipairs(joints) do if j.motor then
+        local offset = defaults[j.name]:Inverse() * j.motor.C0
+        local ox,oy,oz = offset.X, offset.Y, offset.Z
+        local rx,ry,rz = offset:ToEulerAnglesXYZ()
+        rx,ry,rz = math.deg(rx),math.deg(ry),math.deg(rz)
+        local hp = math.abs(ox)>0.01 or math.abs(oy)>0.01 or math.abs(oz)>0.01
+        local hr = math.abs(rx)>0.5 or math.abs(ry)>0.5 or math.abs(rz)>0.5
+        if hp or hr then
+            local v=j.name:gsub(" ",""); local s=v:sub(1,2):lower()..v:sub(3)
+            local ps=hp and string.format("CFrame.new(%.2f, %.2f, %.2f) * ",ox,oy,oz) or ""
+            local rs=hr and string.format("CFrame.Angles(math.rad(%.1f), math.rad(%.1f), math.rad(%.1f))",rx,ry,rz) or "CFrame.new()"
+            out=out..string.format("if %s then %s.C0 = %s.C0:Lerp(%sDefault * %s%s, 0.12) end\n",s,s,s,v,ps,rs)
+        end
+    end end
+    out=out.."\n-- Defaults:\n"
+    for _,j in ipairs(joints) do if j.motor then
+        local cs={defaults[j.name]:GetComponents()};local pts={}
+        for _,vv in ipairs(cs) do table.insert(pts,string.format("%.4f",vv)) end
+        out=out..string.format("-- local %sDefault = CFrame.new(%s)\n",j.name:gsub(" ",""),table.concat(pts,", "))
+    end end
+    print("=== POSE ===");print(out);print("============")
+    pcall(function() if setclipboard then setclipboard(out) elseif toclipboard then toclipboard(out) end end)
+end
+
+--================================================================
+-- HANDLE / SELECTION HELPERS
+--================================================================
+
+local function getHandleAdornee()
+    if not selected or not selected.motor then return nil end
+    if axisMode == "global" then
+        if not proxyPart then
+            proxyPart = Instance.new("Part")
+            proxyPart.Name = "PoseProxy"
+            proxyPart.Size = selected.motor.Part1.Size
+            proxyPart.Transparency = 1
+            proxyPart.Anchored = true
+            proxyPart.CanCollide = false
+            proxyPart.Parent = workspace
+        end
+        proxyPart.Size = selected.motor.Part1.Size
+        proxyPart.CFrame = CFrame.new(selected.motor.Part1.Position)
+        return proxyPart
+    else
+        return selected.motor.Part1
+    end
+end
+
+local function clearSel()
+    selected = nil
+    selectedList = {}
+    for _, sb in pairs(selBoxes) do sb:Destroy() end
+    selBoxes = {}
+    if moveHandles then moveHandles.Adornee = nil end
+    if arcHandles then arcHandles.Adornee = nil end
+end
+
+local function addToSel(j)
+    for _, s in ipairs(selectedList) do if s.name == j.name then return end end
+    table.insert(selectedList, j)
+    local sb = Instance.new("SelectionBox")
+    sb.Color3 = #selectedList == 1 and Color3.fromRGB(0,170,255) or Color3.fromRGB(230,190,40)
+    sb.LineThickness = 0.05
+    sb.SurfaceTransparency = 0.8
+    sb.SurfaceColor3 = sb.Color3
+    sb.Parent = gui
+    if j.motor and j.motor.Part1 then sb.Adornee = j.motor.Part1; sb.Visible = true end
+    selBoxes[j.name] = sb
+end
+
+local function removeFromSel(j)
+    for i, s in ipairs(selectedList) do
+        if s.name == j.name then
+            table.remove(selectedList, i)
+            if selBoxes[j.name] then selBoxes[j.name]:Destroy(); selBoxes[j.name] = nil end
+            break
+        end
+    end
+end
+
+local function selectPart(part, multi)
+    if not part or not joints then return nil end
+    local jn = partMap[part.Name]
+    if not jn and part.Parent and part.Parent:IsA("Accessory") then jn = "Acc_"..part.Parent.Name end
+    if not jn then return nil end
+    for _,j in ipairs(joints) do
+        if j.name == jn then
+            if multi then
+                local found = false
+                for _, s in ipairs(selectedList) do if s.name == j.name then found = true; break end end
+                if found then removeFromSel(j) else addToSel(j) end
+                selected = #selectedList > 0 and selectedList[#selectedList] or nil
+            else
+                clearSel()
+                selected = j
+                addToSel(j)
+            end
+            local adornee = getHandleAdornee()
+            if moveHandles then moveHandles.Adornee = mode=="Move" and adornee or nil end
+            if arcHandles then arcHandles.Adornee = mode=="Rotate" and adornee or nil end
+            return true
+        end
+    end
+    return nil
+end
+
+local function updateHandleMode()
+    if not selected then return end
+    local adornee = getHandleAdornee()
+    if moveHandles then moveHandles.Adornee = mode=="Move" and adornee or nil end
+    if arcHandles then arcHandles.Adornee = mode=="Rotate" and adornee or nil end
+end
+
+-- Undo/Redo
+local undoStack, redoStack = {}, {}
+
+local function saveState()
+    if not joints then return end
+    local state = {}
+    for _,j in ipairs(joints) do if j.motor then state[j.name] = j.motor.C0 end end
+    table.insert(undoStack, state)
+    if #undoStack > 50 then table.remove(undoStack, 1) end
+    redoStack = {}
+end
+
+local function undo()
+    if #undoStack == 0 or not joints then return end
+    local cur = {}
+    for _,j in ipairs(joints) do if j.motor then cur[j.name] = j.motor.C0 end end
+    table.insert(redoStack, cur)
+    local prev = table.remove(undoStack)
+    for _,j in ipairs(joints) do if j.motor and prev[j.name] then j.motor.C0 = prev[j.name] end end
+end
+
+local function redo()
+    if #redoStack == 0 or not joints then return end
+    local cur = {}
+    for _,j in ipairs(joints) do if j.motor then cur[j.name] = j.motor.C0 end end
+    table.insert(undoStack, cur)
+    local next2 = table.remove(redoStack)
+    for _,j in ipairs(joints) do if j.motor and next2[j.name] then j.motor.C0 = next2[j.name] end end
+end
+
+-- Accessory adder
+local function addAcc(acc)
+    if not acc:IsA("Accessory") or not acc:FindFirstChild("Handle") or not clone or not joints then return end
+    for _,j in ipairs(joints) do if j.name=="Acc_"..acc.Name then return end end
+    local h = acc.Handle
+    local par = nil
+    for _,w in ipairs(h:GetChildren()) do if w:IsA("Weld") or w:IsA("WeldConstraint") then par=(w.Part0==h) and w.Part1 or w.Part0; break end end
+    if not par then for _,w in ipairs(clone:GetDescendants()) do if (w:IsA("Weld") or w:IsA("WeldConstraint")) and (w.Part0==h or w.Part1==h) then par=(w.Part0==h) and w.Part1 or w.Part0; break end end end
+    if not par then par = clone:FindFirstChild("Head") or clone:FindFirstChild("Torso") end
+    for _,w in ipairs(h:GetChildren()) do if w:IsA("Weld") or w:IsA("WeldConstraint") then w:Destroy() end end
+    local m = Instance.new("Motor6D"); m.Name="CZ_Acc"; m.Part0=par; m.Part1=h
+    m.C0 = par.CFrame:ToObjectSpace(h.CFrame); m.Parent=h
+    local jd = {name="Acc_"..acc.Name, motor=m}
+    table.insert(joints, jd)
+    defaults[jd.name] = m.C0
+    partMap[h.Name] = jd.name
+end
+
+local refreshPartsList, refreshFramesList
+
+--================================================================
+-- SPAWN / SWITCH / DELETE KEYFRAME CLONES
+--================================================================
+
+-- Forward declare for render radius (defined later)
+local savePose
+
+local function buildJoints(c)
+    local j, d = {}, {}
+    local tor = c:FindFirstChild("Torso")
+    for _,jd in ipairs({
+        {n="RootJoint",m=c.HumanoidRootPart:FindFirstChild("RootJoint")},
+        {n="Neck",m=tor and tor:FindFirstChild("Neck")},
+        {n="Right Shoulder",m=tor and tor:FindFirstChild("Right Shoulder")},
+        {n="Left Shoulder",m=tor and tor:FindFirstChild("Left Shoulder")},
+        {n="Right Hip",m=tor and tor:FindFirstChild("Right Hip")},
+        {n="Left Hip",m=tor and tor:FindFirstChild("Left Hip")},
+    }) do if jd.m then table.insert(j,{name=jd.n,motor=jd.m}); d[jd.n]=jd.m.C0 end end
+    return j, d
+end
+
+local function spawnClone()
+    local real = player.Character; if not real then return end
+    local hum = real:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.RigType ~= Enum.HumanoidRigType.R6 then print("[Pose] R6 only"); return end
+    real.Archivable = true
+    local c = real:Clone(); c.Name = "PoseFrame_" .. (#clonesList + 1)
+    for _,v in pairs(c:GetDescendants()) do
+        if v:IsA("LocalScript") or v:IsA("Script") then v:Destroy()
+        elseif v:IsA("BasePart") then v.Anchored=(v.Name=="HumanoidRootPart"); v.CanCollide=false end
+    end
+    local ch = c:FindFirstChildOfClass("Humanoid")
+    if ch then ch.PlatformStand=true; for _,t in pairs(ch:GetPlayingAnimationTracks()) do t:Stop() end end
+
+    -- Position: first clone 10 studs in front, subsequent 20 studs right of last
+    local root = real:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local spawnPos
+    if #clonesList == 0 then
+        spawnPos = root.CFrame.Position + root.CFrame.LookVector * 10
+    else
+        -- Use stored position of last frame (works even if model is despawned)
+        local lastData = clonesList[#clonesList]
+        local lastPos = lastData.pos or (root.CFrame.Position + root.CFrame.LookVector * 10)
+        spawnPos = lastPos + root.CFrame.RightVector * 6
+    end
+    local groundRay = workspace:Raycast(spawnPos + Vector3.new(0, 50, 0), Vector3.new(0, -200, 0))
+    local groundY = groundRay and (groundRay.Position.Y + 5) or spawnPos.Y
+    c:SetPrimaryPartCFrame(CFrame.new(spawnPos.X, groundY, spawnPos.Z) * CFrame.Angles(0, math.pi, 0))
+    c.Parent = workspace
+
+    -- Frame number label above head
+    local bGui = Instance.new("BillboardGui")
+    bGui.Name = "FrameLabel"
+    bGui.Size = UDim2.new(0, 60, 0, 24)
+    bGui.StudsOffset = Vector3.new(0, 3, 0)
+    bGui.AlwaysOnTop = true
+    bGui.Adornee = c:FindFirstChild("Head") or c.HumanoidRootPart
+    bGui.Parent = c
+    local fLbl = Instance.new("TextLabel")
+    fLbl.Size = UDim2.new(1, 0, 1, 0)
+    fLbl.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    fLbl.BackgroundTransparency = 0.3
+    fLbl.TextColor3 = Color3.new(1, 1, 1)
+    fLbl.TextSize = 14
+    fLbl.Font = Enum.Font.GothamBold
+    fLbl.Text = "F" .. (#clonesList + 1)
+    fLbl.Parent = bGui
+    Instance.new("UICorner", fLbl).CornerRadius = UDim.new(0, 6)
+
+    local j, d = buildJoints(c)
+    -- Store pose data (C0 values) so we can rebuild the model if despawned
+    local poseData = {}
+    for _, jt in ipairs(j) do if jt.motor then poseData[jt.name] = jt.motor.C0 end end
+    local data = { model = c, joints = j, defaults = d, pose = poseData, pos = spawnPos, rendered = true }
+    table.insert(clonesList, data)
+    switchToClone(data)
+    print("[Pose] Frame " .. #clonesList .. " spawned")
+end
+
+function switchToClone(data)
+    if not data then return end
+    clearSel()
+    clone = data.model
+    joints = data.joints
+    defaults = data.defaults
+    undoStack = {}
+    redoStack = {}
+    -- Highlight active clone
+    if cloneHighlight then
+        cloneHighlight.Adornee = clone
+    end
+    if refreshPartsList then refreshPartsList() end
+    if refreshFramesList then refreshFramesList() end
+end
+
+local function findCloneDataForPart(part)
+    for _, cd in ipairs(clonesList) do
+        if cd.model and part:IsDescendantOf(cd.model) then return cd end
+    end
+    return nil
+end
+
+local function deleteClone(data)
+    if not data then return end
+    for i, cd in ipairs(clonesList) do
+        if cd == data then table.remove(clonesList, i); break end
+    end
+    if data.model then pcall(function() data.model:Destroy() end) end
+    -- Renumber frame labels
+    for i, cd in ipairs(clonesList) do
+        if cd.model then
+            local bg = cd.model:FindFirstChild("FrameLabel")
+            if bg then
+                local lbl = bg:FindFirstChildOfClass("TextLabel")
+                if lbl then lbl.Text = "F" .. i end
+            end
+        end
+    end
+    if clone == data.model then
+        if #clonesList > 0 then
+            switchToClone(clonesList[#clonesList])
+        else
+            clone = nil; joints = nil; defaults = nil
+            clearSel()
+            if refreshPartsList then refreshPartsList() end
+            if refreshFramesList then refreshFramesList() end
+        end
+    else
+        if refreshFramesList then refreshFramesList() end
+    end
+end
+
+--================================================================
+-- PLAY ANIMATION (temp clone that lerps through keyframes)
+--================================================================
+
+local function stopPlayback()
+    playing = false
+    if tempClone then pcall(function() tempClone:Destroy() end); tempClone = nil end
+end
+
+local function playAnimation()
+    if #clonesList < 2 then print("[Pose] Need at least 2 frames"); return end
+    if playing then stopPlayback(); return end
+
+    -- Create temp clone from first keyframe
+    local firstModel = clonesList[1].model
+    firstModel.Archivable = true
+    tempClone = firstModel:Clone()
+    tempClone.Name = "PoseAnim_Preview"
+
+    -- Remove frame label, add "PLAYING" label
+    local oldLabel = tempClone:FindFirstChild("FrameLabel")
+    if oldLabel then oldLabel:Destroy() end
+    local bGui = Instance.new("BillboardGui")
+    bGui.Name = "PlayLabel"
+    bGui.Size = UDim2.new(0, 80, 0, 24)
+    bGui.StudsOffset = Vector3.new(0, 3, 0)
+    bGui.AlwaysOnTop = true
+    bGui.Adornee = tempClone:FindFirstChild("Head") or tempClone:FindFirstChild("HumanoidRootPart")
+    bGui.Parent = tempClone
+    local pLbl = Instance.new("TextLabel")
+    pLbl.Size = UDim2.new(1, 0, 1, 0)
+    pLbl.BackgroundColor3 = Color3.fromRGB(60, 200, 80)
+    pLbl.BackgroundTransparency = 0.3
+    pLbl.TextColor3 = Color3.new(1, 1, 1)
+    pLbl.TextSize = 12
+    pLbl.Font = Enum.Font.GothamBold
+    pLbl.Text = "PLAYING"
+    pLbl.Parent = bGui
+    Instance.new("UICorner", pLbl).CornerRadius = UDim.new(0, 6)
+
+    -- Position in front of player
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if root then
+        local pos = root.CFrame.Position + root.CFrame.LookVector * 10 + Vector3.new(0, 0, 0)
+        local groundRay = workspace:Raycast(pos + Vector3.new(0, 50, 0), Vector3.new(0, -200, 0))
+        local groundY = groundRay and (groundRay.Position.Y + 5) or pos.Y
+        local hrp = tempClone:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.CFrame = CFrame.new(pos.X, groundY, pos.Z) * CFrame.Angles(0, math.pi, 0) end
+    end
+    tempClone.Parent = workspace
+
+    local tempJoints = buildJoints(tempClone)
+    playing = true
+
+    task.spawn(function()
+        -- Gather all keyframe poses
+        local keyframes = {}
+        for _, cd in ipairs(clonesList) do
+            table.insert(keyframes, captureFrom(cd.joints))
+        end
+
+        while playing do
+            for i = 1, #keyframes - 1 do
+                if not playing then break end
+                local from, to = keyframes[i], keyframes[i + 1]
+                local startTime = tick()
+                while tick() - startTime < tweenDuration do
+                    if not playing then break end
+                    local alpha = math.clamp((tick() - startTime) / tweenDuration, 0, 1)
+                    for _, tj in ipairs(tempJoints) do
+                        if tj.motor and from[tj.name] and to[tj.name] then
+                            tj.motor.C0 = from[tj.name]:Lerp(to[tj.name], alpha)
+                        end
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+                -- Snap to target
+                if playing then applyTo(tempJoints, to) end
+            end
+            -- Loop: pause at end briefly then restart
+            if playing then task.wait(0.2) end
+        end
+
+        if tempClone then pcall(function() tempClone:Destroy() end); tempClone = nil end
+        if refreshFramesList then refreshFramesList() end
+    end)
+
+    if refreshFramesList then refreshFramesList() end
+end
+
+--================================================================
+-- IMPORT ANIMATION BY ID
+--================================================================
+
+local function importAnimation(animId)
+    local real = player.Character
+    if not real then print("[Pose] No character"); return end
+    local hum = real:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.RigType ~= Enum.HumanoidRigType.R6 then print("[Pose] R6 only"); return end
+
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then
+        animator = Instance.new("Animator")
+        animator.Parent = hum
+    end
+
+    print("[Pose] Loading animation " .. animId .. "...")
+
+    local anim = Instance.new("Animation")
+    anim.AnimationId = "rbxassetid://" .. tostring(animId)
+
+    local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
+    if not ok or not track then
+        print("[Pose] LoadAnimation failed: " .. tostring(track))
+        return
+    end
+
+    -- Stop other animations so our sample is clean
+    for _, t in ipairs(animator:GetPlayingAnimationTracks()) do t:Stop(0) end
+    task.wait(0.1)
+
+    track.Priority = Enum.AnimationPriority.Action4
+    track:Play()
+
+    -- Wait for length to populate
+    local waited = 0
+    while track.Length <= 0 and waited < 5 do
+        task.wait(0.1)
+        waited = waited + 0.1
+    end
+
+    if track.Length <= 0 then
+        track:Stop()
+        print("[Pose] Animation failed to load (ID: " .. animId .. ")")
+        return
+    end
+
+    local length = track.Length
+    print("[Pose] Playing and sampling, length: " .. string.format("%.2f", length) .. "s")
+
+    -- Sample the actual rendered poses every heartbeat as the engine plays it
+    local torso = real:FindFirstChild("Torso")
+    local hrpReal = real:FindFirstChild("HumanoidRootPart")
+    local sampledFrames = {}
+
+    local startTime = tick()
+    while tick() - startTime < length + 0.03 do
+        local pose = {}
+        if torso then
+            for _, m in ipairs(torso:GetChildren()) do
+                if m:IsA("Motor6D") then
+                    pose[m.Name] = m.C0 * m.Transform
+                end
+            end
+        end
+        if hrpReal then
+            local rj = hrpReal:FindFirstChild("RootJoint")
+            if rj then pose["RootJoint"] = rj.C0 * rj.Transform end
+        end
+        table.insert(sampledFrames, pose)
+        RunService.Heartbeat:Wait()
+    end
+
+    track:Stop(0)
+    print("[Pose] Sampled " .. #sampledFrames .. " frames")
+
+    if #sampledFrames == 0 then
+        print("[Pose] No frames captured")
+        return
+    end
+
+    -- Set tween duration (one heartbeat per frame, ~1/60s)
+    tweenDuration = length / math.max(#sampledFrames - 1, 1)
+    if tweenBoxRef then tweenBoxRef.Text = string.format("%.4f", tweenDuration) end
+
+    -- Create keyframe clones sequentially (one per frame, yields to prevent crash)
+    print("[Pose] Spawning " .. #sampledFrames .. " frames sequentially...")
+    for i, pose in ipairs(sampledFrames) do
+        if not active then break end
+        spawnClone()
+        local cd = clonesList[#clonesList]
+        if cd then
+            for _, j in ipairs(cd.joints) do
+                if j.motor and pose[j.name] then
+                    j.motor.C0 = pose[j.name]
+                end
+            end
+            -- Save pose data immediately for render radius
+            savePose(cd)
+        end
+        -- Yield every frame to prevent crash
+        if i % 3 == 0 then task.wait() end
+    end
+
+    if #clonesList > 0 then switchToClone(clonesList[1]) end
+    print("[Pose] Imported " .. #sampledFrames .. " frames (tween: " .. string.format("%.4f", tweenDuration) .. "s)")
+end
+
+--================================================================
+-- CREATE GUI
+--================================================================
+
+local function createGUI()
+    if guiCreated then return end
+    guiCreated = true
+
+    gui = Instance.new("ScreenGui"); gui.Name="PoseTool"; gui.ResetOnSpawn=false; gui.DisplayOrder=10
+    gui.Parent = playerGui
+
+    local TH = {bg=Color3.fromRGB(20,20,24),panel=Color3.fromRGB(30,30,36),accent=Color3.fromRGB(0,170,255),text=Color3.new(1,1,1),muted=Color3.fromRGB(140,140,140),btn=Color3.fromRGB(50,50,58),green=Color3.fromRGB(60,200,80),red=Color3.fromRGB(200,50,50),yellow=Color3.fromRGB(230,190,40)}
+
+    -- Clone highlight box (green outline around active clone model)
+    cloneHighlight = Instance.new("SelectionBox")
+    cloneHighlight.Color3 = Color3.fromRGB(60, 200, 80)
+    cloneHighlight.LineThickness = 0.02
+    cloneHighlight.SurfaceTransparency = 1
+    cloneHighlight.Parent = gui
+    if clone then cloneHighlight.Adornee = clone end
+
+    -- ── TOOLBAR (bottom center) ──
+    local tb2 = Instance.new("Frame")
+    tb2.Size = UDim2.new(0, 470, 0, 32)
+    tb2.Position = UDim2.new(0.5, -235, 1, -38)
+    tb2.BackgroundColor3 = Color3.fromRGB(36,36,37)
+    tb2.BorderSizePixel = 0
+    tb2.Parent = gui
+    Instance.new("UICorner", tb2).CornerRadius = UDim.new(0, 6)
+    Instance.new("UIStroke", tb2).Color = Color3.fromRGB(60,60,62)
+    local tbl = Instance.new("UIListLayout", tb2)
+    tbl.FillDirection = Enum.FillDirection.Horizontal
+    tbl.VerticalAlignment = Enum.VerticalAlignment.Center
+    tbl.Padding = UDim.new(0, 2)
+    Instance.new("UIPadding", tb2).PaddingLeft = UDim.new(0, 4)
+
+    local moveBtn2, rotBtn2, globalBtn, localBtn
+    local function updTB()
+        moveBtn2.BackgroundColor3 = mode=="Move" and TH.accent or Color3.fromRGB(56,56,60)
+        rotBtn2.BackgroundColor3 = mode=="Rotate" and TH.accent or Color3.fromRGB(56,56,60)
+        globalBtn.BackgroundColor3 = axisMode=="global" and TH.accent or Color3.fromRGB(56,56,60)
+        localBtn.BackgroundColor3 = axisMode=="local" and TH.accent or Color3.fromRGB(56,56,60)
+    end
+
+    local function tBtn(text, w, cb)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(0, w, 0, 24)
+        b.BackgroundColor3 = Color3.fromRGB(56,56,60)
+        b.BorderSizePixel = 0; b.Text = text; b.TextColor3 = Color3.new(1,1,1)
+        b.TextSize = 10; b.Font = Enum.Font.GothamBold; b.Parent = tb2
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        b.MouseButton1Click:Connect(cb); return b
+    end
+
+    tBtn("+ Frame", 55, spawnClone)
+    tBtn("Clear", 42, function()
+        for _, cd in ipairs(clonesList) do pcall(function() cd.model:Destroy() end) end
+        clonesList = {}
+        clone = nil; joints = nil; defaults = nil
+        clearSel()
+        if moveHandles then moveHandles.Adornee = nil end
+        if arcHandles then arcHandles.Adornee = nil end
+        if refreshPartsList then refreshPartsList() end
+        if refreshFramesList then refreshFramesList() end
+        if cloneHighlight then cloneHighlight.Adornee = nil end
+        print("[Pose] All frames cleared")
+    end)
+
+    local sep0 = Instance.new("Frame"); sep0.Size=UDim2.new(0,1,0,20); sep0.BackgroundColor3=Color3.fromRGB(80,80,82); sep0.BorderSizePixel=0; sep0.Parent=tb2
+
+    moveBtn2 = tBtn("Move [Z]", 65, function() mode="Move"; updTB(); updateHandleMode() end)
+    rotBtn2 = tBtn("Rotate [C]", 72, function() mode="Rotate"; updTB(); updateHandleMode() end)
+
+    local sep2 = Instance.new("Frame"); sep2.Size=UDim2.new(0,1,0,20); sep2.BackgroundColor3=Color3.fromRGB(80,80,82); sep2.BorderSizePixel=0; sep2.Parent=tb2
+
+    globalBtn = tBtn("Global", 50, function() axisMode="global"; updTB(); updateHandleMode() end)
+    localBtn = tBtn("Local", 44, function() axisMode="local"; updTB(); updateHandleMode() end)
+
+    local sep3 = Instance.new("Frame"); sep3.Size=UDim2.new(0,1,0,20); sep3.BackgroundColor3=Color3.fromRGB(80,80,82); sep3.BorderSizePixel=0; sep3.Parent=tb2
+
+    tBtn("Reset", 42, function() if joints and defaults then for _,j in ipairs(joints) do if j.motor then j.motor.C0=defaults[j.name] end end end end)
+
+    local sep4 = Instance.new("Frame"); sep4.Size=UDim2.new(0,1,0,20); sep4.BackgroundColor3=Color3.fromRGB(80,80,82); sep4.BorderSizePixel=0; sep4.Parent=tb2
+
+    local xBtn = Instance.new("TextButton")
+    xBtn.Size = UDim2.new(0, 28, 0, 24)
+    xBtn.BackgroundColor3 = TH.red; xBtn.BorderSizePixel = 0
+    xBtn.Text = "X"; xBtn.TextColor3 = Color3.new(1,1,1)
+    xBtn.TextSize = 14; xBtn.Font = Enum.Font.GothamBold; xBtn.Parent = tb2
+    Instance.new("UICorner", xBtn).CornerRadius = UDim.new(0, 4)
+    xBtn.MouseButton1Click:Connect(function()
+        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then humanoid:UnequipTools() end
+    end)
+
+    updTB()
+
+    -- ── PROXY PART update ──
+    table.insert(conns, RunService.RenderStepped:Connect(function()
+        if proxyPart and selected and selected.motor and selected.motor.Part1 then
+            proxyPart.Size = selected.motor.Part1.Size
+            proxyPart.CFrame = CFrame.new(selected.motor.Part1.Position)
+        end
+    end))
+
+    -- ── MOVE HANDLES ──
+    moveHandles = Instance.new("Handles")
+    moveHandles.Color3 = Color3.fromRGB(255,140,0)
+    moveHandles.Style = Enum.HandlesStyle.Movement
+    moveHandles.Parent = playerGui; moveHandles.Visible = true
+
+    local preMoveAll = {}
+    moveHandles.MouseButton1Down:Connect(function()
+        saveState()
+        preMoveAll = {}
+        for _, sj in ipairs(selectedList) do
+            if sj.motor then preMoveAll[sj.name] = { c0 = sj.motor.C0, cf = sj.motor.Part1.CFrame, c1 = sj.motor.C1 } end
+        end
+    end)
+
+    moveHandles.MouseDrag:Connect(function(face, distance)
+        if #selectedList == 0 then return end
+        local dir
+        if face == Enum.NormalId.Right then dir = Vector3.new(1,0,0)
+        elseif face == Enum.NormalId.Left then dir = Vector3.new(-1,0,0)
+        elseif face == Enum.NormalId.Top then dir = Vector3.new(0,1,0)
+        elseif face == Enum.NormalId.Bottom then dir = Vector3.new(0,-1,0)
+        elseif face == Enum.NormalId.Front then dir = Vector3.new(0,0,-1)
+        elseif face == Enum.NormalId.Back then dir = Vector3.new(0,0,1) end
+        for _, sj in ipairs(selectedList) do
+            local pre = preMoveAll[sj.name]
+            if pre and sj.motor then
+                local worldOffset = axisMode == "global" and dir * distance or pre.cf:VectorToWorldSpace(dir) * distance
+                local desiredCF = pre.cf + worldOffset
+                sj.motor.C0 = sj.motor.Part0.CFrame:Inverse() * desiredCF * (pre.c1 or CFrame.new())
+            end
+        end
+    end)
+
+    -- ── ARC HANDLES ──
+    arcHandles = Instance.new("ArcHandles")
+    arcHandles.Color3 = Color3.fromRGB(0,200,0)
+    arcHandles.Parent = playerGui; arcHandles.Visible = true
+
+    local preRotAll = {}
+    arcHandles.MouseButton1Down:Connect(function()
+        saveState()
+        preRotAll = {}
+        for _, sj in ipairs(selectedList) do
+            if sj.motor then preRotAll[sj.name] = { cf = sj.motor.Part1.CFrame, c1 = sj.motor.C1 } end
+        end
+    end)
+
+    arcHandles.MouseDrag:Connect(function(axis, relativeAngle)
+        if #selectedList == 0 then return end
+        local rotCF
+        if axis == Enum.Axis.X then rotCF = CFrame.Angles(relativeAngle,0,0)
+        elseif axis == Enum.Axis.Y then rotCF = CFrame.Angles(0,relativeAngle,0)
+        else rotCF = CFrame.Angles(0,0,relativeAngle) end
+        for _, sj in ipairs(selectedList) do
+            local pre = preRotAll[sj.name]
+            if pre and sj.motor then
+                local desiredCF = axisMode == "global"
+                    and CFrame.new(pre.cf.Position) * rotCF * CFrame.new(-pre.cf.Position) * pre.cf
+                    or pre.cf * rotCF
+                sj.motor.C0 = sj.motor.Part0.CFrame:Inverse() * desiredCF * (pre.c1 or CFrame.new())
+            end
+        end
+    end)
+
+    -- ── CLICK TO SELECT — raycasts all keyframe clones ──
+    table.insert(conns, UIS.InputBegan:Connect(function(input, processed)
+        if processed or UIS:GetFocusedTextBox() then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+        if #clonesList == 0 then return end
+
+        local cam = workspace.CurrentCamera
+        local mp = UIS:GetMouseLocation()
+        local ray = cam:ViewportPointToRay(mp.X, mp.Y)
+        local allModels = {}
+        for _, cd in ipairs(clonesList) do if cd.model and cd.model.Parent then table.insert(allModels, cd.model) end end
+
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Include
+        params.FilterDescendantsInstances = allModels
+
+        for attempt = 1, 10 do
+            local result = workspace:Raycast(ray.Origin, ray.Direction * 100, params)
+            if not result or not result.Instance then break end
+            local hit = result.Instance
+
+            local cd = findCloneDataForPart(hit)
+            if cd and (clone ~= cd.model) then switchToClone(cd) end
+
+            local ctrl = UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl)
+            local found = selectPart(hit, ctrl)
+            if found then
+                if partBtns then
+                    for _, b in pairs(partBtns) do b.BackgroundColor3 = TH.btn end
+                    for _, sj in ipairs(selectedList) do
+                        if partBtns[sj.name] then partBtns[sj.name].BackgroundColor3 = sj == selected and TH.accent or TH.yellow end
+                    end
+                end
+                break
+            end
+
+            if hit.Parent and hit.Parent:IsA("Accessory") then
+                hit.CanQuery = false; task.delay(0.1, function() hit.CanQuery = true end)
+            else break end
+        end
+    end))
+
+    -- ── KEYS: Z=Move, C=Rotate, Ctrl+Z=Undo, Ctrl+Y=Redo, Ctrl+C=CopyParts, Ctrl+V=PasteParts ──
+    table.insert(conns, UIS.InputBegan:Connect(function(input, processed)
+        if processed or UIS:GetFocusedTextBox() then return end
+        local ctrl = UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl)
+        if ctrl and input.KeyCode == Enum.KeyCode.Z then undo(); return end
+        if ctrl and input.KeyCode == Enum.KeyCode.Y then redo(); return end
+        if ctrl and input.KeyCode == Enum.KeyCode.C then
+            if #selectedList > 0 then
+                copiedParts = {}
+                for _, sj in ipairs(selectedList) do
+                    if sj.motor then copiedParts[sj.name] = sj.motor.C0 end
+                end
+                print("[Pose] Copied " .. #selectedList .. " part(s)")
+            end
+            return
+        end
+        if ctrl and input.KeyCode == Enum.KeyCode.V then
+            if copiedParts and joints then
+                saveState()
+                for _, j in ipairs(joints) do
+                    if j.motor and copiedParts[j.name] then j.motor.C0 = copiedParts[j.name] end
+                end
+                print("[Pose] Pasted parts")
+            end
+            return
+        end
+        if input.KeyCode == Enum.KeyCode.Z then mode="Move"; updTB(); updateHandleMode() end
+        if input.KeyCode == Enum.KeyCode.C then mode="Rotate"; updTB(); updateHandleMode() end
+        if input.KeyCode == Enum.KeyCode.L then axisMode="local"; updTB(); updateHandleMode() end
+        if input.KeyCode == Enum.KeyCode.G then axisMode="global"; updTB(); updateHandleMode() end
+    end))
+
+    -- ── PARTS PANEL (left) ──
+    local partsPanel = Instance.new("Frame")
+    partsPanel.Size = UDim2.new(0, 100, 0, 0)
+    partsPanel.AutomaticSize = Enum.AutomaticSize.Y
+    partsPanel.Position = UDim2.new(0, 10, 0.5, -150)
+    partsPanel.BackgroundColor3 = TH.bg; partsPanel.BorderSizePixel = 0; partsPanel.Parent = gui
+    Instance.new("UICorner", partsPanel).CornerRadius = UDim.new(0, 8)
+    Instance.new("UIStroke", partsPanel).Color = TH.accent
+
+    local ppTb = Instance.new("Frame")
+    ppTb.Size = UDim2.new(1, 0, 0, 20); ppTb.BackgroundColor3 = Color3.fromRGB(12,12,16); ppTb.BorderSizePixel = 0; ppTb.Parent = partsPanel
+    Instance.new("UICorner", ppTb).CornerRadius = UDim.new(0, 8)
+    local ppTl = Instance.new("TextLabel")
+    ppTl.Size=UDim2.new(1,-6,1,0); ppTl.Position=UDim2.new(0,6,0,0); ppTl.BackgroundTransparency=1; ppTl.Text="Parts"
+    ppTl.TextColor3=TH.accent; ppTl.TextSize=10; ppTl.Font=Enum.Font.GothamBold; ppTl.TextXAlignment=0; ppTl.Parent=ppTb
+
+    local ppd,ppds,ppsp = false,nil,nil
+    ppTb.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then ppd=true;ppds=i.Position;ppsp=partsPanel.Position end end)
+    UIS.InputChanged:Connect(function(i) if ppd and i.UserInputType==Enum.UserInputType.MouseMovement then local d=i.Position-ppds;partsPanel.Position=UDim2.new(ppsp.X.Scale,ppsp.X.Offset+d.X,ppsp.Y.Scale,ppsp.Y.Offset+d.Y) end end)
+    UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then ppd=false end end)
+
+    local ppScroll = Instance.new("ScrollingFrame")
+    ppScroll.Size=UDim2.new(1,-6,0,180); ppScroll.Position=UDim2.new(0,3,0,22)
+    ppScroll.BackgroundColor3=TH.panel; ppScroll.BorderSizePixel=0; ppScroll.ScrollBarThickness=2
+    ppScroll.AutomaticCanvasSize=Enum.AutomaticSize.Y; ppScroll.Parent=partsPanel
+    Instance.new("UICorner",ppScroll).CornerRadius=UDim.new(0,6)
+    Instance.new("UIListLayout",ppScroll).Padding=UDim.new(0,2)
+    local ppPad=Instance.new("UIPadding",ppScroll); ppPad.PaddingTop=UDim.new(0,3); ppPad.PaddingLeft=UDim.new(0,3); ppPad.PaddingRight=UDim.new(0,3)
+
+    local partLabels = {RootJoint="Body",Neck="Head",["Right Shoulder"]="R.Arm",["Left Shoulder"]="L.Arm",["Right Hip"]="R.Leg",["Left Hip"]="L.Leg"}
+
+    refreshPartsList = function()
+        for _,c in ipairs(ppScroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+        partBtns = {}
+        if not joints then return end
+        for _,j in ipairs(joints) do
+            local btn = Instance.new("TextButton")
+            btn.Size=UDim2.new(1,0,0,22); btn.BackgroundColor3=TH.btn; btn.BorderSizePixel=0
+            btn.Text=partLabels[j.name] or j.name; btn.TextColor3=TH.text; btn.TextSize=10; btn.Font=Enum.Font.GothamBold; btn.Parent=ppScroll
+            Instance.new("UICorner",btn).CornerRadius=UDim.new(0,4)
+            partBtns[j.name] = btn
+            btn.MouseButton1Click:Connect(function()
+                local ctrl = UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl)
+                if ctrl then
+                    local found=false; for _,s in ipairs(selectedList) do if s.name==j.name then found=true;break end end
+                    if found then removeFromSel(j);btn.BackgroundColor3=TH.btn else addToSel(j);btn.BackgroundColor3=TH.yellow end
+                    selected = #selectedList>0 and selectedList[#selectedList] or nil
+                else
+                    clearSel(); for _,b in pairs(partBtns) do b.BackgroundColor3=TH.btn end
+                    selected=j; addToSel(j); btn.BackgroundColor3=TH.accent
+                end
+                local adornee=getHandleAdornee()
+                if moveHandles then moveHandles.Adornee=mode=="Move" and adornee or nil end
+                if arcHandles then arcHandles.Adornee=mode=="Rotate" and adornee or nil end
+            end)
+        end
+    end
+
+    -- ── FRAMES PANEL (left, below parts) ──
+    local framesPanel = Instance.new("Frame")
+    framesPanel.Size = UDim2.new(0, 100, 0, 0)
+    framesPanel.AutomaticSize = Enum.AutomaticSize.Y
+    framesPanel.Position = UDim2.new(0, 10, 0.5, 50)
+    framesPanel.BackgroundColor3 = TH.bg; framesPanel.BorderSizePixel = 0; framesPanel.Parent = gui
+    Instance.new("UICorner", framesPanel).CornerRadius = UDim.new(0, 8)
+    Instance.new("UIStroke", framesPanel).Color = TH.green
+
+    local fpTb = Instance.new("Frame")
+    fpTb.Size=UDim2.new(1,0,0,20); fpTb.BackgroundColor3=Color3.fromRGB(12,12,16); fpTb.BorderSizePixel=0; fpTb.Parent=framesPanel
+    Instance.new("UICorner",fpTb).CornerRadius=UDim.new(0,8)
+    local fpTl = Instance.new("TextLabel")
+    fpTl.Size=UDim2.new(1,-6,1,0); fpTl.Position=UDim2.new(0,6,0,0); fpTl.BackgroundTransparency=1; fpTl.Text="Frames"
+    fpTl.TextColor3=TH.green; fpTl.TextSize=10; fpTl.Font=Enum.Font.GothamBold; fpTl.TextXAlignment=0; fpTl.Parent=fpTb
+
+    local fpd,fpds,fpsp = false,nil,nil
+    fpTb.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then fpd=true;fpds=i.Position;fpsp=framesPanel.Position end end)
+    UIS.InputChanged:Connect(function(i) if fpd and i.UserInputType==Enum.UserInputType.MouseMovement then local d=i.Position-fpds;framesPanel.Position=UDim2.new(fpsp.X.Scale,fpsp.X.Offset+d.X,fpsp.Y.Scale,fpsp.Y.Offset+d.Y) end end)
+    UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then fpd=false end end)
+
+    local fpScroll = Instance.new("ScrollingFrame")
+    fpScroll.Size=UDim2.new(1,-6,0,130); fpScroll.Position=UDim2.new(0,3,0,22)
+    fpScroll.BackgroundColor3=TH.panel; fpScroll.BorderSizePixel=0; fpScroll.ScrollBarThickness=2
+    fpScroll.AutomaticCanvasSize=Enum.AutomaticSize.Y; fpScroll.Parent=framesPanel
+    Instance.new("UICorner",fpScroll).CornerRadius=UDim.new(0,6)
+    Instance.new("UIListLayout",fpScroll).Padding=UDim.new(0,2)
+    local fpPad=Instance.new("UIPadding",fpScroll); fpPad.PaddingTop=UDim.new(0,3); fpPad.PaddingLeft=UDim.new(0,3); fpPad.PaddingRight=UDim.new(0,3)
+
+    refreshFramesList = function()
+        for _,c in ipairs(fpScroll:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+        for idx, cd in ipairs(clonesList) do
+            local row = Instance.new("Frame")
+            row.Size=UDim2.new(1,0,0,22); row.BackgroundColor3=(cd.model==clone) and TH.accent or TH.btn
+            row.BorderSizePixel=0; row.Parent=fpScroll
+            Instance.new("UICorner",row).CornerRadius=UDim.new(0,4)
+
+            local lbl = Instance.new("TextButton")
+            lbl.Size=UDim2.new(1,-24,1,0); lbl.BackgroundTransparency=1
+            lbl.Text=" Frame "..idx; lbl.TextColor3=TH.text; lbl.TextSize=10; lbl.Font=Enum.Font.GothamBold
+            lbl.TextXAlignment=0; lbl.Parent=row
+            lbl.MouseButton1Click:Connect(function() switchToClone(cd) end)
+
+            local del = Instance.new("TextButton")
+            del.Size=UDim2.new(0,18,0,16); del.Position=UDim2.new(1,-20,0.5,-8)
+            del.BackgroundColor3=TH.red; del.BorderSizePixel=0; del.Text="X"
+            del.TextColor3=TH.text; del.TextSize=9; del.Font=Enum.Font.GothamBold; del.Parent=row
+            Instance.new("UICorner",del).CornerRadius=UDim.new(0,3)
+            del.MouseButton1Click:Connect(function() deleteClone(cd) end)
+        end
+    end
+
+    -- ── SIDE PANEL (right) ──
+    local sidePanel = Instance.new("Frame")
+    sidePanel.Size=UDim2.new(0,170,0,0); sidePanel.AutomaticSize=Enum.AutomaticSize.Y
+    sidePanel.Position=UDim2.new(1,-180,0.5,-120)
+    sidePanel.BackgroundColor3=TH.bg; sidePanel.BorderSizePixel=0; sidePanel.Parent=gui
+    Instance.new("UICorner",sidePanel).CornerRadius=UDim.new(0,8); Instance.new("UIStroke",sidePanel).Color=TH.accent
+
+    local stb=Instance.new("Frame");stb.Size=UDim2.new(1,0,0,22);stb.BackgroundColor3=Color3.fromRGB(12,12,16);stb.BorderSizePixel=0;stb.Parent=sidePanel
+    Instance.new("UICorner",stb).CornerRadius=UDim.new(0,8)
+    local stl=Instance.new("TextLabel");stl.Size=UDim2.new(1,-8,1,0);stl.Position=UDim2.new(0,8,0,0);stl.BackgroundTransparency=1
+    stl.Text="Animation";stl.TextColor3=TH.accent;stl.TextSize=10;stl.Font=Enum.Font.GothamBold;stl.TextXAlignment=0;stl.Parent=stb
+
+    local spd,spds,spsp = false,nil,nil
+    stb.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then spd=true;spds=i.Position;spsp=sidePanel.Position end end)
+    UIS.InputChanged:Connect(function(i) if spd and i.UserInputType==Enum.UserInputType.MouseMovement then local d=i.Position-spds;sidePanel.Position=UDim2.new(spsp.X.Scale,spsp.X.Offset+d.X,spsp.Y.Scale,spsp.Y.Offset+d.Y) end end)
+    UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then spd=false end end)
+
+    local content=Instance.new("ScrollingFrame");content.Size=UDim2.new(1,-8,0,260);content.Position=UDim2.new(0,4,0,24)
+    content.BackgroundColor3=TH.panel;content.BorderSizePixel=0;content.ScrollBarThickness=2
+    content.AutomaticCanvasSize=Enum.AutomaticSize.Y;content.Parent=sidePanel
+    Instance.new("UICorner",content).CornerRadius=UDim.new(0,6)
+    Instance.new("UIListLayout",content).Padding=UDim.new(0,3)
+    local cPad=Instance.new("UIPadding",content);cPad.PaddingTop=UDim.new(0,4);cPad.PaddingLeft=UDim.new(0,4);cPad.PaddingRight=UDim.new(0,4);cPad.PaddingBottom=UDim.new(0,4)
+
+    local function mkBtn(text,color,cb)
+        local b=Instance.new("TextButton");b.Size=UDim2.new(1,0,0,24);b.BackgroundColor3=color;b.BorderSizePixel=0
+        b.Text=text;b.TextColor3=TH.text;b.TextSize=10;b.Font=Enum.Font.GothamBold;b.Parent=content
+        Instance.new("UICorner",b).CornerRadius=UDim.new(0,4);b.MouseButton1Click:Connect(cb);return b
+    end
+
+    local function mkLabel(text)
+        local l=Instance.new("TextLabel");l.Size=UDim2.new(1,0,0,12);l.BackgroundTransparency=1
+        l.Text=text;l.TextColor3=TH.muted;l.TextSize=9;l.Font=Enum.Font.Gotham;l.TextXAlignment=0;l.Parent=content
+        return l
+    end
+
+    -- Tween duration
+    mkLabel("Tween Duration (sec):")
+    local tweenRow = Instance.new("Frame")
+    tweenRow.Size=UDim2.new(1,0,0,24); tweenRow.BackgroundTransparency=1; tweenRow.Parent=content
+
+    local tweenBox = Instance.new("TextBox")
+    tweenBox.Size=UDim2.new(1,0,1,0); tweenBox.BackgroundColor3=TH.btn; tweenBox.BorderSizePixel=0
+    tweenBox.Text=tostring(tweenDuration); tweenBox.PlaceholderText="0.5"
+    tweenBox.PlaceholderColor3=TH.muted; tweenBox.TextColor3=TH.text; tweenBox.TextSize=12
+    tweenBox.Font=Enum.Font.GothamBold; tweenBox.Parent=tweenRow; tweenBox.ClearTextOnFocus=false
+    Instance.new("UICorner",tweenBox).CornerRadius=UDim.new(0,4)
+    Instance.new("UIPadding",tweenBox).PaddingLeft=UDim.new(0,6)
+    tweenBox.FocusLost:Connect(function()
+        local val = tonumber(tweenBox.Text)
+        if val and val > 0 then tweenDuration = val else tweenBox.Text = tostring(tweenDuration) end
+    end)
+    tweenBoxRef = tweenBox
+
+    local sep = Instance.new("Frame"); sep.Size=UDim2.new(1,0,0,1); sep.BackgroundColor3=Color3.fromRGB(60,60,62); sep.BorderSizePixel=0; sep.Parent=content
+
+    mkBtn("Play / Stop", TH.green, playAnimation)
+
+    local sep2b = Instance.new("Frame"); sep2b.Size=UDim2.new(1,0,0,1); sep2b.BackgroundColor3=Color3.fromRGB(60,60,62); sep2b.BorderSizePixel=0; sep2b.Parent=content
+
+    -- Import animation
+    mkLabel("Import Animation ID:")
+    local importRow = Instance.new("Frame")
+    importRow.Size=UDim2.new(1,0,0,24); importRow.BackgroundTransparency=1; importRow.Parent=content
+
+    local importBox = Instance.new("TextBox")
+    importBox.Size=UDim2.new(1,-52,1,0); importBox.BackgroundColor3=TH.btn; importBox.BorderSizePixel=0
+    importBox.Text=""; importBox.PlaceholderText="Animation ID"
+    importBox.PlaceholderColor3=TH.muted; importBox.TextColor3=TH.text; importBox.TextSize=11
+    importBox.Font=Enum.Font.Gotham; importBox.Parent=importRow; importBox.ClearTextOnFocus=false
+    Instance.new("UICorner",importBox).CornerRadius=UDim.new(0,4)
+    Instance.new("UIPadding",importBox).PaddingLeft=UDim.new(0,6)
+
+    local importBtn = Instance.new("TextButton")
+    importBtn.Size=UDim2.new(0,48,1,0); importBtn.Position=UDim2.new(1,-48,0,0)
+    importBtn.BackgroundColor3=TH.yellow; importBtn.BorderSizePixel=0
+    importBtn.Text="Load"; importBtn.TextColor3=Color3.fromRGB(20,20,20)
+    importBtn.TextSize=10; importBtn.Font=Enum.Font.GothamBold; importBtn.Parent=importRow
+    Instance.new("UICorner",importBtn).CornerRadius=UDim.new(0,4)
+    importBtn.MouseButton1Click:Connect(function()
+        local id = importBox.Text:match("%d+")
+        if not id then print("[Pose] Enter a valid animation ID"); return end
+        importBtn.Text = "..."
+        task.spawn(function()
+            importAnimation(tonumber(id))
+            importBtn.Text = "Load"
+        end)
+    end)
+
+    local sep2c = Instance.new("Frame"); sep2c.Size=UDim2.new(1,0,0,1); sep2c.BackgroundColor3=Color3.fromRGB(60,60,62); sep2c.BorderSizePixel=0; sep2c.Parent=content
+
+    mkBtn("Copy Animation", TH.accent, copyAnimCode)
+    mkBtn("Copy Frame Pose", TH.btn, copySinglePose)
+
+    local sep3b = Instance.new("Frame"); sep3b.Size=UDim2.new(1,0,0,1); sep3b.BackgroundColor3=Color3.fromRGB(60,60,62); sep3b.BorderSizePixel=0; sep3b.Parent=content
+
+    mkBtn("Undo (Ctrl+Z)", TH.btn, undo)
+    mkBtn("Redo (Ctrl+Y)", TH.btn, redo)
+
+    local sep4b = Instance.new("Frame"); sep4b.Size=UDim2.new(1,0,0,1); sep4b.BackgroundColor3=Color3.fromRGB(60,60,62); sep4b.BorderSizePixel=0; sep4b.Parent=content
+
+    -- Accessory picker
+    local accOpen = false
+    local accPopup = Instance.new("ScrollingFrame")
+    accPopup.Size=UDim2.new(0,150,0,160); accPopup.Position=UDim2.new(0,-160,0,0)
+    accPopup.BackgroundColor3=TH.bg; accPopup.BorderSizePixel=0; accPopup.Visible=false
+    accPopup.ScrollBarThickness=2; accPopup.AutomaticCanvasSize=Enum.AutomaticSize.Y; accPopup.Parent=sidePanel
+    Instance.new("UICorner",accPopup).CornerRadius=UDim.new(0,6)
+    Instance.new("UIStroke",accPopup).Color=TH.green
+    Instance.new("UIListLayout",accPopup).Padding=UDim.new(0,2)
+    local ap=Instance.new("UIPadding",accPopup);ap.PaddingTop=UDim.new(0,4);ap.PaddingLeft=UDim.new(0,4);ap.PaddingRight=UDim.new(0,4);ap.PaddingBottom=UDim.new(0,4)
+
+    mkBtn("+ Accessory", TH.green, function()
+        accOpen = not accOpen; accPopup.Visible = accOpen
+        if not accOpen or not clone then return end
+        for _,cc in ipairs(accPopup:GetChildren()) do if cc:IsA("TextButton") or cc:IsA("TextLabel") then cc:Destroy() end end
+        local tit=Instance.new("TextLabel");tit.Size=UDim2.new(1,0,0,14);tit.BackgroundTransparency=1;tit.Text="ADD ACCESSORY";tit.TextColor3=TH.green;tit.TextSize=9;tit.Font=Enum.Font.GothamBold;tit.Parent=accPopup
+        local any=false
+        for _,acc in ipairs(clone:GetChildren()) do
+            if acc:IsA("Accessory") and acc:FindFirstChild("Handle") then
+                local has=false; for _,j in ipairs(joints) do if j.name=="Acc_"..acc.Name then has=true end end
+                if not has then any=true
+                    local ab=Instance.new("TextButton");ab.Size=UDim2.new(1,0,0,22);ab.BackgroundColor3=TH.btn;ab.BorderSizePixel=0
+                    ab.Text=acc.Name;ab.TextColor3=TH.text;ab.TextSize=9;ab.Font=Enum.Font.Gotham;ab.Parent=accPopup
+                    Instance.new("UICorner",ab).CornerRadius=UDim.new(0,3)
+                    ab.MouseButton1Click:Connect(function() saveState();addAcc(acc);accPopup.Visible=false;accOpen=false;refreshPartsList() end)
+                end
+            end
+        end
+        if not any then
+            local nl=Instance.new("TextLabel");nl.Size=UDim2.new(1,0,0,18);nl.BackgroundTransparency=1;nl.Text="None available";nl.TextColor3=TH.muted;nl.TextSize=9;nl.Font=Enum.Font.Gotham;nl.Parent=accPopup
+        end
+    end)
+
+    mkLabel("Ctrl+C/V = copy/paste parts")
+    mkLabel("Z=Move C=Rotate L/G=Axis")
+
+    refreshFramesList()
+    print("[Pose Tool v7] GUI ready — click + Frame to add keyframes")
+end
+
+--================================================================
+-- TOOL EQUIP / UNEQUIP / CLEANUP
+--================================================================
+
+local function fullCleanup()
+    active = false
+    stopPlayback()
+    clearSel()
+    for _,c in pairs(conns) do pcall(function() c:Disconnect() end) end; conns={}
+    if proxyPart then proxyPart:Destroy(); proxyPart=nil end
+    if moveHandles then moveHandles:Destroy(); moveHandles=nil end
+    if arcHandles then arcHandles:Destroy(); arcHandles=nil end
+    if gui then gui:Destroy(); gui=nil end
+    for _, cd in ipairs(clonesList) do
+        if cd.model then pcall(function() cd.model:Destroy() end) end
+    end
+    clonesList = {}
+    clone=nil; joints=nil; defaults=nil
+    guiCreated = false
+end
+
+---------- RENDER RADIUS ----------
+-- Only keep models spawned for frames within RENDER_RADIUS of the player.
+-- Despawned frames keep their pose data so they can be rebuilt.
+
+savePose = function(cd)
+    if not cd.joints then return end
+    cd.pose = {}
+    for _, j in ipairs(cd.joints) do
+        if j.motor then cd.pose[j.name] = j.motor.C0 end
+    end
+end
+
+local function despawnFrame(cd)
+    if not cd.rendered then return end
+    savePose(cd)
+    if cd.model then
+        local hrp = cd.model:FindFirstChild("HumanoidRootPart")
+        if hrp then cd.pos = hrp.CFrame.Position end
+        pcall(function() cd.model:Destroy() end)
+    end
+    cd.model = nil; cd.joints = nil; cd.rendered = false
+end
+
+local function respawnFrame(cd, idx)
+    if cd.rendered then return end
+    local real = player.Character; if not real then return end
+    real.Archivable = true
+    local c = real:Clone(); c.Name = "PoseFrame_" .. idx
+    for _,v in pairs(c:GetDescendants()) do
+        if v:IsA("LocalScript") or v:IsA("Script") then v:Destroy()
+        elseif v:IsA("BasePart") then v.Anchored=(v.Name=="HumanoidRootPart"); v.CanCollide=false end
+    end
+    local ch = c:FindFirstChildOfClass("Humanoid")
+    if ch then ch.PlatformStand=true; for _,t in pairs(ch:GetPlayingAnimationTracks()) do t:Stop() end end
+
+    local pos = cd.pos or Vector3.new(0, 10, 0)
+    local groundRay = workspace:Raycast(pos + Vector3.new(0, 50, 0), Vector3.new(0, -200, 0))
+    local groundY = groundRay and (groundRay.Position.Y + 5) or pos.Y
+    c:SetPrimaryPartCFrame(CFrame.new(pos.X, groundY, pos.Z) * CFrame.Angles(0, math.pi, 0))
+    c.Parent = workspace
+
+    -- Frame label
+    local bGui = Instance.new("BillboardGui")
+    bGui.Name = "FrameLabel"; bGui.Size = UDim2.new(0, 60, 0, 24)
+    bGui.StudsOffset = Vector3.new(0, 3, 0); bGui.AlwaysOnTop = true
+    bGui.Adornee = c:FindFirstChild("Head") or c:FindFirstChild("HumanoidRootPart")
+    bGui.Parent = c
+    local fLbl = Instance.new("TextLabel")
+    fLbl.Size = UDim2.new(1, 0, 1, 0)
+    fLbl.BackgroundColor3 = Color3.fromRGB(0, 170, 255); fLbl.BackgroundTransparency = 0.3
+    fLbl.TextColor3 = Color3.new(1, 1, 1); fLbl.TextSize = 14; fLbl.Font = Enum.Font.GothamBold
+    fLbl.Text = "F" .. idx; fLbl.Parent = bGui
+    Instance.new("UICorner", fLbl).CornerRadius = UDim.new(0, 6)
+
+    local j, d = buildJoints(c)
+    cd.model = c; cd.joints = j; cd.defaults = d; cd.rendered = true
+
+    -- Apply saved pose
+    if cd.pose then
+        for _, jt in ipairs(j) do
+            if jt.motor and cd.pose[jt.name] then jt.motor.C0 = cd.pose[jt.name] end
+        end
+    end
+end
+
+local function updateRenderRadius()
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local playerPos = root.Position
+
+    for idx, cd in ipairs(clonesList) do
+        local framePos = cd.pos or Vector3.new(0, 0, 0)
+        local dist = (playerPos - framePos).Magnitude
+
+        if dist > RENDER_RADIUS and cd.rendered then
+            -- Don't despawn the currently selected clone
+            if cd.model ~= clone then
+                despawnFrame(cd)
+            end
+        elseif dist <= RENDER_RADIUS and not cd.rendered then
+            respawnFrame(cd, idx)
+        end
+    end
+end
+
+table.insert(conns, RunService.Heartbeat:Connect(function()
+    if not active then return end
+    updateRenderRadius()
+end))
+
+---------- LAUNCH + SIXZEROHUB REGISTRATION ----------
+
+createGUI()
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Reanim Poser", "[Dev]reanim_poser", fullCleanup, "dev")
+end
+
+print("[Reanim Poser] Ready — click + Frame to add keyframes")
