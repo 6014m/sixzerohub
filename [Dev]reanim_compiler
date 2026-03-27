@@ -400,29 +400,35 @@ function showAnimIdInput(slot)
     title.Parent = popupWin
 
     local info = Instance.new("TextLabel")
-    info.Size = UDim2.new(1, 0, 0, 14)
+    info.Size = UDim2.new(1, 0, 0, 28)
     info.BackgroundTransparency = 1
-    info.Text = "Enter animation ID or paste frame data"
+    info.Text = "Paste an exported animation script\n(the keyframes table from Reanim Poser)"
     info.TextColor3 = TH.muted
     info.TextSize = 9
     info.Font = Enum.Font.Gotham
     info.TextXAlignment = Enum.TextXAlignment.Left
+    info.TextWrapped = true
     info.Parent = popupWin
 
-    local idBox = Instance.new("TextBox")
-    idBox.Size = UDim2.new(1, 0, 0, 28)
-    idBox.BackgroundColor3 = TH.btn
-    idBox.BorderSizePixel = 0
-    idBox.Text = ""
-    idBox.PlaceholderText = "Animation ID"
-    idBox.PlaceholderColor3 = TH.muted
-    idBox.TextColor3 = TH.text
-    idBox.TextSize = 12
-    idBox.Font = Enum.Font.Gotham
-    idBox.ClearTextOnFocus = false
-    idBox.Parent = popupWin
-    Instance.new("UICorner", idBox).CornerRadius = UDim.new(0, 4)
-    Instance.new("UIPadding", idBox).PaddingLeft = UDim.new(0, 8)
+    local dataBox = Instance.new("TextBox")
+    dataBox.Size = UDim2.new(1, 0, 0, 80)
+    dataBox.BackgroundColor3 = TH.btn
+    dataBox.BorderSizePixel = 0
+    dataBox.Text = ""
+    dataBox.PlaceholderText = "Paste animation script here..."
+    dataBox.PlaceholderColor3 = TH.muted
+    dataBox.TextColor3 = TH.text
+    dataBox.TextSize = 9
+    dataBox.Font = Enum.Font.Code
+    dataBox.ClearTextOnFocus = false
+    dataBox.MultiLine = true
+    dataBox.TextWrapped = true
+    dataBox.TextXAlignment = Enum.TextXAlignment.Left
+    dataBox.TextYAlignment = Enum.TextYAlignment.Top
+    dataBox.Parent = popupWin
+    Instance.new("UICorner", dataBox).CornerRadius = UDim.new(0, 4)
+    local dbPad = Instance.new("UIPadding", dataBox)
+    dbPad.PaddingLeft = UDim.new(0, 6); dbPad.PaddingTop = UDim.new(0, 4)
 
     local statusLbl = Instance.new("TextLabel")
     statusLbl.Size = UDim2.new(1, 0, 0, 14)
@@ -439,16 +445,16 @@ function showAnimIdInput(slot)
     btnRow.BackgroundTransparency = 1
     btnRow.Parent = popupWin
 
-    local loadBtn = Instance.new("TextButton")
-    loadBtn.Size = UDim2.new(0.48, 0, 1, 0)
-    loadBtn.BackgroundColor3 = TH.green
-    loadBtn.BorderSizePixel = 0
-    loadBtn.Text = "Load from ID"
-    loadBtn.TextColor3 = Color3.fromRGB(20, 20, 20)
-    loadBtn.TextSize = 11
-    loadBtn.Font = Enum.Font.GothamBold
-    loadBtn.Parent = btnRow
-    Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 4)
+    local parseBtn = Instance.new("TextButton")
+    parseBtn.Size = UDim2.new(0.48, 0, 1, 0)
+    parseBtn.BackgroundColor3 = TH.green
+    parseBtn.BorderSizePixel = 0
+    parseBtn.Text = "Add Animation"
+    parseBtn.TextColor3 = Color3.fromRGB(20, 20, 20)
+    parseBtn.TextSize = 11
+    parseBtn.Font = Enum.Font.GothamBold
+    parseBtn.Parent = btnRow
+    Instance.new("UICorner", parseBtn).CornerRadius = UDim.new(0, 4)
 
     local cancelBtn = Instance.new("TextButton")
     cancelBtn.Size = UDim2.new(0.48, 0, 1, 0)
@@ -464,29 +470,44 @@ function showAnimIdInput(slot)
 
     cancelBtn.MouseButton1Click:Connect(function() popup:Destroy() end)
 
-    loadBtn.MouseButton1Click:Connect(function()
-        local animId = idBox.Text:match("%d+")
-        if not animId then statusLbl.Text = "Enter a valid animation ID"; return end
+    parseBtn.MouseButton1Click:Connect(function()
+        local raw = dataBox.Text
+        if raw == "" then statusLbl.Text = "Paste animation data first"; return end
 
-        statusLbl.Text = "Loading animation..."
-        loadBtn.Text = "..."
-        task.spawn(function()
-            local frames, tw = sampleAnimation(tonumber(animId), statusLbl)
-            if frames and #frames > 0 then
-                local entry = {
-                    slot = slot,
-                    tween = tw,
-                    frames = frames,
-                    hitRange = 10,
-                    hitFrame = math.floor(#frames / 3),
-                }
-                table.insert(animations, entry)
-                popup:Destroy()
-                refreshList()
-            else
-                loadBtn.Text = "Load from ID"
-            end
+        statusLbl.Text = "Parsing..."
+
+        -- Extract tweenDuration and keyframes from the pasted script
+        local ok2, result = pcall(function()
+            -- The pasted script has `local tweenDuration = X` and `local keyframes = {...}`
+            -- Wrap it to return both values
+            local wrapped = raw
+                :gsub("^.-(local%s+tweenDuration)", "%1") -- strip anything before tweenDuration
+                :gsub("local%s+function%s+playAnim.+$", "") -- strip playAnim function
+                :gsub("%-%-[^\n]*", "") -- strip comments
+                :gsub("local%s+RunService.-\n", "") -- strip RunService line
+
+            local fn = loadstring(wrapped .. "\nreturn {tween = tweenDuration, frames = keyframes}")
+            if not fn then error("Failed to parse") end
+            return fn()
         end)
+
+        if not ok2 or not result or not result.frames or #result.frames == 0 then
+            statusLbl.Text = "Failed to parse — make sure you pasted the full script"
+            print("[Compiler] Parse error: " .. tostring(result))
+            return
+        end
+
+        local entry = {
+            slot = slot,
+            tween = result.tween or 0.016,
+            frames = result.frames,
+            hitRange = 10,
+            hitFrame = math.floor(#result.frames / 3),
+        }
+        table.insert(animations, entry)
+        popup:Destroy()
+        refreshList()
+        print("[Compiler] Added " .. slot .. " with " .. #result.frames .. " frames")
     end)
 end
 
