@@ -589,39 +589,30 @@ local function importAnimation(animId)
         return true
     end
 
-    -- 1. Remove consecutive exact duplicate frames
-    local deduped = { sampledFrames[1] }
+    -- Detect loop: walk through frames, if any frame exactly matches an earlier frame
+    -- that's where the animation starts repeating — cut there
+    local cutPoint = nil
     for i = 2, #sampledFrames do
-        if not framesEqual(sampledFrames[i], sampledFrames[i - 1]) then
-            table.insert(deduped, sampledFrames[i])
-        end
-    end
-
-    -- 2. Detect exact loop: if the animation restarts (end frames match start frames exactly)
-    if #deduped > 10 then
-        local halfLen = math.floor(#deduped / 2)
-        for loopLen = 4, halfLen do
-            local match = true
-            for k = 0, math.min(loopLen - 1, 3) do
-                if not framesEqual(deduped[#deduped - loopLen + 1 + k], deduped[1 + k]) then
-                    match = false; break
-                end
-            end
-            if match then
-                local trimmed = {}
-                for i = 1, #deduped - loopLen do
-                    table.insert(trimmed, deduped[i])
-                end
-                table.insert(trimmed, deduped[1])
-                print("[Pose] Loop detected at frame " .. (#deduped - loopLen) .. ", trimmed from " .. #deduped .. " to " .. #trimmed)
-                deduped = trimmed
+        for j = 1, i - 1 do
+            if framesEqual(sampledFrames[i], sampledFrames[j]) then
+                cutPoint = i
                 break
             end
         end
+        if cutPoint then break end
     end
 
-    sampledFrames = deduped
-    print("[Pose] After dedup: " .. #sampledFrames .. " frames")
+    if cutPoint and cutPoint > 2 then
+        local original = #sampledFrames
+        local trimmed = {}
+        for i = 1, cutPoint - 1 do
+            table.insert(trimmed, sampledFrames[i])
+        end
+        sampledFrames = trimmed
+        print("[Pose] Loop detected at frame " .. cutPoint .. ", trimmed from " .. original .. " to " .. #sampledFrames)
+    else
+        print("[Pose] No loop detected, keeping all " .. #sampledFrames .. " frames")
+    end
 
     -- Set tween duration (one heartbeat per frame, ~1/60s)
     tweenDuration = length / math.max(#sampledFrames - 1, 1)
