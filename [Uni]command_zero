@@ -3974,30 +3974,30 @@ addcmd("reanimate", {"reanim", "feanim"}, "FE Reanimate — appear dead, control
     notify("Reanimate", "Active — you appear dead to others")
 end)
 
-addcmd("unreanimate", {"unanimate", "unreanim", "dereanim"}, "Respawn from reanimated state — destroys fake rig and forces respawn", function(args)
-    -- CZ reanimate: kill the fake humanoid to trigger rDeath cleanup
-    if _G.czReanimateActive and _G.czReanimateFakeRig then
-        local fakeRig = _G.czReanimateFakeRig
-        local fakeHum = fakeRig and fakeRig:FindFirstChildOfClass("Humanoid")
-        if fakeHum then fakeHum.Health = 0 end
+addcmd("unreanimate", {"unanimate", "unreanim", "dereanim"}, "Respawn from reanimated state", function(args)
+    local fakeRig = _G.czReanimateFakeRig
+    if fakeRig and fakeRig.Parent then
+        local fakeHum = fakeRig:FindFirstChildOfClass("Humanoid")
+        if fakeHum then
+            -- Reanimate disables Dead state — re-enable so killing triggers rDeath cleanup
+            fakeHum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+            fakeHum.Health = 0
+        end
         _G.czReanimateActive = false
         _G.czReanimateFakeRig = nil
         notify("Unreanimate", "Respawning...")
         return
     end
-    -- Generic reanimate: destroy nested character models, kill humanoid
+    -- Generic: force respawn
     local char = player.Character
     if char then
-        for _, child in ipairs(char:GetChildren()) do
-            if child:IsA("Model") and child:FindFirstChildOfClass("Humanoid") then
-                pcall(function() child:Destroy() end)
-            end
-        end
         char:BreakJoints()
         local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then hum.Health = 0 end
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+            hum.Health = 0
+        end
     end
-    -- Clean up any leftover rigs with player's name
     for _, obj in ipairs(workspace:GetChildren()) do
         if obj:IsA("Model") and obj.Name == player.Name and obj ~= player.Character then
             pcall(function() obj:Destroy() end)
