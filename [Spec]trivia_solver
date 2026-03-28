@@ -8,6 +8,7 @@ local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 
 local WORKER_URL = "https://trivia-solver.killtrex0.workers.dev"
+local LOG_FILE = "TriviaSolver_log.json"
 
 -- Paths (adjust if the game uses different names)
 local ANNOUNCEMENT_PARENT = "Announcement"
@@ -17,6 +18,26 @@ local IMAGE_WORKSPACE_PATH = {"CityMap", "Model", "screen", "SurfaceGui", "Image
 local connections = {}
 local lastQuestion = ""
 local answering = false
+
+---------- Q&A Log ----------
+
+local qaLog = {}
+pcall(function()
+	if isfile and isfile(LOG_FILE) then
+		local decoded = HttpService:JSONDecode(readfile(LOG_FILE))
+		if type(decoded) == "table" then
+			qaLog = decoded
+		end
+	end
+end)
+
+local function saveLog()
+	pcall(function()
+		if writefile then
+			writefile(LOG_FILE, HttpService:JSONEncode(qaLog))
+		end
+	end)
+end
 
 ---------- GUI ----------
 
@@ -88,6 +109,19 @@ local function hideAnswer()
 	container.Visible = false
 end
 
+local function shouldIgnore(text)
+	local trimmed = text:match("^%s*(.-)%s*$")
+	if not trimmed or trimmed == "" then return true end
+	-- Ignore "True" / "False" answer displays
+	local low = trimmed:lower()
+	if low == "true" or low == "false" then return true end
+	-- Ignore countdown numbers (bare digits like "10", "9", "3"...)
+	if trimmed:match("^%d+$") then return true end
+	-- Ignore very short non-question text (single words that aren't questions)
+	if #trimmed < 5 and not trimmed:find("[%?%+%-%*/x]") then return true end
+	return false
+end
+
 local function getImageAssetId()
 	local ok, result = pcall(function()
 		local current = workspace
@@ -116,6 +150,52 @@ local function isTrueFalse(text)
 	return l:find("true or false") or l:find("true/false")
 end
 
+local function tryMath(text)
+	local lower = text:lower()
+
+	-- Square root: "square root of 64"
+	local sqrtN = lower:match("square root of (%d+%.?%d*)")
+	if sqrtN then
+		local n = tonumber(sqrtN)
+		if n then
+			local r = math.sqrt(n)
+			return (r == math.floor(r)) and tostring(math.floor(r)) or string.format("%.2f", r)
+		end
+	end
+
+	-- Power: "2 to the power of 8", "3^4"
+	local base, exp = lower:match("(%d+%.?%d*)%s*to the power of%s*(%d+%.?%d*)")
+	if not base then base, exp = text:match("(%d+%.?%d*)%s*%^%s*(%d+%.?%d*)") end
+	if base and exp then
+		local r = tonumber(base) ^ tonumber(exp)
+		return (r == math.floor(r)) and tostring(math.floor(r)) or string.format("%.2f", r)
+	end
+
+	-- Basic arithmetic: "25 + 4", "100 x 3", "52 - 17", "144 / 12"
+	local a, op, b = text:match("(%d+%.?%d*)%s*([%+%-%*/x×÷])%s*(%d+%.?%d*)")
+	if a and op and b then
+		a, b = tonumber(a), tonumber(b)
+		local r
+		if op == "+" then r = a + b
+		elseif op == "-" then r = a - b
+		elseif op == "*" or op == "x" or op == "\195\151" then r = a * b -- × is UTF-8 C3 97
+		elseif op == "/" or op == "\195\183" then r = (b ~= 0) and (a / b) or nil -- ÷
+		end
+		if r then
+			return (r == math.floor(r)) and tostring(math.floor(r)) or string.format("%.2f", r)
+		end
+	end
+
+	-- Percentage: "what is 25% of 200"
+	local pct, of = lower:match("(%d+%.?%d*)%%%s*of%s*(%d+%.?%d*)")
+	if pct and of then
+		local r = (tonumber(pct) / 100) * tonumber(of)
+		return (r == math.floor(r)) and tostring(math.floor(r)) or string.format("%.2f", r)
+	end
+
+	return nil
+end
+
 local function askWorker(question, imageId)
 	local body = {question = question}
 	if imageId then body.imageId = imageId end
@@ -136,20 +216,68 @@ local function askWorker(question, imageId)
 	return nil
 end
 
+---------- Display ----------
+
+local function displayAnswer(text, answer, isFromLog)
+	local source = isFromLog and " (logged)" or ""
+
+	if isTrueFalse(text) then
+		local upper = answer:upper()
+		if upper:find("TRUE") and not upper:find("FALSE") then
+			showAnswer("TRUE" .. source .. "\n" .. answer, Color3.fromRGB(87, 242, 135))
+		elseif upper:find("FALSE") and not upper:find("TRUE") then
+			showAnswer("FALSE" .. source .. "\n" .. answer, Color3.fromRGB(255, 100, 100))
+		else
+			showAnswer(answer .. source)
+		end
+	else
+		showAnswer(answer .. source, Color3.fromRGB(255, 215, 0))
+	end
+end
+
 ---------- Core ----------
 
 local function processQuestion(text)
-	if not text or text == "" or text == lastQuestion or answering then return end
+	if shouldIgnore(text) then return end
+	if text == lastQuestion or answering then return end
 	lastQuestion = text
 	answering = true
 
+	-- 1) Check log for cached answer
+	if qaLog[text] then
+		answering = false
+		displayAnswer(text, qaLog[text], true)
+		task.delay(20, function()
+			if lastQuestion == text then hideAnswer() end
+		end)
+		return
+	end
+
+	-- 2) Try solving math locally
+	local mathAnswer = tryMath(text)
+	if mathAnswer then
+		answering = false
+		showAnswer(mathAnswer, Color3.fromRGB(0, 200, 255))
+		-- Log math answers too
+		qaLog[text] = mathAnswer
+		saveLog()
+		task.delay(20, function()
+			if lastQuestion == text then hideAnswer() end
+		end)
+		return
+	end
+
+	-- 3) Check if image question
 	showAnswer("Thinking...", Color3.fromRGB(142, 146, 151))
 
 	local imageId = nil
+	local usedImage = false
 	if isLocationQuestion(text) then
 		imageId = getImageAssetId()
+		usedImage = imageId ~= nil
 	end
 
+	-- 4) Ask the worker
 	task.spawn(function()
 		local answer = askWorker(text, imageId)
 		answering = false
@@ -160,17 +288,12 @@ local function processQuestion(text)
 			return
 		end
 
-		if isTrueFalse(text) then
-			local upper = answer:upper()
-			if upper:find("^TRUE") or upper:find("TRUE") and not upper:find("FALSE") then
-				showAnswer("TRUE\n" .. answer, Color3.fromRGB(87, 242, 135))
-			elseif upper:find("^FALSE") or upper:find("FALSE") and not upper:find("TRUE") then
-				showAnswer("FALSE\n" .. answer, Color3.fromRGB(255, 100, 100))
-			else
-				showAnswer(answer)
-			end
-		else
-			showAnswer(answer, Color3.fromRGB(255, 215, 0))
+		displayAnswer(text, answer, false)
+
+		-- Log the answer (skip image-based questions since the image changes)
+		if not usedImage then
+			qaLog[text] = answer
+			saveLog()
 		end
 
 		task.delay(20, function()
@@ -202,9 +325,7 @@ local function setupMonitor()
 
 	local conn = textLabel:GetPropertyChangedSignal("Text"):Connect(function()
 		local t = textLabel.Text
-		if t and t ~= "" then
-			processQuestion(t)
-		end
+		if t then processQuestion(t) end
 	end)
 	table.insert(connections, conn)
 
