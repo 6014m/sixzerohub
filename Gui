@@ -1893,6 +1893,7 @@ end)
 
 -- tab switching
 local activeTab = "servers"
+local refreshFavGamesList -- forward declare (must be before switchTab so its closure can see it)
 
 local function switchTab(tab)
     activeTab = tab
@@ -1908,6 +1909,8 @@ local function switchTab(tab)
     updatesTabBtn.TextColor3 = tab == "updates" and COLORS.text or COLORS.textMuted
     favGamesTabBtn.BackgroundColor3 = tab == "favgames" and COLORS.sidebar or COLORS.background
     favGamesTabBtn.TextColor3 = tab == "favgames" and COLORS.text or COLORS.textMuted
+
+    if tab == "favgames" and refreshFavGamesList then refreshFavGamesList() end
 end
 
 serversTabBtn.MouseButton1Click:Connect(function() switchTab("servers") end)
@@ -2155,8 +2158,6 @@ local function saveFavGames()
     end)
     if not ok then warn("[SixZeroHub] Failed to save fav games: " .. tostring(err)) end
 end
-
-local refreshFavGamesList -- forward declare
 
 -- add game dialog
 local addDialog = Instance.new("Frame")
