@@ -112,13 +112,29 @@ end
 local function shouldIgnore(text)
 	local trimmed = text:match("^%s*(.-)%s*$")
 	if not trimmed or trimmed == "" then return true end
-	-- Ignore "True" / "False" answer displays
 	local low = trimmed:lower()
+	-- Ignore "True" / "False" answer displays
 	if low == "true" or low == "false" then return true end
-	-- Ignore countdown numbers (bare digits like "10", "9", "3"...)
+	-- Ignore countdown numbers
 	if trimmed:match("^%d+$") then return true end
-	-- Ignore very short non-question text (single words that aren't questions)
-	if #trimmed < 5 and not trimmed:find("[%?%+%-%*/x]") then return true end
+	-- Must actually look like a question — reject random statements
+	local isQuestion = low:find("%?")                        -- has question mark
+		or low:find("^true or false")                        -- T/F prompt
+		or low:find("^true/false")
+		or low:find("^what ") or low:find("^which ")         -- question words
+		or low:find("^where ") or low:find("^when ")
+		or low:find("^who ") or low:find("^how ")
+		or low:find("^is ") or low:find("^are ")
+		or low:find("^does ") or low:find("^do ")
+		or low:find("^can ") or low:find("^was ") or low:find("^did ")
+		or low:find("^name ") or low:find("^identify ")
+		or low:find("located") or low:find("capital of")
+		or low:find("this place") or low:find("this city")
+		or low:find("this country") or low:find("this landmark")
+		or trimmed:find("%d+%s*[%+%-%*/x×÷^]%s*%d+")        -- math expression
+		or low:find("square root") or low:find("percent")
+		or low:find("%% of")
+	if not isQuestion then return true end
 	return false
 end
 
