@@ -6771,10 +6771,11 @@ addcmd("autoobby", {"aobby"}, "Auto-complete obby — jumps at block edges when 
     notify("AutoObby", "Enabled — jumps at block edges while walking")
 end)
 
-addcmd("unautoobby", {}, "Stop auto obby", function(args)
+addcmd("unautoobby", {"noobby", "unaobby", "noautoobby"}, "Stop auto obby", function(args)
     for _, c in ipairs(autoObbyConns) do pcall(function() c:Disconnect() end) end
     autoObbyConns = {}
     loopStates["autoobby"] = nil
+    notify("AutoObby", "Disabled")
 end)
 
 addcmd("chatframe", {"chatpos"}, "Move chat frame position", function(args)
