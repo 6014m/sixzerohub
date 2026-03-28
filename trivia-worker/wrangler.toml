@@ -1,0 +1,6 @@
+name = "trivia-solver"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[ai]
+binding = "AI"

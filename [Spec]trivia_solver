@@ -1,0 +1,217 @@
+-- [Spec] Trivia Solver
+-- Auto-answers trivia questions from game announcements
+-- Requires: trivia-solver Cloudflare Worker deployed (see trivia-worker/)
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+
+local WORKER_URL = "https://trivia-solver.killtrex0.workers.dev"
+
+-- Paths (adjust if the game uses different names)
+local ANNOUNCEMENT_PARENT = "Announcement"
+local TEXT_LABEL_NAME = "TextLabelEXAMPLE"
+local IMAGE_WORKSPACE_PATH = {"CityMap", "Model", "screen", "SurfaceGui", "ImageLabel"}
+
+local connections = {}
+local lastQuestion = ""
+local answering = false
+
+---------- GUI ----------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "TriviaSolver"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local container = Instance.new("Frame")
+container.Name = "Container"
+container.Size = UDim2.new(0, 340, 0, 80)
+container.Position = UDim2.new(0.5, -170, 0, 10)
+container.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+container.BackgroundTransparency = 0.05
+container.BorderSizePixel = 0
+container.Visible = false
+container.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = container
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(88, 101, 242)
+stroke.Thickness = 1.5
+stroke.Parent = container
+
+local title = Instance.new("TextLabel")
+title.Name = "Title"
+title.Size = UDim2.new(1, -16, 0, 20)
+title.Position = UDim2.new(0, 8, 0, 6)
+title.BackgroundTransparency = 1
+title.Text = "TRIVIA SOLVER"
+title.TextColor3 = Color3.fromRGB(88, 101, 242)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 11
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = container
+
+local answerLabel = Instance.new("TextLabel")
+answerLabel.Name = "Answer"
+answerLabel.Size = UDim2.new(1, -16, 1, -32)
+answerLabel.Position = UDim2.new(0, 8, 0, 28)
+answerLabel.BackgroundTransparency = 1
+answerLabel.Text = ""
+answerLabel.TextColor3 = Color3.fromRGB(220, 221, 222)
+answerLabel.Font = Enum.Font.GothamMedium
+answerLabel.TextSize = 15
+answerLabel.TextWrapped = true
+answerLabel.TextXAlignment = Enum.TextXAlignment.Left
+answerLabel.TextYAlignment = Enum.TextYAlignment.Top
+answerLabel.AutomaticSize = Enum.AutomaticSize.Y
+answerLabel.Parent = container
+
+gui.Parent = playerGui
+
+---------- Helpers ----------
+
+local function showAnswer(text, color)
+	answerLabel.Text = text
+	answerLabel.TextColor3 = color or Color3.fromRGB(220, 221, 222)
+	task.wait()
+	local h = math.max(80, answerLabel.TextBounds.Y + 42)
+	container.Size = UDim2.new(0, 340, 0, h)
+	container.Visible = true
+end
+
+local function hideAnswer()
+	container.Visible = false
+end
+
+local function getImageAssetId()
+	local ok, result = pcall(function()
+		local current = workspace
+		for _, name in ipairs(IMAGE_WORKSPACE_PATH) do
+			current = current:FindFirstChild(name)
+			if not current then return nil end
+		end
+		if current and current:IsA("ImageLabel") and current.Image ~= "" then
+			return current.Image:match("(%d+)")
+		end
+		return nil
+	end)
+	return ok and result or nil
+end
+
+local function isLocationQuestion(text)
+	local l = text:lower()
+	return l:find("located") or l:find("where is") or l:find("this place")
+		or l:find("this city") or l:find("this country") or l:find("this landmark")
+		or l:find("what country") or l:find("what city") or l:find("which country")
+		or l:find("which city") or l:find("identify") or l:find("this location")
+end
+
+local function isTrueFalse(text)
+	local l = text:lower()
+	return l:find("true or false") or l:find("true/false")
+end
+
+local function askWorker(question, imageId)
+	local body = {question = question}
+	if imageId then body.imageId = imageId end
+
+	local ok, response = pcall(function()
+		return request({
+			Url = WORKER_URL,
+			Method = "POST",
+			Headers = {["Content-Type"] = "application/json"},
+			Body = HttpService:JSONEncode(body)
+		})
+	end)
+
+	if ok and response and response.StatusCode == 200 then
+		local data = HttpService:JSONDecode(response.Body)
+		return data.answer
+	end
+	return nil
+end
+
+---------- Core ----------
+
+local function processQuestion(text)
+	if not text or text == "" or text == lastQuestion or answering then return end
+	lastQuestion = text
+	answering = true
+
+	showAnswer("Thinking...", Color3.fromRGB(142, 146, 151))
+
+	local imageId = nil
+	if isLocationQuestion(text) then
+		imageId = getImageAssetId()
+	end
+
+	task.spawn(function()
+		local answer = askWorker(text, imageId)
+		answering = false
+
+		if not answer then
+			showAnswer("Failed to get answer", Color3.fromRGB(255, 100, 100))
+			task.delay(5, hideAnswer)
+			return
+		end
+
+		if isTrueFalse(text) then
+			local upper = answer:upper()
+			if upper:find("^TRUE") or upper:find("TRUE") and not upper:find("FALSE") then
+				showAnswer("TRUE\n" .. answer, Color3.fromRGB(87, 242, 135))
+			elseif upper:find("^FALSE") or upper:find("FALSE") and not upper:find("TRUE") then
+				showAnswer("FALSE\n" .. answer, Color3.fromRGB(255, 100, 100))
+			else
+				showAnswer(answer)
+			end
+		else
+			showAnswer(answer, Color3.fromRGB(255, 215, 0))
+		end
+
+		task.delay(20, function()
+			if lastQuestion == text then hideAnswer() end
+		end)
+	end)
+end
+
+---------- Monitor ----------
+
+local function setupMonitor()
+	local announcement = playerGui:FindFirstChild(ANNOUNCEMENT_PARENT)
+	if not announcement then
+		announcement = playerGui:WaitForChild(ANNOUNCEMENT_PARENT, 60)
+	end
+	if not announcement then
+		warn("[TriviaSolver] Announcement not found in PlayerGui")
+		return
+	end
+
+	local textLabel = announcement:FindFirstChild(TEXT_LABEL_NAME)
+	if not textLabel then
+		textLabel = announcement:WaitForChild(TEXT_LABEL_NAME, 60)
+	end
+	if not textLabel then
+		warn("[TriviaSolver] TextLabel not found in Announcement")
+		return
+	end
+
+	local conn = textLabel:GetPropertyChangedSignal("Text"):Connect(function()
+		local t = textLabel.Text
+		if t and t ~= "" then
+			processQuestion(t)
+		end
+	end)
+	table.insert(connections, conn)
+
+	-- Check existing text on load
+	if textLabel.Text and textLabel.Text ~= "" then
+		processQuestion(textLabel.Text)
+	end
+end
+
+setupMonitor()
