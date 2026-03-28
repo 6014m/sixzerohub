@@ -522,6 +522,9 @@ end
 -- ESP storage
 local espObjects = {}
 
+-- Hidden players: tracks CharacterAdded connections so hide persists through respawn
+local hiddenPlayers = {} -- [userId] = { conn: RBXScriptConnection }
+
 local function clearESP()
     for _, obj in pairs(espObjects) do
         pcall(function() obj:Destroy() end)
@@ -2596,12 +2599,13 @@ addcmd("unesp", {"noesp"}, "Disable ESP", function(args)
     notify("ESP", "Disabled")
 end)
 
-addcmd("hide", {"invisible"}, "Make a player invisible locally", function(args)
+addcmd("hide", {"invisible"}, "Make a player invisible locally (persists through respawn)", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
-    for _, t in ipairs(targets) do
-        if not t.Character then continue end
-        for _, v in ipairs(t.Character:GetDescendants()) do
+
+    local function hideCharacter(char)
+        if not char then return end
+        for _, v in ipairs(char:GetDescendants()) do
             if v:IsA("BasePart") or v:IsA("Decal") or v:IsA("Texture") then
                 if not v:GetAttribute("CZ_HiddenTransparency") then
                     v:SetAttribute("CZ_HiddenTransparency", v.Transparency)
@@ -2614,7 +2618,25 @@ addcmd("hide", {"invisible"}, "Make a player invisible locally", function(args)
                 v.Enabled = false
             end
         end
-        notify("Hide", t.Name .. " is now invisible")
+    end
+
+    for _, t in ipairs(targets) do
+        -- Clean up old connection if already hidden
+        if hiddenPlayers[t.UserId] then
+            hiddenPlayers[t.UserId].conn:Disconnect()
+        end
+        -- Hide current character
+        hideCharacter(t.Character)
+        -- Re-hide on respawn
+        local conn = t.CharacterAdded:Connect(function(newChar)
+            task.wait(0.5)
+            if hiddenPlayers[t.UserId] then
+                hideCharacter(newChar)
+            end
+        end)
+        table.insert(allConnections, conn)
+        hiddenPlayers[t.UserId] = { conn = conn }
+        notify("Hide", t.Name .. " is now invisible (persists through respawn)")
     end
 end)
 
@@ -2622,6 +2644,11 @@ addcmd("unhide", {"visible", "nohide"}, "Make a player visible again", function(
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
     for _, t in ipairs(targets) do
+        -- Stop tracking
+        if hiddenPlayers[t.UserId] then
+            hiddenPlayers[t.UserId].conn:Disconnect()
+            hiddenPlayers[t.UserId] = nil
+        end
         if not t.Character then continue end
         for _, v in ipairs(t.Character:GetDescendants()) do
             if v:IsA("BasePart") or v:IsA("Decal") or v:IsA("Texture") then
@@ -8167,6 +8194,29 @@ addcmd("unmutevc", {"unmutevoice"}, "Unmute voice chat", function(args)
             end
         end
     end)
+end)
+
+addcmd("voicevolume", {"vcvol", "vcvolume", "voicevol"}, "Set a player's voice chat volume. Usage: voicevolume [player] [0-10]", function(args)
+    local targets = getPlayers(args[1])
+    if #targets == 0 then return end
+    local vol = tonumber(args[2])
+    if not vol then notify("VoiceVolume", "Usage: voicevolume [player] [0-10]"); return end
+    vol = math.clamp(vol, 0, 10)
+    for _, t in ipairs(targets) do
+        if not t.Character then continue end
+        local found = false
+        for _, v in ipairs(t.Character:GetDescendants()) do
+            if v:IsA("AudioDeviceInput") or v:IsA("AudioEmitter") or v:IsA("AudioPlayer") then
+                v.Volume = vol
+                found = true
+            end
+        end
+        if found then
+            notify("VoiceVolume", t.Name .. " voice set to " .. vol)
+        else
+            notify("VoiceVolume", "No voice instances found on " .. t.Name)
+        end
+    end
 end)
 
 addcmd("lay", {"laydown"}, "Lay down animation", function(args)
