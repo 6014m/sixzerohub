@@ -117,6 +117,8 @@ local function shouldIgnore(text)
 	if low == "true" or low == "false" then return true end
 	-- Ignore countdown numbers
 	if trimmed:match("^%d+$") then return true end
+	-- Ignore "would you rather" — opinion, no right answer
+	if low:find("would you rather") then return true end
 	-- Must actually look like a question — reject random statements
 	local isQuestion = low:find("%?")                        -- has question mark
 		or low:find("^true or false")                        -- T/F prompt
