@@ -1,13 +1,17 @@
--- Auto Parry — detects Workspace.PushStuff.YourName collision parts
--- When push collision parts appear on your body, instantly parries + horizontal density
+-- Auto Parry — maximum speed
+-- RenderStepped + AnimationPlayed, pre-cached references, zero overhead
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local lp = Players.LocalPlayer
 local playerGui = lp:WaitForChild("PlayerGui")
 
+local RANGE = 20
+local RANGE_APPROACHING = 30
+local CLOSE_RANGE = 5
 local connections = {}
 local recentParry = 0
+local PUSH_ANIM_ID = "rbxassetid://134933487900882"
 
 ---------- Pre-cached refs ----------
 
@@ -76,7 +80,7 @@ local function burstHorizontalDensity()
 	end)
 end
 
----------- Parry ----------
+---------- Instant parry ----------
 
 local function fireParry()
 	if not parryTool or not myHum then
@@ -91,12 +95,30 @@ local function fireParry()
 	return true
 end
 
-local function doParry()
+local function getHRP(player)
+	local char = player.Character
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function shouldParry(theirHRP)
+	if not myHRP then return false end
+	local offset = myHRP.Position - theirHRP.Position
+	local dist = offset.Magnitude
+	local vel = theirHRP.AssemblyLinearVelocity
+	local movingToward = vel.Magnitude > 1 and vel.Unit:Dot(offset.Unit) > 0.3
+	local maxRange = movingToward and RANGE_APPROACHING or RANGE
+	if dist > maxRange then return false end
+	if dist <= CLOSE_RANGE then return true end
+	return theirHRP.CFrame.LookVector:Dot(offset.Unit) >= 0
+end
+
+local function doParry(player, theirHRP)
 	if tick() - recentParry < 0.5 then return end
+	if not shouldParry(theirHRP) then return end
 	recentParry = tick()
 	burstHorizontalDensity()
 	if fireParry() then
-		flashLabel.Text = "PARRIED"
+		flashLabel.Text = "PARRIED " .. player.Name
 		flashLabel.Visible = true
 		task.delay(1.5, function() flashLabel.Visible = false end)
 	end
@@ -122,77 +144,80 @@ flashLabel.Visible = false
 flashLabel.Parent = gui
 Instance.new("UICorner", flashLabel).CornerRadius = UDim.new(0, 6)
 
----------- PushStuff Detection ----------
+---------- Watch players ----------
 
-local function isMe(name)
-	return name == lp.Name or name == lp.DisplayName
-		or (myChar and name == myChar.Name)
-end
-
-local function watchPushStuff(pushStuff)
-	-- Watch ALL descendants — check if any collision part targets us
-	local conn = pushStuff.DescendantAdded:Connect(function(desc)
-		-- Check if this descendant or any ancestor matches our name
-		local current = desc
-		for i = 1, 4 do
-			if not current then break end
-			if isMe(current.Name) then
-				doParry()
-				return
-			end
-			current = current.Parent
-		end
-
-		-- Fallback: if it's a BasePart, check if it's near us
-		if desc:IsA("BasePart") and myHRP then
-			pcall(function()
-				if (desc.Position - myHRP.Position).Magnitude < 10 then
-					doParry()
+local function watchCharacter(player, char)
+	-- Animation detection
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		local animator = hum:FindFirstChildOfClass("Animator") or hum:WaitForChild("Animator", 2)
+		if animator then
+			local c = animator.AnimationPlayed:Connect(function(track)
+				if track.Animation and track.Animation.AnimationId == PUSH_ANIM_ID then
+					local hrp = char:FindFirstChild("HumanoidRootPart")
+					if hrp then doParry(player, hrp) end
 				end
 			end)
+			table.insert(connections, c)
+		end
+	end
+
+	-- Tool equip detection
+	local c = char.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") and child.Name == "Push" then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then doParry(player, hrp) end
 		end
 	end)
-	table.insert(connections, conn)
-
-	-- Also check ChildAdded for victim folders
-	local conn2 = pushStuff.ChildAdded:Connect(function(child)
-		if isMe(child.Name) then doParry() end
-	end)
-	table.insert(connections, conn2)
+	table.insert(connections, c)
 end
 
--- Find or wait for PushStuff
-local pushStuff = workspace:FindFirstChild("PushStuff")
-if pushStuff then watchPushStuff(pushStuff) end
-
-local wsConn = workspace.ChildAdded:Connect(function(child)
-	if child.Name == "PushStuff" then watchPushStuff(child) end
-end)
-table.insert(connections, wsConn)
-
----------- Workspace.Model.Plane Detection ----------
-
-local function watchPlane()
-	local model = workspace:FindFirstChild("Model")
-	if not model then return end
-	local plane = model:FindFirstChild("Plane")
-	if plane then doParry() end
-	local conn = model.ChildAdded:Connect(function(child)
-		if child.Name == "Plane" then doParry() end
+local function watchPlayer(player)
+	if player == lp then return end
+	if player.Character then watchCharacter(player, player.Character) end
+	local c = player.CharacterAdded:Connect(function(char)
+		task.wait(0.3)
+		watchCharacter(player, char)
 	end)
-	table.insert(connections, conn)
+	table.insert(connections, c)
 end
 
-pcall(watchPlane)
+for _, p in ipairs(Players:GetPlayers()) do watchPlayer(p) end
+Players.PlayerAdded:Connect(watchPlayer)
 
--- Watch for Model appearing
-local modelConn = workspace.ChildAdded:Connect(function(child)
-	if child.Name == "Model" then
-		task.wait(0.1)
-		watchPlane()
+---------- RenderStepped scan ----------
+
+local playerCache = {}
+
+local function rebuildCache()
+	playerCache = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= lp then table.insert(playerCache, p) end
+	end
+end
+
+rebuildCache()
+Players.PlayerAdded:Connect(rebuildCache)
+Players.PlayerRemoving:Connect(rebuildCache)
+
+RunService.RenderStepped:Connect(function()
+	if tick() - recentParry < 0.5 then return end
+	if not myHRP then cacheLocal(); return end
+	for i = 1, #playerCache do
+		local p = playerCache[i]
+		local char = p.Character
+		if char then
+			local push = char:FindFirstChild("Push")
+			if push and push:IsA("Tool") then
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					doParry(p, hrp)
+					return
+				end
+			end
+		end
 	end
 end)
-table.insert(connections, modelConn)
 
 ---------- Auto Delete Ropes ----------
 
