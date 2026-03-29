@@ -170,6 +170,30 @@ local wsConn = workspace.ChildAdded:Connect(function(child)
 end)
 table.insert(connections, wsConn)
 
+---------- Workspace.Model.Plane Detection ----------
+
+local function watchPlane()
+	local model = workspace:FindFirstChild("Model")
+	if not model then return end
+	local plane = model:FindFirstChild("Plane")
+	if plane then doParry() end
+	local conn = model.ChildAdded:Connect(function(child)
+		if child.Name == "Plane" then doParry() end
+	end)
+	table.insert(connections, conn)
+end
+
+pcall(watchPlane)
+
+-- Watch for Model appearing
+local modelConn = workspace.ChildAdded:Connect(function(child)
+	if child.Name == "Model" then
+		task.wait(0.1)
+		watchPlane()
+	end
+end)
+table.insert(connections, modelConn)
+
 ---------- Auto Delete Ropes ----------
 
 local function isAttachedToMe(rope)
@@ -188,7 +212,6 @@ end
 
 for _, v in ipairs(workspace:GetDescendants()) do checkRope(v) end
 workspace.DescendantAdded:Connect(checkRope)
-
 
 -- SixZeroHub cleanup
 if _G.SixZeroHubRegister then
