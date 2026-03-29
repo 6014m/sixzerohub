@@ -1,18 +1,24 @@
--- [Spec] True or False — Trivia Answer Cache
--- Answers questions from cached Q&A log (built by standalone trivia solver)
--- Falls back to math solver for equations. No AI worker needed.
+-- [Spec] Trivia Solver
+-- Auto-answers trivia questions from game announcements
+-- Requires: trivia-solver Cloudflare Worker deployed (see trivia-worker/)
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 
+local WORKER_URL = "https://trivia-solver.killtrex0.workers.dev"
 local LOG_FILE = "TriviaSolver_log.json"
+local IMAGE_LOG_FILE = "TriviaSolver_imagelog.json"
+
+-- Paths (adjust if the game uses different names)
 local ANNOUNCEMENT_PARENT = "Announcement"
 local TEXT_LABEL_NAME = "TextLabelEXAMPLE"
+local IMAGE_WORKSPACE_PATH = {"CityMap", "Model", "screen", "SurfaceGui", "ImageLabel"}
 
 local connections = {}
 local lastQuestion = ""
+local answering = false
 
 ---------- Q&A Log ----------
 
@@ -20,54 +26,150 @@ local qaLog = {}
 pcall(function()
 	if isfile and isfile(LOG_FILE) then
 		local decoded = HttpService:JSONDecode(readfile(LOG_FILE))
-		if type(decoded) == "table" then qaLog = decoded end
+		if type(decoded) == "table" then
+			qaLog = decoded
+		end
 	end
 end)
 
 local function saveLog()
 	pcall(function()
-		if writefile then writefile(LOG_FILE, HttpService:JSONEncode(qaLog)) end
+		if writefile then
+			writefile(LOG_FILE, HttpService:JSONEncode(qaLog))
+		end
+	end)
+end
+
+-- Image question log: {question, imageId, answer} for location/AI-generated questions
+local imageLog = {}
+pcall(function()
+	if isfile and isfile(IMAGE_LOG_FILE) then
+		local decoded = HttpService:JSONDecode(readfile(IMAGE_LOG_FILE))
+		if type(decoded) == "table" then
+			imageLog = decoded
+		end
+	end
+end)
+
+local function saveImageLog()
+	pcall(function()
+		if writefile then
+			writefile(IMAGE_LOG_FILE, HttpService:JSONEncode(imageLog))
+		end
+	end)
+end
+
+local function logImageQuestion(question, imageId, answer)
+	if not imageId then return end
+	-- Extract just TRUE or FALSE from the answer
+	local tf = nil
+	if answer then
+		local upper = answer:upper()
+		if upper:find("^TRUE") then tf = "TRUE"
+		elseif upper:find("^FALSE") then tf = "FALSE" end
+	end
+	-- Update existing entry or add new one (keyed by imageId)
+	imageLog[imageId] = {question = question, answer = tf}
+	saveImageLog()
+end
+
+-- History log: every question + answer for review
+local HISTORY_FILE = "TriviaSolver_history.txt"
+
+local function logHistory(question, answer)
+	pcall(function()
+		if not writefile or not appendfile then return end
+		local line = "Q: " .. question .. "\nA: " .. answer .. "\n---\n"
+		if isfile and isfile(HISTORY_FILE) then
+			appendfile(HISTORY_FILE, line)
+		else
+			writefile(HISTORY_FILE, line)
+		end
 	end)
 end
 
 ---------- GUI ----------
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "TofTrivia"
+gui.Name = "TriviaSolver"
 gui.ResetOnSpawn = false
-gui.Parent = playerGui
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
+-- Clip frame: flush to right edge, clips the right-side rounding off the container
+local clipFrame = Instance.new("Frame")
+clipFrame.Name = "ClipFrame"
+clipFrame.Size = UDim2.new(0, 240, 0, 200)
+clipFrame.Position = UDim2.new(1, -240, 0.5, -100)
+clipFrame.BackgroundTransparency = 1
+clipFrame.ClipsDescendants = true
+clipFrame.Visible = false
+clipFrame.Parent = gui
+
+-- Container: 10px wider than clip so right corners get clipped
 local container = Instance.new("Frame")
-container.Size = UDim2.new(0, 250, 0, 120)
-container.Position = UDim2.new(1, -250, 0.5, -60)
+container.Name = "Container"
+container.Size = UDim2.new(0, 250, 1, 0)
+container.Position = UDim2.new(0, 0, 0, 0)
 container.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 container.BackgroundTransparency = 0.05
 container.BorderSizePixel = 0
-container.Visible = false
-container.Parent = gui
+container.Parent = clipFrame
 
--- No UICorner — flush against right screen edge
-local stroke = Instance.new("UIStroke", container)
-stroke.Color = Color3.fromRGB(88, 101, 242); stroke.Thickness = 1.5
+Instance.new("UICorner", container).CornerRadius = UDim.new(0, 8)
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(88, 101, 242)
+stroke.Thickness = 1.5
+stroke.Parent = container
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -16, 0, 20); title.Position = UDim2.new(0, 8, 0, 6)
-title.BackgroundTransparency = 1; title.Text = "TRIVIA (CACHE)"
-title.TextColor3 = Color3.fromRGB(88, 101, 242); title.Font = Enum.Font.GothamBold
-title.TextSize = 11; title.TextXAlignment = Enum.TextXAlignment.Left; title.Parent = container
+title.Name = "Title"
+title.Size = UDim2.new(1, -16, 0, 20)
+title.Position = UDim2.new(0, 8, 0, 6)
+title.BackgroundTransparency = 1
+title.Text = "TRIVIA SOLVER"
+title.TextColor3 = Color3.fromRGB(88, 101, 242)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 11
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = container
+
+-- Scrollable answer area
+local answerScroll = Instance.new("ScrollingFrame")
+answerScroll.Name = "AnswerScroll"
+answerScroll.Size = UDim2.new(1, -12, 1, -32)
+answerScroll.Position = UDim2.new(0, 6, 0, 28)
+answerScroll.BackgroundTransparency = 1
+answerScroll.BorderSizePixel = 0
+answerScroll.ScrollBarThickness = 2
+answerScroll.ScrollBarImageColor3 = Color3.fromRGB(88, 101, 242)
+answerScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+answerScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+answerScroll.Parent = container
 
 local answerLabel = Instance.new("TextLabel")
-answerLabel.Size = UDim2.new(1, -16, 1, -32); answerLabel.Position = UDim2.new(0, 8, 0, 28)
-answerLabel.BackgroundTransparency = 1; answerLabel.Text = ""
-answerLabel.TextColor3 = Color3.fromRGB(220, 221, 222); answerLabel.Font = Enum.Font.GothamMedium
-answerLabel.TextSize = 15; answerLabel.TextWrapped = true
-answerLabel.TextXAlignment = Enum.TextXAlignment.Left; answerLabel.TextYAlignment = Enum.TextYAlignment.Top
-answerLabel.AutomaticSize = Enum.AutomaticSize.Y; answerLabel.Parent = container
+answerLabel.Name = "Answer"
+answerLabel.Size = UDim2.new(1, -4, 0, 0)
+answerLabel.Position = UDim2.new(0, 2, 0, 0)
+answerLabel.BackgroundTransparency = 1
+answerLabel.Text = ""
+answerLabel.TextColor3 = Color3.fromRGB(220, 221, 222)
+answerLabel.Font = Enum.Font.GothamMedium
+answerLabel.TextSize = 15
+answerLabel.TextWrapped = true
+answerLabel.TextXAlignment = Enum.TextXAlignment.Left
+answerLabel.TextYAlignment = Enum.TextYAlignment.Top
+answerLabel.AutomaticSize = Enum.AutomaticSize.Y
+answerLabel.Parent = answerScroll
+
+gui.Parent = playerGui
 
 ---------- Helpers ----------
 
+-- Strip Roblox rich text tags: <font color="rgb(255,255,255)">, </font>, <b>, <stroke>, etc.
 local function stripRichText(text)
 	local clean = text:gsub("<[^>]+>", "")
+	-- Normalize curly apostrophes/quotes to straight ones
 	clean = clean:gsub("\xe2\x80\x99", "'"):gsub("\xe2\x80\x98", "'")
 	clean = clean:gsub("\xe2\x80\x9c", '"'):gsub("\xe2\x80\x9d", '"')
 	return clean:gsub("%s+", " "):match("^%s*(.-)%s*$")
@@ -76,13 +178,12 @@ end
 local function showAnswer(text, color)
 	answerLabel.Text = text
 	answerLabel.TextColor3 = color or Color3.fromRGB(220, 221, 222)
-	task.wait()
-	local h = math.max(80, answerLabel.TextBounds.Y + 42)
-	container.Size = UDim2.new(0, 250, 0, h)
-	container.Visible = true
+	clipFrame.Visible = true
 end
 
-local function hideAnswer() container.Visible = false end
+local function hideAnswer()
+	clipFrame.Visible = false
+end
 
 local function shouldIgnore(text)
 	if not text or text == "" then return true end
@@ -90,34 +191,128 @@ local function shouldIgnore(text)
 	if not trimmed or trimmed == "" then return true end
 	local low = trimmed:lower()
 
+	-- Bare "True" / "False" — game revealing the correct answer
+	-- Always log the game's answer so the cache is authoritative
 	if low == "true" or low == "false" then
-		-- Self-correct the log
 		if lastQuestion ~= "" then
 			local correct = low == "true" and "TRUE" or "FALSE"
+			local wasWrong = false
+			if qaLog[lastQuestion] then
+				local current = qaLog[lastQuestion]:upper()
+				wasWrong = (current:find("^TRUE") and correct == "FALSE")
+					or (current:find("^FALSE") and correct == "TRUE")
+			end
 			qaLog[lastQuestion] = correct
 			saveLog()
+			-- Update image log with the game's authoritative answer
+			if isImageQuestion(lastQuestion) then
+				local imgId = getImageAssetId()
+				if imgId then logImageQuestion(lastQuestion, imgId, correct) end
+			end
+			if wasWrong then
+				showAnswer("CORRECTED: " .. correct, correct == "TRUE"
+					and Color3.fromRGB(87, 242, 135) or Color3.fromRGB(255, 100, 100))
+				task.delay(3, hideAnswer)
+			end
 		end
 		return true
 	end
+	-- Countdowns / bare numbers
 	if trimmed:match("^[%d%s%.!,:]+$") then return true end
+	-- Intermission timer
 	if low:find("intermission") then return true end
-	if low:find("^you") then return true end
+	-- Game taunts (second person + general taunts)
+	if low:find("^you're ") or low:find("^you did") or low:find("^you do ")
+		or low:find("^you missed") or low:find("^you aren't")
+		or low:find("^you are ") or low:find("^you got")
+		or low:find("^you didn't") or low:find("^you weren't")
+		or low:find("^you all ") or low:find("^you guys")
+		or low:find("^you simply") or low:find("^you actually")
+		or low:find("not getting better") or low:find("not built for")
+		or low:find("horrible") or low:find("not good enough") then return true end
 	if low:find("^they will") or low:find("^how are you") then return true end
+	-- Single-word taunts
 	if not low:find(" ") and not low:find("%?") and not low:find("%d") then return true end
-	if low:find("lights will") or low:find("remain out") then return true end
+	-- Game state / flavor
+	if low:find("lights will") or low:find("remain out") or low:find("will remain") then return true end
+	-- Would you rather / would u kill (opinion, no right answer)
 	if low:find("would you rather") or low:find("would u rather")
 		or low:find("would you kill") or low:find("would u kill") then return true end
+	-- Game state announcements
 	if low:find("voting time") or low:find("game started")
 		or low:find("rolling for") or low:find("game over") then return true end
+	-- Rewards / coins / spins
 	if trimmed:match("^%+") then return true end
+	-- Vote results: "X% chose Y"
 	if low:find("%% chose") then return true end
+	-- Majority results
 	if low:find("as a majority") then return true end
+	-- Winner reward text
 	if low:find("each winner") or low:find("recieves") or low:find("receives a sum") then return true end
+	-- Game commentary / instructions
 	if low:find("pass rate") or low:find("good job")
 		or low:find("cash prize") or low:find("split amongst")
 		or low:find("pick an answer") or low:find("staying in the middle")
 		or low:find("this question") or low:find("make sure to")
 		or low:find("^that was") or low:find("^this is") or low:find("pathetic") then return true end
+
+	return false
+end
+
+local function getImageAssetId()
+	local ok, result = pcall(function()
+		local current = workspace
+		for _, name in ipairs(IMAGE_WORKSPACE_PATH) do
+			current = current:FindFirstChild(name)
+			if not current then return nil end
+		end
+		if current and current:IsA("ImageLabel") and current.Image ~= "" then
+			return current.Image:match("(%d+)")
+		end
+		return nil
+	end)
+	return ok and result or nil
+end
+
+local function isLocationQuestion(text)
+	local l = text:lower()
+	return l:find("located") or l:find("where is") or l:find("this place")
+		or l:find("this city") or l:find("this country") or l:find("this landmark")
+		or l:find("what country") or l:find("what city") or l:find("which country")
+		or l:find("which city") or l:find("identify") or l:find("this location")
+end
+
+local function isAIGeneratedQuestion(text)
+	local l = text:lower()
+	return l:find("ai generated") or l:find("ai%-generated") or l:find("artificial intelligence")
+		or l:find("generated by ai") or l:find("made by ai") or l:find("created by ai")
+end
+
+local function isImageQuestion(text)
+	return isLocationQuestion(text) or isAIGeneratedQuestion(text)
+end
+
+local function isTrueFalse(text)
+	local l = text:lower()
+	-- Explicit T/F prefix
+	if l:find("true or false") or l:find("true/false") then return true end
+	-- Math equation (has = with numbers)
+	if text:find("=") and text:find("%d") then return true end
+	-- Yes/no questions: "Did X..?", "Is X..?", "Are X..?", "Can X..?", etc.
+	if l:find("^did ") or l:find("^is ") or l:find("^are ")
+		or l:find("^does ") or l:find("^do ") or l:find("^can ")
+		or l:find("^was ") or l:find("^were ") or l:find("^has ")
+		or l:find("^have ") or l:find("^will ") or l:find("^could ")
+		or l:find("^should ") or l:find("^is it true") then
+		return true
+	end
+	-- No question mark + not starting with a question word = factual statement = T/F
+	if not l:find("%?") and not l:find("^what ") and not l:find("^which ")
+		and not l:find("^where ") and not l:find("^when ")
+		and not l:find("^who ") and not l:find("^how ")
+		and not l:find("^name ") and not l:find("^identify ") then
+		return true
+	end
 	return false
 end
 
@@ -129,10 +324,11 @@ end
 
 local function evalExpr(raw)
 	local expr = raw:gsub("%s+", "")
-	expr = expr:gsub("[xX]", "*")
-	expr = expr:gsub("(%d)%(", "%1*(")
-	expr = expr:gsub("%)(%d)", ")*%1")
-	expr = expr:gsub("%)%(", ")*(")
+	expr = expr:gsub("[xX]", "*")         -- x/X → *
+	expr = expr:gsub("(%d)%(", "%1*(")    -- 8( → 8*(
+	expr = expr:gsub("%)(%d)", ")*%1")    -- )8 → )*8
+	expr = expr:gsub("%)%(", ")*(")       -- )( → )*(
+	-- Safety: only allow digits, operators, parens, dots
 	if expr:find("[^%d%+%-%*/%.%(%)]") then return nil end
 	local fn = loadstring("return " .. expr)
 	if not fn then return nil end
@@ -145,56 +341,132 @@ local function tryMath(text)
 	local trimmed = text:match("^%s*(.-)%s*$")
 	local lower = trimmed:lower()
 
+	-- Comparison: "10/5 is bigger than 1", "3x4 is less than 10"
 	local compLeft, comp, compRight = lower:match("(.-)%s+is%s+(.-)%s+than%s+(%d+%.?%d*)")
 	if compLeft and comp and compRight then
-		local lv = evalExpr(compLeft); local rv = tonumber(compRight)
-		if lv and rv then
+		local leftVal = evalExpr(compLeft)
+		local rightVal = tonumber(compRight)
+		if leftVal and rightVal then
 			if comp:find("big") or comp:find("great") or comp:find("more") or comp:find("larg") or comp:find("high") then
-				return lv > rv and "TRUE" or "FALSE"
+				return leftVal > rightVal and "TRUE" or "FALSE"
 			elseif comp:find("less") or comp:find("small") or comp:find("few") or comp:find("low") then
-				return lv < rv and "TRUE" or "FALSE"
+				return leftVal < rightVal and "TRUE" or "FALSE"
 			end
 		end
 	end
 
+	-- "is equal to" / "equals" / "is the same as": both sides can be expressions
 	local eqLeft, eqRight = lower:match("(.-)%s+is%s+the%s+same%s+as%s+(.*)")
 	if not eqLeft then eqLeft, eqRight = lower:match("(.-)%s+is%s+equal%s+to%s+(.*)") end
 	if not eqLeft then eqLeft, eqRight = lower:match("(.-)%s+equals?%s+(.*)") end
 	if eqLeft and eqRight then
-		local lv = evalExpr(eqLeft); local rv = evalExpr(eqRight)
-		if lv and rv then return math.abs(lv - rv) < 0.01 and "TRUE" or "FALSE" end
+		local leftVal = evalExpr(eqLeft)
+		local rightVal = evalExpr(eqRight)
+		if leftVal and rightVal then
+			return math.abs(leftVal - rightVal) < 0.01 and "TRUE" or "FALSE"
+		end
 	end
 
+	-- Equation: expression = number → TRUE/FALSE
+	-- Matches "8x6=48", "12/4=3", "8(6)=48", "(2)(3)+4=10"
 	local left, right = trimmed:match("(.-)%s*=%s*(%d+%.?%d*)%s*%??%s*$")
 	if left and right and left:find("%d") then
-		local rv = tonumber(right)
-		if rv then
+		local rightVal = tonumber(right)
+		if rightVal then
 			local result = evalExpr(left)
 			if result then
-				if math.abs(result - rv) < 0.01 then return "TRUE"
-				else return "FALSE — answer is " .. fmtNum(result) end
+				if math.abs(result - rightVal) < 0.01 then
+					return "TRUE"
+				else
+					return "FALSE — answer is " .. fmtNum(result)
+				end
 			end
 		end
 	end
 
+	-- Square root: "square root of 64"
 	local sqrtN = lower:match("square root of (%d+%.?%d*)")
-	if sqrtN and tonumber(sqrtN) then return fmtNum(math.sqrt(tonumber(sqrtN))) end
+	if sqrtN and tonumber(sqrtN) then
+		return fmtNum(math.sqrt(tonumber(sqrtN)))
+	end
 
+	-- Power: "2 to the power of 8", "3^4"
 	local base, exp = lower:match("(%d+%.?%d*)%s*to the power of%s*(%d+%.?%d*)")
 	if not base then base, exp = trimmed:match("(%d+%.?%d*)%s*%^%s*(%d+%.?%d*)") end
-	if base and exp then return fmtNum(tonumber(base) ^ tonumber(exp)) end
+	if base and exp then
+		return fmtNum(tonumber(base) ^ tonumber(exp))
+	end
 
-	local a, op, b = trimmed:match("(%d+%.?%d*)%s*([%+%-%*/xX])%s*(%d+%.?%d*)")
+	-- Basic arithmetic without = (just compute): "what is 8x6"
+	local a, op, b = trimmed:match("(%d+%.?%d*)%s*([%+%-%*/xX×÷])%s*(%d+%.?%d*)")
 	if a and op and b then
 		a, b = tonumber(a), tonumber(b)
 		local r
-		if op == "+" then r = a + b elseif op == "-" then r = a - b
+		if op == "+" then r = a + b
+		elseif op == "-" then r = a - b
 		elseif op == "*" or op == "x" or op == "X" then r = a * b
-		elseif op == "/" then r = (b ~= 0) and (a / b) or nil end
+		elseif op == "/" then r = (b ~= 0) and (a / b) or nil
+		end
 		if r then return fmtNum(r) end
 	end
 
+	-- Percentage: "what is 25% of 200"
+	local pct, of = lower:match("(%d+%.?%d*)%%%s*of%s*(%d+%.?%d*)")
+	if pct and of then
+		return fmtNum((tonumber(pct) / 100) * tonumber(of))
+	end
+
 	return nil
+end
+
+---------- Worker ----------
+
+local function askWorker(question, imageId, tf)
+	local body = {question = question, isTF = tf}
+	if imageId then body.imageId = imageId end
+
+	local ok, response = pcall(function()
+		return request({
+			Url = WORKER_URL,
+			Method = "POST",
+			Headers = {["Content-Type"] = "application/json"},
+			Body = HttpService:JSONEncode(body)
+		})
+	end)
+
+	if ok and response and response.StatusCode == 200 then
+		local data = HttpService:JSONDecode(response.Body)
+		return data.answer
+	end
+	return nil
+end
+
+---------- Display ----------
+
+local function displayAnswer(text, answer, isFromLog)
+	local source = isFromLog and " (logged)" or ""
+
+	-- Clean duplicate TRUE/FALSE prefix (worker sometimes returns "FALSE\nFALSE. reason")
+	local clean = answer
+	clean = clean:gsub("^TRUE%s*\n%s*TRUE", "TRUE")
+	clean = clean:gsub("^FALSE%s*\n%s*FALSE", "FALSE")
+
+	if clean:find("^TRUE") then
+		showAnswer(clean .. source, Color3.fromRGB(87, 242, 135))
+	elseif clean:find("^FALSE") then
+		showAnswer(clean .. source, Color3.fromRGB(255, 100, 100))
+	elseif isTrueFalse(text) then
+		local upper = clean:upper()
+		if upper:find("TRUE") and not upper:find("FALSE") then
+			showAnswer("TRUE" .. source .. "\n" .. clean, Color3.fromRGB(87, 242, 135))
+		elseif upper:find("FALSE") and not upper:find("TRUE") then
+			showAnswer("FALSE" .. source .. "\n" .. clean, Color3.fromRGB(255, 100, 100))
+		else
+			showAnswer(clean .. source)
+		end
+	else
+		showAnswer(clean .. source, Color3.fromRGB(255, 215, 0))
+	end
 end
 
 ---------- Core ----------
@@ -202,68 +474,77 @@ end
 local function processQuestion(rawText)
 	local text = stripRichText(rawText)
 	if shouldIgnore(text) then return end
-	if text == lastQuestion then return end
+	if text == lastQuestion or answering then return end
 	lastQuestion = text
+	answering = true
 
-	-- Check cache
-	if qaLog[text] then
-		local answer = qaLog[text]
-		if answer:find("^TRUE") then
-			showAnswer(answer, Color3.fromRGB(87, 242, 135))
-		elseif answer:find("^FALSE") then
-			showAnswer(answer, Color3.fromRGB(255, 100, 100))
-		else
-			showAnswer(answer, Color3.fromRGB(255, 215, 0))
-		end
-		task.delay(20, function() if lastQuestion == text then hideAnswer() end end)
+	-- Check if image question early (needed for cache key + logging)
+	local imageId = nil
+	local isImgQ = isImageQuestion(text)
+	if isImgQ then
+		imageId = getImageAssetId()
+	end
+
+	-- Cache key: "question|imageId" for image questions, just "question" otherwise
+	local cacheKey = imageId and (text .. "|" .. imageId) or text
+
+	-- 1) Check log for cached answer
+	if qaLog[cacheKey] then
+		answering = false
+		if isImgQ then logImageQuestion(text, imageId, qaLog[cacheKey]) end
+		displayAnswer(text, qaLog[cacheKey], true)
+		task.delay(20, function()
+			if lastQuestion == text then hideAnswer() end
+		end)
 		return
 	end
 
-	-- Try math
+	-- 2) Try solving math locally
 	local mathAnswer = tryMath(text)
 	if mathAnswer then
-		if mathAnswer:find("^TRUE") then showAnswer(mathAnswer, Color3.fromRGB(87, 242, 135))
-		elseif mathAnswer:find("^FALSE") then showAnswer(mathAnswer, Color3.fromRGB(255, 100, 100))
-		else showAnswer(mathAnswer, Color3.fromRGB(0, 200, 255)) end
-		qaLog[text] = mathAnswer; saveLog()
-		task.delay(20, function() if lastQuestion == text then hideAnswer() end end)
+		answering = false
+		if mathAnswer:find("^TRUE") then
+			showAnswer(mathAnswer, Color3.fromRGB(87, 242, 135))
+		elseif mathAnswer:find("^FALSE") then
+			showAnswer(mathAnswer, Color3.fromRGB(255, 100, 100))
+		else
+			showAnswer(mathAnswer, Color3.fromRGB(0, 200, 255))
+		end
+		qaLog[cacheKey] = mathAnswer
+		saveLog()
+		logHistory(text, mathAnswer)
+		task.delay(20, function()
+			if lastQuestion == text then hideAnswer() end
+		end)
 		return
 	end
 
-	-- No cache hit, no math — try worker as fallback
-	local tf = not text:lower():find("%?") -- no question mark = likely T/F statement
+	-- 3) Ask the worker (searches web + AI)
 	showAnswer("Thinking...", Color3.fromRGB(142, 146, 151))
 
-	task.spawn(function()
-		local ok, response = pcall(function()
-			return request({
-				Url = "https://trivia-solver.killtrex0.workers.dev",
-				Method = "POST",
-				Headers = {["Content-Type"] = "application/json"},
-				Body = HttpService:JSONEncode({question = text, isTF = tf})
-			})
-		end)
+	local tf = isTrueFalse(text)
 
-		if ok and response and response.StatusCode == 200 then
-			local data = HttpService:JSONDecode(response.Body)
-			if data.answer then
-				local answer = data.answer
-				if answer:find("^TRUE") or (answer:upper():find("TRUE") and not answer:upper():find("FALSE")) then
-					showAnswer("TRUE\n" .. answer, Color3.fromRGB(87, 242, 135))
-				elseif answer:find("^FALSE") or (answer:upper():find("FALSE") and not answer:upper():find("TRUE")) then
-					showAnswer("FALSE\n" .. answer, Color3.fromRGB(255, 100, 100))
-				else
-					showAnswer(answer, Color3.fromRGB(255, 215, 0))
-				end
-				qaLog[text] = answer; saveLog()
-				task.delay(20, function() if lastQuestion == text then hideAnswer() end end)
-				return
-			end
+	task.spawn(function()
+		local answer = askWorker(text, imageId, tf)
+		answering = false
+
+		if not answer then
+			showAnswer("Failed to get answer", Color3.fromRGB(255, 100, 100))
+			task.delay(5, hideAnswer)
+			return
 		end
 
-		-- Worker failed — show unknown
-		showAnswer("? (not in cache)", Color3.fromRGB(150, 150, 150))
-		task.delay(10, function() if lastQuestion == text then hideAnswer() end end)
+		displayAnswer(text, answer, false)
+		logHistory(text .. (imageId and (" [img:" .. imageId .. "]") or ""), answer)
+
+		if isImgQ then logImageQuestion(text, imageId, answer) end
+
+		qaLog[cacheKey] = answer
+		saveLog()
+
+		task.delay(20, function()
+			if lastQuestion == text then hideAnswer() end
+		end)
 	end)
 end
 
@@ -275,15 +556,21 @@ local function hookTextLabel(textLabel)
 		if t then processQuestion(t) end
 	end)
 	table.insert(connections, conn)
-	if textLabel.Text and textLabel.Text ~= "" then processQuestion(textLabel.Text) end
+	if textLabel.Text and textLabel.Text ~= "" then
+		processQuestion(textLabel.Text)
+	end
 end
 
+-- Watch for the Announcement/TextLabel to appear, reappear after respawn, or get recreated
 local function setupMonitor()
 	local function watchAnnouncement(announcement)
 		local textLabel = announcement:FindFirstChild(TEXT_LABEL_NAME)
 		if textLabel then hookTextLabel(textLabel) end
+		-- Re-hook if the TextLabel gets added/recreated
 		local conn = announcement.ChildAdded:Connect(function(child)
-			if child.Name == TEXT_LABEL_NAME then hookTextLabel(child) end
+			if child.Name == TEXT_LABEL_NAME then
+				hookTextLabel(child)
+			end
 		end)
 		table.insert(connections, conn)
 	end
@@ -291,11 +578,16 @@ local function setupMonitor()
 	local announcement = playerGui:FindFirstChild(ANNOUNCEMENT_PARENT)
 	if announcement then watchAnnouncement(announcement) end
 
+	-- Re-hook if Announcement itself gets added/recreated (respawn)
 	local conn = playerGui.ChildAdded:Connect(function(child)
-		if child.Name == ANNOUNCEMENT_PARENT then task.wait(0.5); watchAnnouncement(child) end
+		if child.Name == ANNOUNCEMENT_PARENT then
+			task.wait(0.5)
+			watchAnnouncement(child)
+		end
 	end)
 	table.insert(connections, conn)
 
+	-- Also re-setup on character respawn in case PlayerGui gets wiped
 	localPlayer.CharacterAdded:Connect(function()
 		task.wait(1)
 		local ann = playerGui:FindFirstChild(ANNOUNCEMENT_PARENT)
@@ -304,14 +596,3 @@ local function setupMonitor()
 end
 
 setupMonitor()
-
--- Cleanup for SixZeroHub
-local function cleanup()
-	for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
-	connections = {}
-	pcall(function() gui:Destroy() end)
-end
-
-if _G.SixZeroHubRegister then
-	_G.SixZeroHubRegister("Trivia Cache", "[Spec]tof_trivia", cleanup, "spec")
-end
