@@ -1,5 +1,5 @@
--- Auto Parry — maximum speed
--- RenderStepped + AnimationPlayed, pre-cached references, zero overhead
+-- Auto Parry — every detection method layered
+-- Animation + Tool equip + RenderStepped + PushStuff + Model.Plane + Touched + Velocity spike
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,9 +9,10 @@ local playerGui = lp:WaitForChild("PlayerGui")
 local RANGE = 20
 local RANGE_APPROACHING = 30
 local CLOSE_RANGE = 5
+local PUSH_ANIM_ID = "rbxassetid://134933487900882"
+
 local connections = {}
 local recentParry = 0
-local PUSH_ANIM_ID = "rbxassetid://134933487900882"
 
 ---------- Pre-cached refs ----------
 
@@ -80,7 +81,7 @@ local function burstHorizontalDensity()
 	end)
 end
 
----------- Instant parry ----------
+---------- Core parry ----------
 
 local function fireParry()
 	if not parryTool or not myHum then
@@ -104,21 +105,34 @@ local function shouldParry(theirHRP)
 	if not myHRP then return false end
 	local offset = myHRP.Position - theirHRP.Position
 	local dist = offset.Magnitude
+	if dist <= CLOSE_RANGE then return true end
 	local vel = theirHRP.AssemblyLinearVelocity
 	local movingToward = vel.Magnitude > 1 and vel.Unit:Dot(offset.Unit) > 0.3
 	local maxRange = movingToward and RANGE_APPROACHING or RANGE
 	if dist > maxRange then return false end
-	if dist <= CLOSE_RANGE then return true end
 	return theirHRP.CFrame.LookVector:Dot(offset.Unit) >= 0
 end
 
-local function doParry(player, theirHRP)
+-- Parry triggered by a specific player
+local function doParryPlayer(player, theirHRP)
 	if tick() - recentParry < 0.5 then return end
 	if not shouldParry(theirHRP) then return end
 	recentParry = tick()
 	burstHorizontalDensity()
 	if fireParry() then
 		flashLabel.Text = "PARRIED " .. player.Name
+		flashLabel.Visible = true
+		task.delay(1.5, function() flashLabel.Visible = false end)
+	end
+end
+
+-- Parry triggered by non-player source (PushStuff, Model.Plane, etc)
+local function doParryDirect(source)
+	if tick() - recentParry < 0.5 then return end
+	recentParry = tick()
+	burstHorizontalDensity()
+	if fireParry() then
+		flashLabel.Text = "PARRIED (" .. (source or "?") .. ")"
 		flashLabel.Visible = true
 		task.delay(1.5, function() flashLabel.Visible = false end)
 	end
@@ -144,10 +158,9 @@ flashLabel.Visible = false
 flashLabel.Parent = gui
 Instance.new("UICorner", flashLabel).CornerRadius = UDim.new(0, 6)
 
----------- Watch players ----------
+---------- METHOD 1: AnimationPlayed + Tool equip per player ----------
 
 local function watchCharacter(player, char)
-	-- Animation detection
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if hum then
 		local animator = hum:FindFirstChildOfClass("Animator") or hum:WaitForChild("Animator", 2)
@@ -155,18 +168,17 @@ local function watchCharacter(player, char)
 			local c = animator.AnimationPlayed:Connect(function(track)
 				if track.Animation and track.Animation.AnimationId == PUSH_ANIM_ID then
 					local hrp = char:FindFirstChild("HumanoidRootPart")
-					if hrp then doParry(player, hrp) end
+					if hrp then doParryPlayer(player, hrp) end
 				end
 			end)
 			table.insert(connections, c)
 		end
 	end
 
-	-- Tool equip detection
 	local c = char.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") and child.Name == "Push" then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then doParry(player, hrp) end
+			if hrp then doParryPlayer(player, hrp) end
 		end
 	end)
 	table.insert(connections, c)
@@ -185,14 +197,14 @@ end
 for _, p in ipairs(Players:GetPlayers()) do watchPlayer(p) end
 Players.PlayerAdded:Connect(watchPlayer)
 
----------- RenderStepped scan ----------
+---------- METHOD 2: RenderStepped frame scan ----------
 
 local playerCache = {}
 
 local function rebuildCache()
 	playerCache = {}
 	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= lp then table.insert(playerCache, p) end
+		if p ~= lp then playerCache[#playerCache+1] = p end
 	end
 end
 
@@ -210,12 +222,120 @@ RunService.RenderStepped:Connect(function()
 			local push = char:FindFirstChild("Push")
 			if push and push:IsA("Tool") then
 				local hrp = char:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					doParry(p, hrp)
-					return
-				end
+				if hrp then doParryPlayer(p, hrp); return end
 			end
 		end
+	end
+end)
+
+---------- METHOD 3: PushStuff folder ----------
+
+local function isMe(name)
+	return name == lp.Name or name == lp.DisplayName or (myChar and name == myChar.Name)
+end
+
+local function watchPushStuff(pushStuff)
+	local c = pushStuff.DescendantAdded:Connect(function(desc)
+		local current = desc
+		for i = 1, 4 do
+			if not current then break end
+			if isMe(current.Name) then doParryDirect("PushStuff"); return end
+			current = current.Parent
+		end
+		if desc:IsA("BasePart") and myHRP then
+			pcall(function()
+				if (desc.Position - myHRP.Position).Magnitude < 10 then
+					doParryDirect("PushStuff")
+				end
+			end)
+		end
+	end)
+	table.insert(connections, c)
+
+	local c2 = pushStuff.ChildAdded:Connect(function(child)
+		if isMe(child.Name) then doParryDirect("PushStuff") end
+	end)
+	table.insert(connections, c2)
+end
+
+local ps = workspace:FindFirstChild("PushStuff")
+if ps then watchPushStuff(ps) end
+table.insert(connections, workspace.ChildAdded:Connect(function(child)
+	if child.Name == "PushStuff" then watchPushStuff(child) end
+end))
+
+---------- METHOD 4: Workspace.Model.Plane ----------
+
+local function watchModelPlane()
+	local model = workspace:FindFirstChild("Model")
+	if not model then return end
+	if model:FindFirstChild("Plane") then doParryDirect("Plane") end
+	local c = model.ChildAdded:Connect(function(child)
+		if child.Name == "Plane" then doParryDirect("Plane") end
+	end)
+	table.insert(connections, c)
+end
+
+pcall(watchModelPlane)
+table.insert(connections, workspace.ChildAdded:Connect(function(child)
+	if child.Name == "Model" then task.wait(0.1); watchModelPlane() end
+end))
+
+---------- METHOD 5: Touched on character parts ----------
+
+local touchConns = {}
+
+local function hookTouched(char)
+	for _, c in ipairs(touchConns) do pcall(function() c:Disconnect() end) end
+	touchConns = {}
+
+	local hrp = char:WaitForChild("HumanoidRootPart", 5)
+	if not hrp then return end
+
+	for _, part in ipairs(char:GetChildren()) do
+		if part:IsA("BasePart") then
+			local c = part.Touched:Connect(function(hit)
+				if not hit or not hit.Parent then return end
+				if hit:IsDescendantOf(char) then return end
+				local name = hit.Name:lower()
+				if name:find("push") or name:find("hitbox") or name:find("plane")
+					or name:find("collision") or name:find("attack") then
+					doParryDirect("Touch:" .. hit.Name)
+				end
+			end)
+			touchConns[#touchConns+1] = c
+		end
+	end
+end
+
+if myChar then hookTouched(myChar) end
+lp.CharacterAdded:Connect(function(char)
+	task.wait(0.5)
+	hookTouched(char)
+end)
+
+---------- METHOD 6: Velocity spike (reactive parry) ----------
+
+local lastVel = Vector3.zero
+local velSpikeCount = 0
+
+RunService.Heartbeat:Connect(function()
+	if not myHRP then return end
+	local vel = myHRP.AssemblyLinearVelocity
+	local hVel = Vector3.new(vel.X, 0, vel.Z)
+	local lastH = Vector3.new(lastVel.X, 0, lastVel.Z)
+	local spike = (hVel - lastH).Magnitude
+	lastVel = vel
+
+	-- Sudden horizontal velocity spike = probably got pushed
+	if spike > 40 and hVel.Magnitude > 25 then
+		velSpikeCount = velSpikeCount + 1
+		if velSpikeCount >= 2 then
+			doParryDirect("VelSpike")
+			velSpikeCount = 0
+		end
+	else
+		velSpikeCount = 0
 	end
 end)
 
