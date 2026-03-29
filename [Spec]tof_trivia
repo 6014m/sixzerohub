@@ -230,9 +230,41 @@ local function processQuestion(rawText)
 		return
 	end
 
-	-- No cache hit, no math — show unknown
-	showAnswer("? (not in cache)", Color3.fromRGB(150, 150, 150))
-	task.delay(10, function() if lastQuestion == text then hideAnswer() end end)
+	-- No cache hit, no math — try worker as fallback
+	local tf = not text:lower():find("%?") -- no question mark = likely T/F statement
+	showAnswer("Thinking...", Color3.fromRGB(142, 146, 151))
+
+	task.spawn(function()
+		local ok, response = pcall(function()
+			return request({
+				Url = "https://trivia-solver.killtrex0.workers.dev",
+				Method = "POST",
+				Headers = {["Content-Type"] = "application/json"},
+				Body = HttpService:JSONEncode({question = text, isTF = tf})
+			})
+		end)
+
+		if ok and response and response.StatusCode == 200 then
+			local data = HttpService:JSONDecode(response.Body)
+			if data.answer then
+				local answer = data.answer
+				if answer:find("^TRUE") or (answer:upper():find("TRUE") and not answer:upper():find("FALSE")) then
+					showAnswer("TRUE\n" .. answer, Color3.fromRGB(87, 242, 135))
+				elseif answer:find("^FALSE") or (answer:upper():find("FALSE") and not answer:upper():find("TRUE")) then
+					showAnswer("FALSE\n" .. answer, Color3.fromRGB(255, 100, 100))
+				else
+					showAnswer(answer, Color3.fromRGB(255, 215, 0))
+				end
+				qaLog[text] = answer; saveLog()
+				task.delay(20, function() if lastQuestion == text then hideAnswer() end end)
+				return
+			end
+		end
+
+		-- Worker failed — show unknown
+		showAnswer("? (not in cache)", Color3.fromRGB(150, 150, 150))
+		task.delay(10, function() if lastQuestion == text then hideAnswer() end end)
+	end)
 end
 
 ---------- Monitor ----------
