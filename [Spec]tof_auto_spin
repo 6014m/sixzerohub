@@ -35,7 +35,7 @@ gui.Parent = playerGui
 
 local label = Instance.new("TextLabel")
 label.Size = UDim2.new(0, 150, 0, 26)
-label.Position = UDim2.new(0.5, -75, 0, 46)
+label.Position = UDim2.new(1, -160, 0, 75)
 label.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 label.BackgroundTransparency = 0.1
 label.BorderSizePixel = 0

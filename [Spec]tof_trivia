@@ -39,7 +39,7 @@ gui.Parent = playerGui
 
 local container = Instance.new("Frame")
 container.Size = UDim2.new(0, 340, 0, 80)
-container.Position = UDim2.new(0.5, -170, 0, 10)
+container.Position = UDim2.new(1, -350, 0.5, -40)
 container.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 container.BackgroundTransparency = 0.05
 container.BorderSizePixel = 0
