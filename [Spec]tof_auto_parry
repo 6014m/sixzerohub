@@ -453,7 +453,9 @@ table.insert(connections, workspace.ChildAdded:Connect(function(child)
 	if child.Name == "PushStuff" then watchPushStuffFeedback(child) end
 end))
 
----------- FEEDBACK: Ragdoll detection (missed push) ----------
+---------- FEEDBACK: Ragdoll detection ----------
+-- Only counts as a miss if we ragdoll AND we didn't recently parry
+-- (ragdoll after parry = they got parried, that's a success)
 
 local function hookRagdoll(char)
 	local hum = char:WaitForChild("Humanoid", 5)
@@ -461,8 +463,9 @@ local function hookRagdoll(char)
 	local c = hum.StateChanged:Connect(function(_, newState)
 		if newState == Enum.HumanoidStateType.Ragdoll
 			or newState == Enum.HumanoidStateType.FallingDown then
-			-- Ragdolled without active parry = missed
-			if not parryPending and (tick() - recentParry > 1) then
+			-- Only a miss if we haven't parried in the last 3 seconds
+			-- (ragdoll right after parry = successful parry on them)
+			if tick() - recentParry > 3 then
 				onMiss()
 			end
 		end
