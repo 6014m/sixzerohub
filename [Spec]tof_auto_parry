@@ -1,19 +1,15 @@
--- Auto Parry — maximum speed
--- RenderStepped + AnimationPlayed, pre-cached references, zero overhead
+-- Auto Parry — detects Workspace.PushStuff.YourName collision parts
+-- When push collision parts appear on your body, instantly parries + horizontal density
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local lp = Players.LocalPlayer
 local playerGui = lp:WaitForChild("PlayerGui")
 
-local RANGE = 20
-local RANGE_APPROACHING = 30 -- extended range when moving toward me
-local CLOSE_RANGE = 5
 local connections = {}
 local recentParry = 0
-local PUSH_ANIM_ID = "rbxassetid://134933487900882"
 
----------- Pre-cached refs (updated on change) ----------
+---------- Pre-cached refs ----------
 
 local myChar, myHRP, myHum, myBackpack, parryTool
 
@@ -26,14 +22,8 @@ local function cacheLocal()
 end
 
 cacheLocal()
+lp.CharacterAdded:Connect(function() task.wait(0.2); cacheLocal() end)
 
-lp.CharacterAdded:Connect(function(char)
-	myChar = char
-	task.wait(0.2)
-	cacheLocal()
-end)
-
--- Keep parry ref fresh
 task.spawn(function()
 	while true do
 		myBackpack = lp:FindFirstChild("Backpack")
@@ -42,15 +32,12 @@ task.spawn(function()
 	end
 end)
 
----------- Instant parry ----------
-
----------- Temporary Horizontal Density (1 second burst) ----------
+---------- Horizontal Density Burst ----------
 
 local hdActive = false
 
 local function burstHorizontalDensity()
-	if hdActive then return end
-	if not myHRP or not myHum then return end
+	if hdActive or not myHRP or not myHum then return end
 	hdActive = true
 
 	local att = Instance.new("Attachment")
@@ -89,7 +76,7 @@ local function burstHorizontalDensity()
 	end)
 end
 
----------- Instant parry ----------
+---------- Parry ----------
 
 local function fireParry()
 	if not parryTool or not myHum then
@@ -104,40 +91,25 @@ local function fireParry()
 	return true
 end
 
-local function shouldParry(theirHRP)
-	if not myHRP then return false end
-	local offset = myHRP.Position - theirHRP.Position
-	local dist = offset.Magnitude
-	-- Check if moving toward me (velocity pointing in my direction)
-	local vel = theirHRP.AssemblyLinearVelocity
-	local movingToward = vel.Magnitude > 1 and vel.Unit:Dot(offset.Unit) > 0.3
-	local maxRange = movingToward and RANGE_APPROACHING or RANGE
-	if dist > maxRange then return false end
-	if dist <= CLOSE_RANGE then return true end
-	-- Beyond close range, ignore if facing away
-	return theirHRP.CFrame.LookVector:Dot(offset.Unit) >= 0
-end
-
-local function doParry(player, theirHRP)
+local function doParry()
 	if tick() - recentParry < 0.5 then return end
-	if not shouldParry(theirHRP) then return end
 	recentParry = tick()
 	burstHorizontalDensity()
 	if fireParry() then
-		flashLabel.Text = "PARRIED " .. player.Name
+		flashLabel.Text = "PARRIED"
 		flashLabel.Visible = true
 		task.delay(1.5, function() flashLabel.Visible = false end)
 	end
 end
 
----------- Minimal notify ----------
+---------- Notify ----------
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "AutoParry"
 gui.ResetOnSpawn = false
 gui.Parent = playerGui
 
-local flashLabel = Instance.new("TextLabel")
+flashLabel = Instance.new("TextLabel")
 flashLabel.Size = UDim2.new(0, 200, 0, 30)
 flashLabel.Position = UDim2.new(0.5, -100, 0, 50)
 flashLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
@@ -148,84 +120,47 @@ flashLabel.Font = Enum.Font.GothamBold
 flashLabel.TextSize = 14
 flashLabel.Visible = false
 flashLabel.Parent = gui
-
 Instance.new("UICorner", flashLabel).CornerRadius = UDim.new(0, 6)
 
----------- Watch players ----------
+---------- PushStuff Detection ----------
 
-local function watchCharacter(player, char)
-	-- AnimationPlayed — fastest event-based detection
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		local animator = hum:FindFirstChildOfClass("Animator") or hum:WaitForChild("Animator", 2)
-		if animator then
-			local c = animator.AnimationPlayed:Connect(function(track)
-				if track.Animation and track.Animation.AnimationId == PUSH_ANIM_ID then
-					local hrp = char:FindFirstChild("HumanoidRootPart")
-					if hrp then doParry(player, hrp) end
-				end
-			end)
-			table.insert(connections, c)
-		end
+local function watchPushStuff(pushStuff)
+	-- Watch for our name folder (we're the victim)
+	local function onVictimFolder(folder)
+		if folder.Name ~= lp.Name then return end
+		-- Collision parts appearing = someone is pushing us
+		doParry()
+		-- Also watch DescendantAdded in case parts come in waves
+		local conn = folder.DescendantAdded:Connect(function()
+			doParry()
+		end)
+		table.insert(connections, conn)
 	end
 
-	-- ChildAdded backup
-	local c = char.ChildAdded:Connect(function(child)
-		if child:IsA("Tool") and child.Name == "Push" then
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then doParry(player, hrp) end
-		end
-	end)
-	table.insert(connections, c)
-end
-
-local function watchPlayer(player)
-	if player == lp then return end
-	if player.Character then watchCharacter(player, player.Character) end
-	local c = player.CharacterAdded:Connect(function(char)
-		task.wait(0.3)
-		watchCharacter(player, char)
-	end)
-	table.insert(connections, c)
-end
-
-for _, p in ipairs(Players:GetPlayers()) do watchPlayer(p) end
-Players.PlayerAdded:Connect(watchPlayer)
-
----------- RenderStepped scan — every frame, zero yield ----------
-
-local playerCache = {}
-
-local function rebuildCache()
-	playerCache = {}
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= lp then table.insert(playerCache, p) end
+	-- Check existing children
+	for _, child in ipairs(pushStuff:GetChildren()) do
+		if child.Name == lp.Name then onVictimFolder(child) end
 	end
+
+	-- Watch for new victim folders
+	local conn = pushStuff.ChildAdded:Connect(function(child)
+		if child.Name == lp.Name then onVictimFolder(child) end
+	end)
+	table.insert(connections, conn)
 end
 
-rebuildCache()
-Players.PlayerAdded:Connect(rebuildCache)
-Players.PlayerRemoving:Connect(rebuildCache)
+-- Find or wait for PushStuff
+local pushStuff = workspace:FindFirstChild("PushStuff")
+if pushStuff then
+	watchPushStuff(pushStuff)
+end
 
-RunService.RenderStepped:Connect(function()
-	if tick() - recentParry < 0.5 then return end
-	if not myHRP then cacheLocal(); return end
-	local myPos = myHRP.Position
-	for i = 1, #playerCache do
-		local p = playerCache[i]
-		local char = p.Character
-		if char then
-			local push = char:FindFirstChild("Push")
-			if push and push:IsA("Tool") then
-				local hrp = char:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					doParry(p, hrp)
-					return
-				end
-			end
-		end
+local wsConn = workspace.ChildAdded:Connect(function(child)
+	if child.Name == "PushStuff" then
+		watchPushStuff(child)
 	end
 end)
+table.insert(connections, wsConn)
 
 ---------- Auto Delete Ropes ----------
 
