@@ -56,6 +56,7 @@ toggleBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.TextSize = 10
 toggleBtn.Parent = gui
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
 
 local active = true
 toggleBtn.MouseButton1Click:Connect(function()

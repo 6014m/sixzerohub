@@ -46,7 +46,7 @@ container.BorderSizePixel = 0
 container.Visible = false
 container.Parent = gui
 
-Instance.new("UICorner", container).CornerRadius = UDim.new(0, 8)
+-- No UICorner — flush against right screen edge
 local stroke = Instance.new("UIStroke", container)
 stroke.Color = Color3.fromRGB(88, 101, 242); stroke.Thickness = 1.5
 
