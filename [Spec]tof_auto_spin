@@ -34,8 +34,8 @@ gui.ResetOnSpawn = false
 gui.Parent = playerGui
 
 local label = Instance.new("TextLabel")
-label.Size = UDim2.new(0, 120, 0, 26)
-label.Position = UDim2.new(1, -160, 0, 75)
+label.Size = UDim2.new(0, 130, 0, 26)
+label.Position = UDim2.new(1, -130, 0, 75)
 label.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 label.BackgroundTransparency = 0.1
 label.BorderSizePixel = 0
@@ -44,30 +44,29 @@ label.TextColor3 = Color3.fromRGB(87, 242, 135)
 label.Font = Enum.Font.GothamBold
 label.TextSize = 13
 label.Parent = gui
-Instance.new("UICorner", label).CornerRadius = UDim.new(0, 6)
 
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0, 30, 0, 26)
-toggleBtn.Position = UDim2.new(1, -36, 0, 75)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
+toggleBtn.Position = UDim2.new(1, -161, 0, 75)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+toggleBtn.BackgroundTransparency = 0.1
 toggleBtn.BorderSizePixel = 0
 toggleBtn.Text = "ON"
-toggleBtn.TextColor3 = Color3.fromRGB(30, 30, 35)
+toggleBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.TextSize = 10
 toggleBtn.Parent = gui
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
 
 local active = true
 toggleBtn.MouseButton1Click:Connect(function()
 	active = not active
 	if active then
 		toggleBtn.Text = "ON"
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
+		toggleBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
 		label.TextColor3 = Color3.fromRGB(87, 242, 135)
 	else
 		toggleBtn.Text = "OFF"
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+		toggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
 		label.TextColor3 = Color3.fromRGB(255, 100, 100)
 	end
 end)
