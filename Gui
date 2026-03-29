@@ -1340,6 +1340,9 @@ local SPEC_SCRIPTS = {
     { name = "Auto Crate", file = "[Spec]evil_plate_crate", gameId = 100337093788565 },
     { name = "Clue Finder", file = "[Spec]outlaster_clue_finder", gameId = 15057331539 },
     { name = "Auto Arrest", file = "[Spec]auto_arrest", gameId = 155615604 },
+    { name = "Trivia Cache", file = "[Spec]tof_trivia", gameId = 106861549205304 },
+    { name = "Auto Parry", file = "[Spec]tof_auto_parry", gameId = 106861549205304 },
+    { name = "Auto Spin", file = "[Spec]tof_auto_spin", gameId = 106861549205304 },
 }
 
 local currentGameId = game.PlaceId

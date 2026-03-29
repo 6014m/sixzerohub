@@ -1,0 +1,84 @@
+-- Auto Spin for True or False
+-- Clicks the ROLL button whenever you have enough tokens
+
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+local playerGui = lp:WaitForChild("PlayerGui")
+
+local connections = {}
+local spinning = true
+
+local function getButton()
+	local shop = playerGui:FindFirstChild("SerekShop")
+	if not shop then return nil, nil end
+	local frame = shop:FindFirstChild("Frame")
+	if not frame then return nil, nil end
+	local roll = frame:FindFirstChild("ROLL")
+	if not roll then return nil, nil end
+	local btn = roll:FindFirstChild("Button")
+	if not btn then return nil, nil end
+	local tokensLabel = btn:FindFirstChild("AmountOfTokens")
+	return btn, tokensLabel
+end
+
+local function getTokenCount(label)
+	if not label then return 0 end
+	local num = label.Text:match("%((%d+)")
+	return tonumber(num) or 0
+end
+
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoSpin"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local label = Instance.new("TextLabel")
+label.Size = UDim2.new(0, 150, 0, 26)
+label.Position = UDim2.new(0.5, -75, 0, 46)
+label.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+label.BackgroundTransparency = 0.1
+label.BorderSizePixel = 0
+label.Text = "Auto Spin: ON"
+label.TextColor3 = Color3.fromRGB(87, 242, 135)
+label.Font = Enum.Font.GothamBold
+label.TextSize = 13
+label.Parent = gui
+Instance.new("UICorner", label).CornerRadius = UDim.new(0, 6)
+
+-- Main loop
+task.spawn(function()
+	while spinning do
+		local btn, tokensLabel = getButton()
+		if btn and tokensLabel then
+			local tokens = getTokenCount(tokensLabel)
+			label.Text = "Auto Spin: " .. tokens .. " tokens"
+			if tokens > 0 then
+				pcall(function()
+					fireclickdetector(btn.ClickDetector)
+				end)
+				-- Fallback: simulate click via virtual input
+				pcall(function()
+					firesignal(btn.MouseButton1Click)
+				end)
+				-- Fallback: activate if it's a GuiButton
+				pcall(function()
+					if btn:IsA("GuiButton") then
+						btn.MouseButton1Click:Fire()
+					end
+				end)
+			end
+		else
+			label.Text = "Auto Spin: Waiting..."
+		end
+		task.wait(0.5)
+	end
+end)
+
+-- SixZeroHub cleanup
+if _G.SixZeroHubRegister then
+	_G.SixZeroHubRegister("Auto Spin", "[Spec]tof_auto_spin", function()
+		spinning = false
+		pcall(function() gui:Destroy() end)
+	end, "spec")
+end
