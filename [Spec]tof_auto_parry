@@ -615,6 +615,7 @@ task.delay(2, function()
 				name = "reset_sensitivity",
 				label = "Reset Sensitivity",
 				type = "button",
+				buttonText = "Reset",
 				onClick = function()
 					sensitivity.range = 20
 					sensitivity.rangeApproach = 30

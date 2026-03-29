@@ -790,6 +790,32 @@ showSettingsPanel = function(fileKey)
                 if def.onChange then pcall(def.onChange, values[def.name]) end
                 saveSettingsToFile()
             end)
+
+        elseif def.type == "button" then
+            local actionBtn = Instance.new("TextButton")
+            actionBtn.Size = UDim2.new(0.4, -8, 0, 22)
+            actionBtn.Position = UDim2.new(0.6, 0, 0, 4)
+            actionBtn.BackgroundColor3 = COLORS.accent
+            actionBtn.BorderSizePixel = 0
+            actionBtn.Text = def.buttonText or "Run"
+            actionBtn.TextColor3 = Color3.new(1, 1, 1)
+            actionBtn.TextSize = 12
+            actionBtn.Font = Enum.Font.GothamBold
+            actionBtn.AutoButtonColor = true
+            actionBtn.Parent = row
+            Instance.new("UICorner", actionBtn).CornerRadius = UDim.new(0, 4)
+
+            actionBtn.MouseButton1Click:Connect(function()
+                if def.onClick then pcall(def.onClick) end
+                actionBtn.Text = "Done"
+                actionBtn.BackgroundColor3 = Color3.fromRGB(87, 242, 135)
+                task.delay(1, function()
+                    if actionBtn.Parent then
+                        actionBtn.Text = def.buttonText or "Run"
+                        actionBtn.BackgroundColor3 = COLORS.accent
+                    end
+                end)
+            end)
         end
     end
 
