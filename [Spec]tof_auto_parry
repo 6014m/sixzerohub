@@ -189,7 +189,11 @@ local function watchAnimations(player, char)
 	if not animator then return end
 
 	local c = animator.AnimationPlayed:Connect(function(track)
-		if track.Animation and track.Animation.AnimationId == PUSH_ANIM_ID then
+		if not track.Animation then return end
+		local id = track.Animation.AnimationId
+		-- Log ALL animations from nearby players to F9
+		warn("[AutoParry] " .. player.Name .. " played: " .. id)
+		if id == PUSH_ANIM_ID then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
 			if hrp then doParry(player, hrp) end
 		end
@@ -304,6 +308,92 @@ RunService.Heartbeat:Connect(function()
 		end
 	end
 end)
+
+---------- Push Distance Logger ----------
+
+local LOG_FILE = "AutoParry_distances.txt"
+
+local function logDistance(text)
+	warn("[AutoParry] " .. text)
+	pcall(function()
+		if appendfile then
+			appendfile(LOG_FILE, text .. "\n")
+		elseif writefile and isfile then
+			local old = isfile(LOG_FILE) and readfile(LOG_FILE) or ""
+			writefile(LOG_FILE, old .. text .. "\n")
+		end
+	end)
+end
+
+-- Watch OTHER players ragdolling (we parried them — log our distance)
+local function watchRagdoll(player, char)
+	local hum = char:WaitForChild("Humanoid", 5)
+	if not hum then return end
+	local c = hum.StateChanged:Connect(function(_, newState)
+		if newState == Enum.HumanoidStateType.Ragdoll or newState == Enum.HumanoidStateType.FallingDown then
+			if not myHRP then return end
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if not hrp then return end
+			local dist = (myHRP.Position - hrp.Position).Magnitude
+			local timeSinceParry = tick() - recentParry
+			if timeSinceParry < 2 then
+				logDistance(string.format("PARRIED %s at %.1f studs (%.2fs ago)", player.Name, dist, timeSinceParry))
+			else
+				logDistance(string.format("RAGDOLL %s at %.1f studs (not our parry)", player.Name, dist))
+			end
+		end
+	end)
+	table.insert(connections, c)
+end
+
+-- Watch SELF ragdolling (we got pushed — find who was closest with Push)
+local function watchSelfRagdoll(char)
+	local hum = char:WaitForChild("Humanoid", 5)
+	if not hum then return end
+	local c = hum.StateChanged:Connect(function(_, newState)
+		if newState == Enum.HumanoidStateType.Ragdoll or newState == Enum.HumanoidStateType.FallingDown then
+			if not myHRP then return end
+			local nearest, nearDist = nil, math.huge
+			for _, p in ipairs(playerCache) do
+				local pChar = p.Character
+				if pChar then
+					local pHRP = pChar:FindFirstChild("HumanoidRootPart")
+					if pHRP then
+						local d = (myHRP.Position - pHRP.Position).Magnitude
+						if d < nearDist then nearDist = d; nearest = p end
+					end
+				end
+			end
+			local timeSinceParry = tick() - recentParry
+			if nearest then
+				logDistance(string.format("GOT PUSHED by %s(?) at %.1f studs | parried %.2fs ago", nearest.Name, nearDist, timeSinceParry))
+			else
+				logDistance(string.format("GOT PUSHED (unknown) | parried %.2fs ago", timeSinceParry))
+			end
+		end
+	end)
+	table.insert(connections, c)
+end
+
+-- Hook ragdoll watchers for all players
+for _, p in ipairs(Players:GetPlayers()) do
+	if p ~= lp and p.Character then watchRagdoll(p, p.Character) end
+end
+Players.PlayerAdded:Connect(function(p)
+	if p == lp then return end
+	p.CharacterAdded:Connect(function(char) task.wait(0.5); watchRagdoll(p, char) end)
+end)
+
+-- Also hook when existing players respawn
+for _, p in ipairs(Players:GetPlayers()) do
+	if p ~= lp then
+		p.CharacterAdded:Connect(function(char) task.wait(0.5); watchRagdoll(p, char) end)
+	end
+end
+
+-- Hook self
+if myChar then watchSelfRagdoll(myChar) end
+lp.CharacterAdded:Connect(function(char) task.wait(0.5); watchSelfRagdoll(char) end)
 
 ---------- Auto Delete Ropes ----------
 
