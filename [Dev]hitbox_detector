@@ -89,6 +89,19 @@ countLbl.TextSize = 11
 countLbl.Font = Enum.Font.Gotham
 countLbl.Parent = header
 
+local visualBtn = Instance.new("TextButton")
+visualBtn.Size = UDim2.new(0, 50, 0, 22)
+visualBtn.Position = UDim2.new(1, -128, 0, 6)
+visualBtn.BackgroundColor3 = COLORS.row
+visualBtn.BorderSizePixel = 0
+visualBtn.Text = "Visual"
+visualBtn.TextColor3 = COLORS.text
+visualBtn.TextSize = 11
+visualBtn.Font = Enum.Font.GothamBold
+visualBtn.AutoButtonColor = false
+visualBtn.Parent = header
+Instance.new("UICorner", visualBtn).CornerRadius = UDim.new(0, 4)
+
 local pauseBtn = Instance.new("TextButton")
 pauseBtn.Size = UDim2.new(0, 50, 0, 22)
 pauseBtn.Position = UDim2.new(1, -72, 0, 6)
@@ -303,6 +316,11 @@ local function addEntry(part)
     end
 
     countLbl.Text = tostring(#entries)
+
+    -- Visual mode: highlight the part
+    if visualMode then
+        makeVisible(part)
+    end
 end
 
 ---------- DETECTION ----------
@@ -384,12 +402,66 @@ clearBtn.MouseButton1Click:Connect(function()
     countLbl.Text = "0"
 end)
 
+---------- VISUAL MODE ----------
+
+local visualMode = false
+local highlights = {} -- track highlights we've added so we can clean up
+
+local function makeVisible(part)
+    if not part or not part.Parent then return end
+    if part:FindFirstChild("_HitboxHighlight") then return end
+
+    -- Make the part visible
+    pcall(function()
+        if part.Transparency >= 0.5 then
+            part:SetAttribute("_HBD_OrigTransparency", part.Transparency)
+            part.Transparency = 0.3
+        end
+    end)
+
+    -- Add red highlight
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "_HitboxHighlight"
+    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineColor = Color3.fromRGB(255, 50, 50)
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Adornee = part
+    highlight.Parent = part
+    table.insert(highlights, {part = part, highlight = highlight})
+end
+
+local function clearVisuals()
+    for _, h in ipairs(highlights) do
+        pcall(function()
+            if h.highlight and h.highlight.Parent then h.highlight:Destroy() end
+        end)
+        pcall(function()
+            local orig = h.part:GetAttribute("_HBD_OrigTransparency")
+            if orig then h.part.Transparency = orig; h.part:SetAttribute("_HBD_OrigTransparency", nil) end
+        end)
+    end
+    highlights = {}
+end
+
+visualBtn.MouseButton1Click:Connect(function()
+    visualMode = not visualMode
+    visualBtn.Text = visualMode and "Hide" or "Visual"
+    visualBtn.BackgroundColor3 = visualMode and COLORS.accent or COLORS.row
+
+    if not visualMode then
+        clearVisuals()
+    end
+end)
+
 ---------- CLEANUP ----------
 
 local function cleanup()
     for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     for _, c in ipairs(touchConnections) do pcall(function() c:Disconnect() end) end
     connections = {}; touchConnections = {}
+    clearVisuals()
     pcall(function() gui:Destroy() end)
 end
 
