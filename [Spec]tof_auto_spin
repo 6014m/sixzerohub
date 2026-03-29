@@ -2,6 +2,7 @@
 -- Clicks the ROLL button whenever you have enough tokens
 
 local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 local lp = Players.LocalPlayer
 local playerGui = lp:WaitForChild("PlayerGui")
 
@@ -58,9 +59,17 @@ toggleBtn.TextSize = 10
 toggleBtn.Parent = gui
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
 
+local SETTINGS_FILE = "AutoSpin_settings.json"
+
 local active = true
-toggleBtn.MouseButton1Click:Connect(function()
-	active = not active
+pcall(function()
+	if isfile and isfile(SETTINGS_FILE) then
+		local data = HttpService:JSONDecode(readfile(SETTINGS_FILE))
+		if data.active == false then active = false end
+	end
+end)
+
+local function updateVisual()
 	if active then
 		toggleBtn.Text = "ON"
 		toggleBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
@@ -70,6 +79,18 @@ toggleBtn.MouseButton1Click:Connect(function()
 		toggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
 		label.TextColor3 = Color3.fromRGB(255, 100, 100)
 	end
+end
+
+updateVisual()
+
+toggleBtn.MouseButton1Click:Connect(function()
+	active = not active
+	updateVisual()
+	pcall(function()
+		if writefile then
+			writefile(SETTINGS_FILE, HttpService:JSONEncode({active = active}))
+		end
+	end)
 end)
 
 -- Main loop
