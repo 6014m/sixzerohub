@@ -9,6 +9,7 @@ local playerGui = lp:WaitForChild("PlayerGui")
 local connections = {}
 local spinning = true
 
+-- Token Roll
 local function getButton()
 	local shop = playerGui:FindFirstChild("SerekShop")
 	if not shop then return nil, nil end
@@ -25,6 +26,21 @@ end
 local function getTokenCount(label)
 	if not label then return 0 end
 	local num = label.Text:match("%((%d+)")
+	return tonumber(num) or 0
+end
+
+-- Daily Spin
+local function getDailySpin()
+	local gui = playerGui:FindFirstChild("DailySpinGive")
+	if not gui then return nil, nil end
+	local spinBtn = gui:FindFirstChild("Spin")
+	local amountLabel = gui:FindFirstChild("amount")
+	return spinBtn, amountLabel
+end
+
+local function getDailySpinCount(label)
+	if not label then return 0 end
+	local num = label.Text:match("(%d+)")
 	return tonumber(num) or 0
 end
 
@@ -59,15 +75,51 @@ toggleBtn.TextSize = 10
 toggleBtn.Parent = gui
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
 
+-- Daily Spin GUI (same style, below token spin)
+local label2 = Instance.new("TextLabel")
+label2.Size = UDim2.new(0, 130, 0, 26)
+label2.Position = UDim2.new(1, -130, 0, 105)
+label2.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+label2.BackgroundTransparency = 0.1
+label2.BorderSizePixel = 0
+label2.Text = "Daily Spin: ON"
+label2.TextColor3 = Color3.fromRGB(87, 242, 135)
+label2.Font = Enum.Font.GothamBold
+label2.TextSize = 13
+label2.Parent = gui
+
+local toggleBtn2 = Instance.new("TextButton")
+toggleBtn2.Size = UDim2.new(0, 30, 0, 26)
+toggleBtn2.Position = UDim2.new(1, -161, 0, 105)
+toggleBtn2.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+toggleBtn2.BackgroundTransparency = 0.1
+toggleBtn2.BorderSizePixel = 0
+toggleBtn2.Text = "ON"
+toggleBtn2.TextColor3 = Color3.fromRGB(87, 242, 135)
+toggleBtn2.Font = Enum.Font.GothamBold
+toggleBtn2.TextSize = 10
+toggleBtn2.Parent = gui
+Instance.new("UICorner", toggleBtn2).CornerRadius = UDim.new(0, 6)
+
 local SETTINGS_FILE = "AutoSpin_settings.json"
 
 local active = true
+local dailyActive = true
 pcall(function()
 	if isfile and isfile(SETTINGS_FILE) then
 		local data = HttpService:JSONDecode(readfile(SETTINGS_FILE))
 		if data.active == false then active = false end
+		if data.dailyActive == false then dailyActive = false end
 	end
 end)
+
+local function saveSettings()
+	pcall(function()
+		if writefile then
+			writefile(SETTINGS_FILE, HttpService:JSONEncode({active = active, dailyActive = dailyActive}))
+		end
+	end)
+end
 
 local function updateVisual()
 	if active then
@@ -79,6 +131,15 @@ local function updateVisual()
 		toggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
 		label.TextColor3 = Color3.fromRGB(255, 100, 100)
 	end
+	if dailyActive then
+		toggleBtn2.Text = "ON"
+		toggleBtn2.TextColor3 = Color3.fromRGB(87, 242, 135)
+		label2.TextColor3 = Color3.fromRGB(87, 242, 135)
+	else
+		toggleBtn2.Text = "OFF"
+		toggleBtn2.TextColor3 = Color3.fromRGB(255, 100, 100)
+		label2.TextColor3 = Color3.fromRGB(255, 100, 100)
+	end
 end
 
 updateVisual()
@@ -86,14 +147,16 @@ updateVisual()
 toggleBtn.MouseButton1Click:Connect(function()
 	active = not active
 	updateVisual()
-	pcall(function()
-		if writefile then
-			writefile(SETTINGS_FILE, HttpService:JSONEncode({active = active}))
-		end
-	end)
+	saveSettings()
 end)
 
--- Main loop
+toggleBtn2.MouseButton1Click:Connect(function()
+	dailyActive = not dailyActive
+	updateVisual()
+	saveSettings()
+end)
+
+-- Token spin loop
 task.spawn(function()
 	while spinning do
 		local btn, tokensLabel = getButton()
@@ -104,11 +167,9 @@ task.spawn(function()
 				pcall(function()
 					fireclickdetector(btn.ClickDetector)
 				end)
-				-- Fallback: simulate click via virtual input
 				pcall(function()
 					firesignal(btn.MouseButton1Click)
 				end)
-				-- Fallback: activate if it's a GuiButton
 				pcall(function()
 					if btn:IsA("GuiButton") then
 						btn.MouseButton1Click:Fire()
@@ -122,10 +183,29 @@ task.spawn(function()
 	end
 end)
 
--- SixZeroHub cleanup
-if _G.SixZeroHubRegister then
-	_G.SixZeroHubRegister("Auto Spin", "[Spec]tof_auto_spin", function()
-		spinning = false
-		pcall(function() gui:Destroy() end)
-	end, "spec")
-end
+-- Daily spin loop
+task.spawn(function()
+	while spinning do
+		local spinBtn, amountLabel = getDailySpin()
+		if spinBtn and amountLabel then
+			local count = getDailySpinCount(amountLabel)
+			label2.Text = (dailyActive and "Daily Spin: " or "Paused: ") .. count .. " spins"
+			if count > 0 and dailyActive then
+				pcall(function()
+					fireclickdetector(spinBtn.ClickDetector)
+				end)
+				pcall(function()
+					firesignal(spinBtn.MouseButton1Click)
+				end)
+				pcall(function()
+					if spinBtn:IsA("GuiButton") then
+						spinBtn.MouseButton1Click:Fire()
+					end
+				end)
+			end
+		else
+			label2.Text = "Daily Spin: Waiting..."
+		end
+		task.wait(0.5)
+	end
+end)
