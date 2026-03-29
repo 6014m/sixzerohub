@@ -312,8 +312,38 @@ end)
 ---------- Push Distance Logger ----------
 
 local LOG_FILE = "AutoParry_distances.txt"
+local DATA_FILE = "AutoParry_data.json"
+local HttpService = game:GetService("HttpService")
 
-local function logDistance(text)
+-- Persistent learned data
+local learnedData = { pushes = {}, parries = {}, ranges = {}, methods = {} }
+pcall(function()
+	if isfile and isfile(DATA_FILE) then
+		local d = HttpService:JSONDecode(readfile(DATA_FILE))
+		if type(d) == "table" then learnedData = d end
+	end
+end)
+
+local function saveData()
+	pcall(function()
+		if writefile then writefile(DATA_FILE, HttpService:JSONEncode(learnedData)) end
+	end)
+end
+
+local function getOrientation(fromHRP, toHRP)
+	-- Where was the attacker relative to us?
+	local dir = (fromHRP.Position - toHRP.Position).Unit
+	local look = toHRP.CFrame.LookVector
+	local right = toHRP.CFrame.RightVector
+	local fDot = look.X * dir.X + look.Z * dir.Z -- front/back
+	local rDot = right.X * dir.X + right.Z * dir.Z -- left/right
+
+	local facing = fDot > 0.5 and "FRONT" or fDot < -0.5 and "BEHIND" or "SIDE"
+	local side = rDot > 0.3 and "-RIGHT" or rDot < -0.3 and "-LEFT" or ""
+	return facing .. side, fDot, rDot
+end
+
+local function logDistance(text, data)
 	warn("[AutoParry] " .. text)
 	pcall(function()
 		if appendfile then
@@ -323,6 +353,26 @@ local function logDistance(text)
 			writefile(LOG_FILE, old .. text .. "\n")
 		end
 	end)
+	-- Save structured data
+	if data then
+		if data.type == "pushed" then
+			learnedData.pushes[#learnedData.pushes + 1] = data
+			-- Track max push range seen
+			if not learnedData.ranges.maxPushDist or data.dist > learnedData.ranges.maxPushDist then
+				learnedData.ranges.maxPushDist = data.dist
+			end
+		elseif data.type == "parried" then
+			learnedData.parries[#learnedData.parries + 1] = data
+			if not learnedData.ranges.maxParryDist or data.dist > learnedData.ranges.maxParryDist then
+				learnedData.ranges.maxParryDist = data.dist
+			end
+		end
+		-- Track which detection methods fire
+		if data.method then
+			learnedData.methods[data.method] = (learnedData.methods[data.method] or 0) + 1
+		end
+		saveData()
+	end
 end
 
 -- Detect ANY form of ragdoll/push on a player
@@ -333,57 +383,69 @@ local function watchPushEffects(player, char)
 	if not hrp then return end
 	local isMe = player == lp
 
-	-- METHOD A: Standard humanoid state change
+	local function findNearest()
+		local nearest, nd = nil, math.huge
+		for _, p in ipairs(playerCache) do
+			local pc = p.Character; local ph = pc and pc:FindFirstChild("HumanoidRootPart")
+			if ph and myHRP then
+				local d = (myHRP.Position - ph.Position).Magnitude
+				if d < nd then nd = d; nearest = p end
+			end
+		end
+		return nearest, nd
+	end
+
+	local function logEvent(method)
+		local dist = myHRP and hrp and (myHRP.Position - hrp.Position).Magnitude or 0
+		local since = tick() - recentParry
+		local orient, fDot, rDot = "", 0, 0
+
+		if isMe then
+			local nearest, nd = findNearest()
+			local nName = nearest and nearest.Name or "?"
+			local nHRP = nearest and nearest.Character and nearest.Character:FindFirstChild("HumanoidRootPart")
+			if nHRP and myHRP then
+				orient, fDot, rDot = getOrientation(nHRP, myHRP)
+			end
+			local text = string.format("%s | PUSHED by %s at %.1f studs | %s (f:%.2f r:%.2f) | parry %.2fs ago",
+				method, nName, nd, orient, fDot, rDot, since)
+			logDistance(text, {type="pushed", method=method, dist=nd, orient=orient, fDot=fDot, rDot=rDot, since=since, attacker=nName})
+		else
+			if myHRP and hrp then
+				orient, fDot, rDot = getOrientation(hrp, myHRP)
+			end
+			local text = string.format("%s | %s at %.1f studs | %s (f:%.2f r:%.2f) | parry %.2fs ago",
+				method, player.Name, dist, orient, fDot, rDot, since)
+			local tp = since < 2 and "parried" or "other"
+			logDistance(text, {type=tp, method=method, dist=dist, orient=orient, fDot=fDot, rDot=rDot, since=since, target=player.Name})
+		end
+	end
+
+	-- A: Standard humanoid state change
 	local c1 = hum.StateChanged:Connect(function(_, newState)
 		if newState == Enum.HumanoidStateType.Ragdoll
 			or newState == Enum.HumanoidStateType.FallingDown
 			or newState == Enum.HumanoidStateType.Physics then
-			local dist = myHRP and (myHRP.Position - hrp.Position).Magnitude or 0
-			local since = tick() - recentParry
-			if isMe then
-				local nearest, nd = nil, math.huge
-				for _, p in ipairs(playerCache) do
-					local pc = p.Character; local ph = pc and pc:FindFirstChild("HumanoidRootPart")
-					if ph then local d = (myHRP.Position - ph.Position).Magnitude; if d < nd then nd = d; nearest = p end end
-				end
-				logDistance(string.format("STATE %s | GOT PUSHED by %s(?) at %.1f studs | parry %.2fs ago", newState.Name, nearest and nearest.Name or "?", nd, since))
-			else
-				logDistance(string.format("STATE %s | %s at %.1f studs | parry %.2fs ago", newState.Name, player.Name, dist, since))
-			end
+			logEvent("STATE:" .. newState.Name)
 		end
 	end)
 	table.insert(connections, c1)
 
-	-- METHOD B: PlatformStand (custom ragdoll)
+	-- B: PlatformStand
 	local c2 = hum:GetPropertyChangedSignal("PlatformStand"):Connect(function()
-		if hum.PlatformStand then
-			local dist = myHRP and (myHRP.Position - hrp.Position).Magnitude or 0
-			local since = tick() - recentParry
-			if isMe then
-				logDistance(string.format("PLATFORMSTAND | GOT PUSHED | nearest unknown | parry %.2fs ago", since))
-			else
-				logDistance(string.format("PLATFORMSTAND | %s at %.1f studs | parry %.2fs ago", player.Name, dist, since))
-			end
-		end
+		if hum.PlatformStand then logEvent("PLATFORMSTAND") end
 	end)
 	table.insert(connections, c2)
 
-	-- METHOD C: Sit (some games use this)
+	-- C: Sit
 	local c3 = hum:GetPropertyChangedSignal("Sit"):Connect(function()
-		if hum.Sit then
-			local dist = myHRP and (myHRP.Position - hrp.Position).Magnitude or 0
-			local since = tick() - recentParry
-			if isMe then
-				logDistance(string.format("SIT | GOT PUSHED | parry %.2fs ago", since))
-			else
-				logDistance(string.format("SIT | %s at %.1f studs | parry %.2fs ago", player.Name, dist, since))
-			end
-		end
+		if hum.Sit then logEvent("SIT") end
 	end)
 	table.insert(connections, c3)
 
-	-- METHOD D: Sudden velocity spike (flung without state change)
+	-- D: Velocity spike
 	local lastVel = Vector3.zero
+	local spikeDebounce = 0
 	local c4 = RunService.Heartbeat:Connect(function()
 		if not hrp.Parent then return end
 		local vel = hrp.AssemblyLinearVelocity
@@ -391,48 +453,22 @@ local function watchPushEffects(player, char)
 		local lastH = Vector3.new(lastVel.X, 0, lastVel.Z).Magnitude
 		local spike = hVel - lastH
 		lastVel = vel
-		if spike > 50 and hVel > 30 then
-			local dist = myHRP and (myHRP.Position - hrp.Position).Magnitude or 0
-			local since = tick() - recentParry
-			if isMe then
-				local nearest, nd = nil, math.huge
-				for _, p in ipairs(playerCache) do
-					local pc = p.Character; local ph = pc and pc:FindFirstChild("HumanoidRootPart")
-					if ph then local d = (myHRP.Position - ph.Position).Magnitude; if d < nd then nd = d; nearest = p end end
-				end
-				logDistance(string.format("VELOCITY SPIKE %.0f | GOT PUSHED by %s(?) at %.1f studs | parry %.2fs ago", hVel, nearest and nearest.Name or "?", nd, since))
-			else
-				logDistance(string.format("VELOCITY SPIKE %.0f | %s at %.1f studs | parry %.2fs ago", hVel, player.Name, dist, since))
-			end
+		if spike > 50 and hVel > 30 and tick() - spikeDebounce > 1 then
+			spikeDebounce = tick()
+			logEvent("VELOCITY:" .. math.floor(hVel))
 		end
 	end)
 	table.insert(connections, c4)
 
-	-- METHOD E: Motor6D removal (joints broken = custom ragdoll)
+	-- E: Motor6D removed
 	local c5 = char.DescendantRemoving:Connect(function(desc)
-		if desc:IsA("Motor6D") then
-			local dist = myHRP and (myHRP.Position - hrp.Position).Magnitude or 0
-			local since = tick() - recentParry
-			if isMe then
-				logDistance(string.format("JOINT REMOVED %s | GOT PUSHED | parry %.2fs ago", desc.Name, since))
-			else
-				logDistance(string.format("JOINT REMOVED %s | %s at %.1f studs | parry %.2fs ago", desc.Name, player.Name, dist, since))
-			end
-		end
+		if desc:IsA("Motor6D") then logEvent("JOINT_REMOVED:" .. desc.Name) end
 	end)
 	table.insert(connections, c5)
 
-	-- METHOD F: BallSocketConstraint added (ragdoll rig swap)
+	-- F: BallSocketConstraint added
 	local c6 = char.DescendantAdded:Connect(function(desc)
-		if desc:IsA("BallSocketConstraint") then
-			local dist = myHRP and (myHRP.Position - hrp.Position).Magnitude or 0
-			local since = tick() - recentParry
-			if isMe then
-				logDistance(string.format("BALLSOCKET ADDED | GOT PUSHED | parry %.2fs ago", since))
-			else
-				logDistance(string.format("BALLSOCKET ADDED | %s at %.1f studs | parry %.2fs ago", player.Name, dist, since))
-			end
-		end
+		if desc:IsA("BallSocketConstraint") then logEvent("BALLSOCKET_ADDED") end
 	end)
 	table.insert(connections, c6)
 end
