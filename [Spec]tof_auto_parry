@@ -500,10 +500,61 @@ end
 for _, v in ipairs(workspace:GetDescendants()) do checkRope(v) end
 workspace.DescendantAdded:Connect(checkRope)
 
--- SixZeroHub cleanup
-if _G.SixZeroHubRegister then
-	_G.SixZeroHubRegister("Auto Parry", "[Spec]tof_auto_parry", function()
-		for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
-		pcall(function() gui:Destroy() end)
-	end, "spec")
+---------- Handle Blocker ----------
+
+local blockedHandles = {}
+
+local function blockHandle(handle)
+	if not handle:IsA("BasePart") then return end
+	if blockedHandles[handle] then return end
+	-- Skip handles inside backpacks/tools that aren't in workspace characters
+	local tool = handle.Parent
+	if tool and tool:IsA("Tool") and tool.Parent and tool.Parent:IsA("Backpack") then return end
+
+	blockedHandles[handle] = true
+
+	-- Create solid block welded to the handle
+	pcall(function()
+		local block = Instance.new("Part")
+		block.Name = "HandleBlock"
+		block.Size = handle.Size + Vector3.new(2, 2, 2)
+		block.CFrame = handle.CFrame
+		block.Anchored = false
+		block.CanCollide = true
+		block.Transparency = 0.5
+		block.Color = Color3.fromRGB(255, 50, 50)
+		block.Material = Enum.Material.ForceField
+		block.Parent = workspace
+
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = handle
+		weld.Part1 = block
+		weld.Parent = block
+
+		-- Clean up when handle is removed
+		handle.AncestryChanged:Connect(function()
+			if not handle:IsDescendantOf(workspace) then
+				pcall(function() block:Destroy() end)
+				blockedHandles[handle] = nil
+			end
+		end)
+	end)
+
+	-- If handle is on me, burst HD immediately
+	cacheLocal()
+	if myChar and handle:IsDescendantOf(myChar) then
+		burstHorizontalDensity()
+		flashLabel.Text = "HANDLE ON ME — HD"
+		flashLabel.Visible = true
+		task.delay(1.5, function() flashLabel.Visible = false end)
+	end
 end
+
+local function checkHandle(obj)
+	if obj.Name == "Handle" and obj:IsA("BasePart") then
+		blockHandle(obj)
+	end
+end
+
+for _, v in ipairs(workspace:GetDescendants()) do checkHandle(v) end
+workspace.DescendantAdded:Connect(checkHandle)
