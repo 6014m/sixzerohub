@@ -180,6 +180,14 @@ end
 -- Inline range/direction check — no function call overhead
 local function shouldParry(theirHRP)
 	if not myHRP then return false end
+	-- Skip ragdolled players — they can't push
+	local theirHum = theirHRP.Parent and theirHRP.Parent:FindFirstChildOfClass("Humanoid")
+	if theirHum then
+		local state = theirHum:GetState()
+		if state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown then
+			return false
+		end
+	end
 	local ox = myHRP.Position.X - theirHRP.Position.X
 	local oy = myHRP.Position.Y - theirHRP.Position.Y
 	local oz = myHRP.Position.Z - theirHRP.Position.Z
