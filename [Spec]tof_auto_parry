@@ -606,3 +606,31 @@ if _G.SixZeroHubRegister then
 		pcall(function() gui:Destroy() end)
 	end, "spec")
 end
+
+task.delay(2, function()
+	if _G.SixZeroHubRegisterSettings then
+		_G.SixZeroHubRegisterSettings("[Spec]tof_auto_parry", {
+			_title = "Auto Parry",
+			{
+				name = "reset_sensitivity",
+				label = "Reset Sensitivity",
+				type = "button",
+				onClick = function()
+					sensitivity.range = 20
+					sensitivity.rangeApproach = 30
+					sensitivity.closeRange = 5
+					sensitivity.dirThreshold = 0
+					sensitivity.missfires = 0
+					sensitivity.hits = 0
+					sensitivity.misses = 0
+					consecutiveMissfires = 0
+					saveSensitivity()
+					if sensLabel then
+						sensLabel.Text = "RESET | R:20 A:30"
+						sensLabel.TextColor3 = Color3.fromRGB(88, 101, 242)
+					end
+				end,
+			},
+		})
+	end
+end)
