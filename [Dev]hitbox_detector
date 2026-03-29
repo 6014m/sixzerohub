@@ -348,6 +348,7 @@ local function hookCharacter(char)
             local conn = part.Touched:Connect(function(hit)
                 if not hit or not hit.Parent then return end
                 if isMyCharPart(hit) or hit:IsDescendantOf(char) or isCharPart(hit) then return end
+                if hit.Anchored then return end
                 addEntry(hit)
             end)
             table.insert(touchConnections, conn)
@@ -359,6 +360,7 @@ local function hookCharacter(char)
             local conn = child.Touched:Connect(function(hit)
                 if not hit or not hit.Parent then return end
                 if isMyCharPart(hit) or hit:IsDescendantOf(char) or isCharPart(hit) then return end
+                if hit.Anchored then return end
                 addEntry(hit)
             end)
             table.insert(touchConnections, conn)
