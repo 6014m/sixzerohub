@@ -1333,6 +1333,7 @@ local DEV_SCRIPTS = {
     { name = "Anim Logger", file = "[Dev]anim_logger" },
     { name = "Reanim Poser", file = "[Dev]reanim_poser" },
     { name = "Reanim Compiler", file = "[Dev]reanim_compiler" },
+    { name = "Hitbox Detector", file = "[Dev]hitbox_detector" },
 }
 
 local SPEC_SCRIPTS = {

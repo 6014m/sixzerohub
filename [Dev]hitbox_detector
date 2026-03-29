@@ -1,0 +1,398 @@
+-- [Dev] Hitbox Detector
+-- Logs parts that touch/overlap the player's character hitbox
+-- Shows class, name, size, path with copy button
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+
+local COLORS = {
+    bg = Color3.fromRGB(32, 34, 37),
+    header = Color3.fromRGB(24, 26, 29),
+    row = Color3.fromRGB(47, 49, 54),
+    rowAlt = Color3.fromRGB(42, 44, 48),
+    text = Color3.fromRGB(220, 221, 222),
+    muted = Color3.fromRGB(142, 146, 151),
+    accent = Color3.fromRGB(255, 85, 85),
+    path = Color3.fromRGB(100, 180, 255),
+    type = Color3.fromRGB(200, 160, 255),
+    size = Color3.fromRGB(160, 220, 160),
+}
+
+local MAX_ENTRIES = 200
+local entries = {}
+local paused = false
+local connections = {}
+local seenParts = {} -- debounce: don't log the same part twice within a short window
+
+---------- GUI ----------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "HitboxDetector"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 998
+
+pcall(function() gui.Parent = game:GetService("CoreGui") end)
+if not gui.Parent then gui.Parent = playerGui end
+
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, 480, 0, 320)
+main.Position = UDim2.new(0.5, -240, 0.5, -160)
+main.BackgroundColor3 = COLORS.bg
+main.BorderSizePixel = 0
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+
+local mainStroke = Instance.new("UIStroke", main)
+mainStroke.Color = COLORS.accent
+mainStroke.Thickness = 1
+mainStroke.Transparency = 0.5
+
+-- header
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 34)
+header.BackgroundColor3 = COLORS.header
+header.BorderSizePixel = 0
+header.Parent = main
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
+
+local headerFill = Instance.new("Frame")
+headerFill.Size = UDim2.new(1, 0, 0, 8)
+headerFill.Position = UDim2.new(0, 0, 1, -8)
+headerFill.BackgroundColor3 = COLORS.header
+headerFill.BorderSizePixel = 0
+headerFill.Parent = header
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(1, -120, 1, 0)
+titleLbl.Position = UDim2.new(0, 10, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "Hitbox Detector"
+titleLbl.TextColor3 = COLORS.accent
+titleLbl.TextSize = 14
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Parent = header
+
+local countLbl = Instance.new("TextLabel")
+countLbl.Name = "Count"
+countLbl.Size = UDim2.new(0, 40, 1, 0)
+countLbl.Position = UDim2.new(1, -115, 0, 0)
+countLbl.BackgroundTransparency = 1
+countLbl.Text = "0"
+countLbl.TextColor3 = COLORS.muted
+countLbl.TextSize = 11
+countLbl.Font = Enum.Font.Gotham
+countLbl.Parent = header
+
+local pauseBtn = Instance.new("TextButton")
+pauseBtn.Size = UDim2.new(0, 50, 0, 22)
+pauseBtn.Position = UDim2.new(1, -72, 0, 6)
+pauseBtn.BackgroundColor3 = COLORS.row
+pauseBtn.BorderSizePixel = 0
+pauseBtn.Text = "Pause"
+pauseBtn.TextColor3 = COLORS.text
+pauseBtn.TextSize = 11
+pauseBtn.Font = Enum.Font.GothamBold
+pauseBtn.AutoButtonColor = false
+pauseBtn.Parent = header
+Instance.new("UICorner", pauseBtn).CornerRadius = UDim.new(0, 4)
+
+local clearBtn = Instance.new("TextButton")
+clearBtn.Size = UDim2.new(0, 16, 0, 22)
+clearBtn.Position = UDim2.new(1, -18, 0, 6)
+clearBtn.BackgroundTransparency = 1
+clearBtn.Text = "X"
+clearBtn.TextColor3 = COLORS.muted
+clearBtn.TextSize = 14
+clearBtn.Font = Enum.Font.GothamBold
+clearBtn.Parent = header
+
+-- column headers
+local colBar = Instance.new("Frame")
+colBar.Size = UDim2.new(1, -12, 0, 20)
+colBar.Position = UDim2.new(0, 6, 0, 36)
+colBar.BackgroundTransparency = 1
+colBar.Parent = main
+
+local function colHeader(text, x, w)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0, w, 1, 0)
+    lbl.Position = UDim2.new(0, x, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.TextColor3 = COLORS.muted
+    lbl.TextSize = 10
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = colBar
+end
+
+colHeader("Type", 0, 70)
+colHeader("Name", 72, 90)
+colHeader("Size", 164, 70)
+colHeader("Path", 262, 200)
+
+-- scroll list
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, -12, 1, -62)
+scroll.Position = UDim2.new(0, 6, 0, 58)
+scroll.BackgroundTransparency = 1
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 3
+scroll.ScrollBarImageColor3 = COLORS.accent
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.Parent = main
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 1)
+listLayout.Parent = scroll
+
+---------- DRAGGABLE ----------
+
+do
+    local dragging, dragStart, frameStart
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; frameStart = main.Position
+        end
+    end)
+    header.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+---------- HELPERS ----------
+
+local function getFullPath(inst)
+    local parts = {}
+    local current = inst
+    while current and current ~= game do
+        table.insert(parts, 1, current.Name)
+        current = current.Parent
+    end
+    return table.concat(parts, ".")
+end
+
+local function isMyCharPart(inst)
+    local char = localPlayer.Character
+    return char and inst:IsDescendantOf(char)
+end
+
+local function fmtSize(part)
+    local s = part.Size
+    return string.format("%.1f,%.1f,%.1f", s.X, s.Y, s.Z)
+end
+
+local entryCount = 0
+
+local function addEntry(part)
+    if paused then return end
+
+    -- Debounce: skip if we logged this exact part recently
+    if seenParts[part] then return end
+    seenParts[part] = true
+    task.delay(0.5, function() seenParts[part] = nil end)
+
+    entryCount = entryCount + 1
+    local idx = entryCount
+
+    local row = Instance.new("Frame")
+    row.Name = "Entry_" .. idx
+    row.Size = UDim2.new(1, 0, 0, 22)
+    row.BackgroundColor3 = (idx % 2 == 0) and COLORS.rowAlt or COLORS.row
+    row.BackgroundTransparency = 0.3
+    row.BorderSizePixel = 0
+    row.LayoutOrder = -idx
+    row.Parent = scroll
+
+    local typeLbl = Instance.new("TextLabel")
+    typeLbl.Size = UDim2.new(0, 70, 1, 0)
+    typeLbl.BackgroundTransparency = 1
+    typeLbl.Text = part.ClassName
+    typeLbl.TextColor3 = COLORS.type
+    typeLbl.TextSize = 11
+    typeLbl.Font = Enum.Font.GothamBold
+    typeLbl.TextXAlignment = Enum.TextXAlignment.Left
+    typeLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    typeLbl.Parent = row
+
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size = UDim2.new(0, 90, 1, 0)
+    nameLbl.Position = UDim2.new(0, 72, 0, 0)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Text = part.Name
+    nameLbl.TextColor3 = COLORS.text
+    nameLbl.TextSize = 11
+    nameLbl.Font = Enum.Font.Gotham
+    nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    nameLbl.Parent = row
+
+    local sizeLbl = Instance.new("TextLabel")
+    sizeLbl.Size = UDim2.new(0, 70, 1, 0)
+    sizeLbl.Position = UDim2.new(0, 164, 0, 0)
+    sizeLbl.BackgroundTransparency = 1
+    sizeLbl.Text = fmtSize(part)
+    sizeLbl.TextColor3 = COLORS.size
+    sizeLbl.TextSize = 10
+    sizeLbl.Font = Enum.Font.Code
+    sizeLbl.TextXAlignment = Enum.TextXAlignment.Left
+    sizeLbl.Parent = row
+
+    local fullPath = getFullPath(part)
+
+    local copyBtn = Instance.new("TextButton")
+    copyBtn.Size = UDim2.new(0, 22, 0, 18)
+    copyBtn.Position = UDim2.new(0, 236, 0, 2)
+    copyBtn.BackgroundColor3 = COLORS.row
+    copyBtn.BorderSizePixel = 0
+    copyBtn.Text = "\xF0\x9F\x93\x8B"
+    copyBtn.TextSize = 10
+    copyBtn.Font = Enum.Font.GothamBold
+    copyBtn.TextColor3 = COLORS.muted
+    copyBtn.AutoButtonColor = false
+    copyBtn.Parent = row
+    Instance.new("UICorner", copyBtn).CornerRadius = UDim.new(0, 3)
+
+    copyBtn.MouseButton1Click:Connect(function()
+        pcall(function()
+            if setclipboard then setclipboard(fullPath)
+            elseif toclipboard then toclipboard(fullPath) end
+        end)
+        copyBtn.Text = "\xE2\x9C\x93"
+        copyBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
+        task.delay(1, function()
+            if copyBtn and copyBtn.Parent then
+                copyBtn.Text = "\xF0\x9F\x93\x8B"
+                copyBtn.TextColor3 = COLORS.muted
+            end
+        end)
+    end)
+
+    local pathLbl = Instance.new("TextLabel")
+    pathLbl.Size = UDim2.new(1, -268, 1, 0)
+    pathLbl.Position = UDim2.new(0, 262, 0, 0)
+    pathLbl.BackgroundTransparency = 1
+    pathLbl.Text = fullPath
+    pathLbl.TextColor3 = COLORS.path
+    pathLbl.TextSize = 11
+    pathLbl.Font = Enum.Font.Gotham
+    pathLbl.TextXAlignment = Enum.TextXAlignment.Left
+    pathLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    pathLbl.Parent = row
+
+    table.insert(entries, row)
+    if #entries > MAX_ENTRIES then
+        local old = table.remove(entries, 1)
+        old:Destroy()
+    end
+
+    countLbl.Text = tostring(#entries)
+end
+
+---------- DETECTION ----------
+
+local touchConnections = {}
+
+local function hookCharacter(char)
+    -- Disconnect old touch connections
+    for _, c in ipairs(touchConnections) do pcall(function() c:Disconnect() end) end
+    touchConnections = {}
+
+    -- Wait for character to load
+    local hrp = char:WaitForChild("HumanoidRootPart", 10)
+    if not hrp then return end
+
+    -- Hook Touched on all character parts
+    for _, part in ipairs(char:GetChildren()) do
+        if part:IsA("BasePart") then
+            local conn = part.Touched:Connect(function(hit)
+                if not hit or not hit.Parent then return end
+                if isMyCharPart(hit) then return end
+                if hit:IsDescendantOf(char) then return end
+                -- Skip other player characters
+                local isOtherPlayer = false
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr.Character and hit:IsDescendantOf(plr.Character) then
+                        isOtherPlayer = true; break
+                    end
+                end
+                if isOtherPlayer then return end
+                addEntry(hit)
+            end)
+            table.insert(touchConnections, conn)
+        end
+    end
+
+    -- Hook new parts added to character
+    local addConn = char.ChildAdded:Connect(function(child)
+        if child:IsA("BasePart") then
+            local conn = child.Touched:Connect(function(hit)
+                if not hit or not hit.Parent then return end
+                if isMyCharPart(hit) then return end
+                if hit:IsDescendantOf(char) then return end
+                local isOtherPlayer = false
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr.Character and hit:IsDescendantOf(plr.Character) then
+                        isOtherPlayer = true; break
+                    end
+                end
+                if isOtherPlayer then return end
+                addEntry(hit)
+            end)
+            table.insert(touchConnections, conn)
+        end
+    end)
+    table.insert(connections, addConn)
+end
+
+-- Initial hook
+if localPlayer.Character then hookCharacter(localPlayer.Character) end
+local charConn = localPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.5)
+    hookCharacter(char)
+end)
+table.insert(connections, charConn)
+
+---------- BUTTONS ----------
+
+pauseBtn.MouseButton1Click:Connect(function()
+    paused = not paused
+    pauseBtn.Text = paused and "Play" or "Pause"
+    pauseBtn.BackgroundColor3 = paused and COLORS.accent or COLORS.row
+end)
+
+clearBtn.MouseButton1Click:Connect(function()
+    for _, row in ipairs(entries) do row:Destroy() end
+    entries = {}
+    entryCount = 0
+    countLbl.Text = "0"
+end)
+
+---------- CLEANUP ----------
+
+local function cleanup()
+    for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
+    for _, c in ipairs(touchConnections) do pcall(function() c:Disconnect() end) end
+    connections = {}; touchConnections = {}
+    pcall(function() gui:Destroy() end)
+end
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Hitbox Detector", "[Dev]hitbox_detector", cleanup, "dev")
+end
