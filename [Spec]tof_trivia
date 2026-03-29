@@ -38,8 +38,8 @@ gui.ResetOnSpawn = false
 gui.Parent = playerGui
 
 local container = Instance.new("Frame")
-container.Size = UDim2.new(0, 340, 0, 80)
-container.Position = UDim2.new(1, -350, 0.5, -40)
+container.Size = UDim2.new(0, 250, 0, 120)
+container.Position = UDim2.new(1, -250, 0.5, -60)
 container.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 container.BackgroundTransparency = 0.05
 container.BorderSizePixel = 0
@@ -78,7 +78,7 @@ local function showAnswer(text, color)
 	answerLabel.TextColor3 = color or Color3.fromRGB(220, 221, 222)
 	task.wait()
 	local h = math.max(80, answerLabel.TextBounds.Y + 42)
-	container.Size = UDim2.new(0, 340, 0, h)
+	container.Size = UDim2.new(0, 250, 0, h)
 	container.Visible = true
 end
 
