@@ -1,5 +1,5 @@
--- Auto Parry — every detection method layered
--- Animation + Tool equip + RenderStepped + PushStuff + Model.Plane + Touched + Velocity spike
+-- Auto Parry — maximum detection coverage
+-- 5 parallel detection methods, pre-cached, zero overhead hot paths
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,7 +14,7 @@ local PUSH_ANIM_ID = "rbxassetid://134933487900882"
 local connections = {}
 local recentParry = 0
 
----------- Pre-cached refs ----------
+---------- Pre-cached refs (updated constantly) ----------
 
 local myChar, myHRP, myHum, myBackpack, parryTool
 
@@ -29,13 +29,30 @@ end
 cacheLocal()
 lp.CharacterAdded:Connect(function() task.wait(0.2); cacheLocal() end)
 
+-- Refresh parry tool ref constantly since it can appear/disappear
 task.spawn(function()
 	while true do
 		myBackpack = lp:FindFirstChild("Backpack")
 		parryTool = myBackpack and myBackpack:FindFirstChild("Parry")
-		task.wait(0.5)
+		task.wait(0.3)
 	end
 end)
+
+---------- Player cache ----------
+
+local playerCache = {}
+local playerHRPCache = {} -- [player] = HumanoidRootPart (refreshed each frame)
+
+local function rebuildPlayerCache()
+	playerCache = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= lp then playerCache[#playerCache+1] = p end
+	end
+end
+
+rebuildPlayerCache()
+Players.PlayerAdded:Connect(rebuildPlayerCache)
+Players.PlayerRemoving:Connect(rebuildPlayerCache)
 
 ---------- Horizontal Density Burst ----------
 
@@ -68,9 +85,9 @@ local function burstHorizontalDensity()
 		local ws = myHum.WalkSpeed
 		linVel.PlaneVelocity = Vector2.new(moveDir.X * ws, moveDir.Z * ws)
 		local vel = myHRP.AssemblyLinearVelocity
-		local pushX = vel.X - (moveDir.X * ws)
-		local pushZ = vel.Z - (moveDir.Z * ws)
-		myHRP.AssemblyLinearVelocity = Vector3.new(vel.X - pushX, vel.Y, vel.Z - pushZ)
+		myHRP.AssemblyLinearVelocity = Vector3.new(
+			moveDir.X * ws, vel.Y, moveDir.Z * ws
+		)
 	end)
 
 	task.delay(1, function()
@@ -81,7 +98,7 @@ local function burstHorizontalDensity()
 	end)
 end
 
----------- Core parry ----------
+---------- Core parry (as fast as possible) ----------
 
 local function fireParry()
 	if not parryTool or not myHum then
@@ -96,28 +113,43 @@ local function fireParry()
 	return true
 end
 
-local function getHRP(player)
-	local char = player.Character
-	return char and char:FindFirstChild("HumanoidRootPart")
-end
-
+-- Inline range/direction check — no function call overhead
 local function shouldParry(theirHRP)
 	if not myHRP then return false end
-	local offset = myHRP.Position - theirHRP.Position
-	local dist = offset.Magnitude
-	if dist <= CLOSE_RANGE then return true end
+	local ox = myHRP.Position.X - theirHRP.Position.X
+	local oy = myHRP.Position.Y - theirHRP.Position.Y
+	local oz = myHRP.Position.Z - theirHRP.Position.Z
+	local distSq = ox*ox + oy*oy + oz*oz
+
+	-- Always parry if very close
+	if distSq <= CLOSE_RANGE * CLOSE_RANGE then return true end
+
+	-- Check if approaching (velocity toward us)
 	local vel = theirHRP.AssemblyLinearVelocity
-	local movingToward = vel.Magnitude > 1 and vel.Unit:Dot(offset.Unit) > 0.3
-	local maxRange = movingToward and RANGE_APPROACHING or RANGE
-	if dist > maxRange then return false end
-	return theirHRP.CFrame.LookVector:Dot(offset.Unit) >= 0
+	local vMag = vel.Magnitude
+	local maxRange = RANGE
+	if vMag > 1 then
+		local dist = math.sqrt(distSq)
+		local dirX, dirZ = ox / dist, oz / dist
+		local dot = vel.X * dirX + vel.Z * dirZ
+		if dot > 0.3 * vMag then
+			maxRange = RANGE_APPROACHING
+		end
+	end
+
+	if distSq > maxRange * maxRange then return false end
+
+	-- Check facing direction (not back turned)
+	local look = theirHRP.CFrame.LookVector
+	local dist = math.sqrt(distSq)
+	return (look.X * ox + look.Y * oy + look.Z * oz) / dist >= 0
 end
 
--- Parry triggered by a specific player
-local function doParryPlayer(player, theirHRP)
-	if tick() - recentParry < 0.5 then return end
+local function doParry(player, theirHRP)
+	local now = tick()
+	if now - recentParry < 0.5 then return end
 	if not shouldParry(theirHRP) then return end
-	recentParry = tick()
+	recentParry = now
 	burstHorizontalDensity()
 	if fireParry() then
 		flashLabel.Text = "PARRIED " .. player.Name
@@ -146,37 +178,86 @@ flashLabel.Visible = false
 flashLabel.Parent = gui
 Instance.new("UICorner", flashLabel).CornerRadius = UDim.new(0, 6)
 
----------- METHOD 1: AnimationPlayed + Tool equip per player ----------
+---------- METHOD 1: AnimationPlayed (catches push windup) ----------
 
-local function watchCharacter(player, char)
+local function watchAnimations(player, char)
 	local hum = char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		local animator = hum:FindFirstChildOfClass("Animator") or hum:WaitForChild("Animator", 2)
-		if animator then
-			local c = animator.AnimationPlayed:Connect(function(track)
-				if track.Animation and track.Animation.AnimationId == PUSH_ANIM_ID then
-					local hrp = char:FindFirstChild("HumanoidRootPart")
-					if hrp then doParryPlayer(player, hrp) end
-				end
-			end)
-			table.insert(connections, c)
-		end
-	end
+	if not hum then return end
+	local animator = hum:FindFirstChildOfClass("Animator")
+	if not animator then animator = hum:WaitForChild("Animator", 3) end
+	if not animator then return end
 
-	local c = char.ChildAdded:Connect(function(child)
-		if child:IsA("Tool") and child.Name == "Push" then
+	local c = animator.AnimationPlayed:Connect(function(track)
+		local anim = track.Animation
+		if not anim then return end
+
+		-- Match exact push animation ID
+		if anim.AnimationId == PUSH_ANIM_ID then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then doParryPlayer(player, hrp) end
+			if hrp then doParry(player, hrp) end
+			return
+		end
+
+		-- Also trigger if they have Push equipped and ANY animation plays
+		-- (catches animation ID changes / variants)
+		if char:FindFirstChild("Push") then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then doParry(player, hrp) end
 		end
 	end)
 	table.insert(connections, c)
 end
 
+---------- METHOD 2: Tool equip (Push enters Character) ----------
+
+local function watchToolEquip(player, char)
+	local c = char.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") and child.Name == "Push" then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then doParry(player, hrp) end
+		end
+	end)
+	table.insert(connections, c)
+end
+
+---------- METHOD 3: Backpack ChildRemoved (Push leaves Backpack = equipped) ----------
+-- This can fire BEFORE ChildAdded on Character due to replication order
+
+local function watchBackpack(player)
+	local function hookBackpack(backpack)
+		local c = backpack.ChildRemoved:Connect(function(child)
+			if child.Name == "Push" then
+				local char = player.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart")
+				if hrp then doParry(player, hrp) end
+			end
+		end)
+		table.insert(connections, c)
+	end
+
+	local bp = player:FindFirstChild("Backpack")
+	if bp then hookBackpack(bp) end
+
+	-- Backpack gets recreated on respawn
+	local c = player.ChildAdded:Connect(function(child)
+		if child.Name == "Backpack" then hookBackpack(child) end
+	end)
+	table.insert(connections, c)
+end
+
+---------- Watch all players ----------
+
+local function watchCharacter(player, char)
+	watchAnimations(player, char)
+	watchToolEquip(player, char)
+end
+
 local function watchPlayer(player)
 	if player == lp then return end
 	if player.Character then watchCharacter(player, player.Character) end
+	watchBackpack(player)
 	local c = player.CharacterAdded:Connect(function(char)
-		task.wait(0.3)
+		task.wait(0.2)
 		watchCharacter(player, char)
 	end)
 	table.insert(connections, c)
@@ -185,32 +266,59 @@ end
 for _, p in ipairs(Players:GetPlayers()) do watchPlayer(p) end
 Players.PlayerAdded:Connect(watchPlayer)
 
----------- METHOD 2: RenderStepped frame scan ----------
-
-local playerCache = {}
-
-local function rebuildCache()
-	playerCache = {}
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= lp then playerCache[#playerCache+1] = p end
-	end
-end
-
-rebuildCache()
-Players.PlayerAdded:Connect(rebuildCache)
-Players.PlayerRemoving:Connect(rebuildCache)
+---------- METHOD 4: RenderStepped scan (earliest in frame pipeline) ----------
 
 RunService.RenderStepped:Connect(function()
 	if tick() - recentParry < 0.5 then return end
 	if not myHRP then cacheLocal(); return end
+
+	local myPos = myHRP.Position
+
 	for i = 1, #playerCache do
 		local p = playerCache[i]
 		local char = p.Character
 		if char then
-			local push = char:FindFirstChild("Push")
-			if push and push:IsA("Tool") then
-				local hrp = char:FindFirstChild("HumanoidRootPart")
-				if hrp then doParryPlayer(p, hrp); return end
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				-- Quick squared distance pre-check before expensive FindFirstChild
+				local dx = myPos.X - hrp.Position.X
+				local dz = myPos.Z - hrp.Position.Z
+				local distSq = dx*dx + dz*dz
+				if distSq < RANGE_APPROACHING * RANGE_APPROACHING then
+					local push = char:FindFirstChild("Push")
+					if push and push:IsA("Tool") then
+						doParry(p, hrp)
+						return
+					end
+				end
+			end
+		end
+	end
+end)
+
+---------- METHOD 5: Heartbeat backup (physics step, different timing) ----------
+
+RunService.Heartbeat:Connect(function()
+	if tick() - recentParry < 0.5 then return end
+	if not myHRP then return end
+
+	local myPos = myHRP.Position
+
+	for i = 1, #playerCache do
+		local p = playerCache[i]
+		local char = p.Character
+		if char then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local dx = myPos.X - hrp.Position.X
+				local dz = myPos.Z - hrp.Position.Z
+				if dx*dx + dz*dz < RANGE_APPROACHING * RANGE_APPROACHING then
+					local push = char:FindFirstChild("Push")
+					if push and push:IsA("Tool") then
+						doParry(p, hrp)
+						return
+					end
+				end
 			end
 		end
 	end
@@ -226,9 +334,7 @@ end
 
 local function checkRope(obj)
 	if obj:IsA("RopeConstraint") or obj:IsA("RodConstraint") then
-		pcall(function()
-			if isAttachedToMe(obj) then obj:Destroy() end
-		end)
+		pcall(function() if isAttachedToMe(obj) then obj:Destroy() end end)
 	end
 end
 
