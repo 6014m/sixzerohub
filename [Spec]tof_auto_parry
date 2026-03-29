@@ -277,8 +277,6 @@ local function doParry(player, theirHRP)
 	if now - recentParry < 0.3 then return end
 	-- Respect actual game cooldown from UI
 	if isParryOnCooldown() then return end
-	-- Skip if this player just pushed (they're on push cooldown)
-	if isEnemyOnPushCooldown(player) then return end
 	if not shouldParry(theirHRP) then return end
 	-- Record conditions at parry time
 	local ox = myHRP.Position.X - theirHRP.Position.X
@@ -348,20 +346,10 @@ local function watchAnimations(player, char)
 	local c = animator.AnimationPlayed:Connect(function(track)
 		local anim = track.Animation
 		if not anim then return end
-
+		-- Only react to the exact push animation — not every anim
 		if anim.AnimationId == PUSH_ANIM_ID then
-			-- They're pushing — parry and mark their cooldown
 			local hrp = char:FindFirstChild("HumanoidRootPart")
 			if hrp then doParry(player, hrp) end
-			onEnemyPushAnim(player)
-			return
-		end
-
-		-- Also trigger if they have Push equipped and ANY new animation plays
-		if char:FindFirstChild("Push") then
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then doParry(player, hrp) end
-			onEnemyPushAnim(player)
 		end
 	end)
 	table.insert(connections, c)
@@ -532,17 +520,16 @@ end))
 ---------- FEEDBACK: Parry cooldown from UI ----------
 
 local function isParryOnCooldown()
+	local onCD = false
 	pcall(function()
 		local current = playerGui
 		for _, name in ipairs(PARRY_CD_PATH) do
 			current = current:FindFirstChild(name)
-			if not current then return false end
+			if not current then return end
 		end
-		-- CooldownFrame shrinks from 67.5 to 0 as cooldown expires
-		-- If size > 1, still on cooldown
-		return current.AbsoluteSize.X > 1
+		onCD = current.AbsoluteSize.X > 1
 	end)
-	return false
+	return onCD
 end
 
 ---------- FEEDBACK: Track other players' push cooldowns via animation ----------
