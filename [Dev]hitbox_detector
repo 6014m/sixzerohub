@@ -420,26 +420,7 @@ local function hookCharacter(char)
         end
     end
 
-    -- 4. SPATIAL PROXIMITY SCAN — catches magnitude/region-based attacks
-    -- Periodic scan for new non-character parts within attack range
-    local scanConn = RunService.Heartbeat:Connect(function()
-        if paused then return end
-        if not hrp or not hrp.Parent then return end
-        pcall(function()
-            local nearby = workspace:GetPartBoundsInRadius(hrp.Position, SCAN_RADIUS)
-            for _, part in ipairs(nearby) do
-                if not part:IsDescendantOf(char) and not isCharPart(part) and not seenParts[part] then
-                    -- Only log suspicious parts (not terrain, not static world)
-                    if part.Transparency >= 0.8 and part.CanCollide == false then
-                        addEntry(part)
-                    end
-                end
-            end
-        end)
-    end)
-    table.insert(connections, scanConn)
-
-    -- 5. TOOL ACTIVATION — watch other players activating tools (triggers attack)
+    -- 4. TOOL ACTIVATION — watch other players activating tools (triggers attack)
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= localPlayer and plr.Character then
             local tConn = plr.Character.ChildAdded:Connect(function(child)
