@@ -326,57 +326,139 @@ end
 ---------- DETECTION ----------
 
 local touchConnections = {}
+local SCAN_RADIUS = 20
+
+local function isCharPart(inst)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character and inst:IsDescendantOf(plr.Character) then return true end
+    end
+    return false
+end
 
 local function hookCharacter(char)
-    -- Disconnect old touch connections
     for _, c in ipairs(touchConnections) do pcall(function() c:Disconnect() end) end
     touchConnections = {}
 
-    -- Wait for character to load
     local hrp = char:WaitForChild("HumanoidRootPart", 10)
     if not hrp then return end
 
-    -- Hook Touched on all character parts
+    -- 1. TOUCHED EVENTS — detects .Touched hitboxes on character parts
     for _, part in ipairs(char:GetChildren()) do
         if part:IsA("BasePart") then
             local conn = part.Touched:Connect(function(hit)
                 if not hit or not hit.Parent then return end
-                if isMyCharPart(hit) then return end
-                if hit:IsDescendantOf(char) then return end
-                -- Skip other player characters
-                local isOtherPlayer = false
-                for _, plr in ipairs(Players:GetPlayers()) do
-                    if plr.Character and hit:IsDescendantOf(plr.Character) then
-                        isOtherPlayer = true; break
-                    end
-                end
-                if isOtherPlayer then return end
+                if isMyCharPart(hit) or hit:IsDescendantOf(char) or isCharPart(hit) then return end
                 addEntry(hit)
             end)
             table.insert(touchConnections, conn)
         end
     end
 
-    -- Hook new parts added to character
     local addConn = char.ChildAdded:Connect(function(child)
         if child:IsA("BasePart") then
             local conn = child.Touched:Connect(function(hit)
                 if not hit or not hit.Parent then return end
-                if isMyCharPart(hit) then return end
-                if hit:IsDescendantOf(char) then return end
-                local isOtherPlayer = false
-                for _, plr in ipairs(Players:GetPlayers()) do
-                    if plr.Character and hit:IsDescendantOf(plr.Character) then
-                        isOtherPlayer = true; break
-                    end
-                end
-                if isOtherPlayer then return end
+                if isMyCharPart(hit) or hit:IsDescendantOf(char) or isCharPart(hit) then return end
                 addEntry(hit)
             end)
             table.insert(touchConnections, conn)
         end
     end)
     table.insert(connections, addConn)
+
+    -- 2. CLONED/ATTACHED HITBOXES — detect new parts spawning near player
+    -- Catches hitbox parts that are briefly created then destroyed
+    local wsConn = workspace.DescendantAdded:Connect(function(desc)
+        if not desc:IsA("BasePart") then return end
+        if isMyCharPart(desc) or isCharPart(desc) then return end
+        if paused then return end
+        pcall(function()
+            if not hrp or not hrp.Parent then return end
+            local dist = (desc.Position - hrp.Position).Magnitude
+            if dist < SCAN_RADIUS then
+                -- Likely a hitbox if: transparent, no anchored, short-lived, or has specific properties
+                local suspicious = desc.Transparency >= 0.5
+                    or desc.CanCollide == false
+                    or desc.Name:lower():find("hit")
+                    or desc.Name:lower():find("box")
+                    or desc.Name:lower():find("attack")
+                    or desc.Name:lower():find("slash")
+                    or desc.Name:lower():find("swing")
+                    or desc.Name:lower():find("punch")
+                    or desc.Name:lower():find("push")
+                    or desc.Name:lower():find("damage")
+                    or desc.Name:lower():find("hurt")
+                    or desc.Name:lower():find("collision")
+                    or desc.Name:lower():find("raycast")
+                if suspicious then
+                    addEntry(desc)
+                end
+            end
+        end)
+    end)
+    table.insert(connections, wsConn)
+
+    -- 3. RAYCAST ATTACHMENTS — detect RaycastParams or Attachment setups on weapons/tools
+    -- Watch other players' characters for new Attachments (raycast melee origin points)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= localPlayer and plr.Character then
+            local pConn = plr.Character.DescendantAdded:Connect(function(desc)
+                if paused then return end
+                if desc:IsA("Attachment") and not seenParts[desc] then
+                    local parent = desc.Parent
+                    if parent and parent:IsA("BasePart") then
+                        pcall(function()
+                            local dist = (parent.Position - hrp.Position).Magnitude
+                            if dist < SCAN_RADIUS then
+                                addEntry(parent)
+                            end
+                        end)
+                    end
+                end
+            end)
+            table.insert(connections, pConn)
+        end
+    end
+
+    -- 4. SPATIAL PROXIMITY SCAN — catches magnitude/region-based attacks
+    -- Periodic scan for new non-character parts within attack range
+    local scanConn = RunService.Heartbeat:Connect(function()
+        if paused then return end
+        if not hrp or not hrp.Parent then return end
+        pcall(function()
+            local nearby = workspace:GetPartBoundsInRadius(hrp.Position, SCAN_RADIUS)
+            for _, part in ipairs(nearby) do
+                if not part:IsDescendantOf(char) and not isCharPart(part) and not seenParts[part] then
+                    -- Only log suspicious parts (not terrain, not static world)
+                    if part.Transparency >= 0.8 and part.CanCollide == false then
+                        addEntry(part)
+                    end
+                end
+            end
+        end)
+    end)
+    table.insert(connections, scanConn)
+
+    -- 5. TOOL ACTIVATION — watch other players activating tools (triggers attack)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= localPlayer and plr.Character then
+            local tConn = plr.Character.ChildAdded:Connect(function(child)
+                if paused then return end
+                if child:IsA("Tool") then
+                    pcall(function()
+                        local handle = child:FindFirstChild("Handle")
+                        if handle and handle:IsA("BasePart") then
+                            local dist = (handle.Position - hrp.Position).Magnitude
+                            if dist < SCAN_RADIUS then
+                                addEntry(handle)
+                            end
+                        end
+                    end)
+                end
+            end)
+            table.insert(connections, tConn)
+        end
+    end
 end
 
 -- Initial hook
