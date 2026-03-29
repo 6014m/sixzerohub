@@ -9,7 +9,11 @@ local playerGui = lp:WaitForChild("PlayerGui")
 
 local PUSH_ANIM_ID = "rbxassetid://134933487900882"
 local PARRY_ANIM_ID = "rbxassetid://123260433143277"
-local parryCooldownEnd = 0 -- tracks real game cooldown from parry animation
+local PUSH_COOLDOWN_ANIM_ID = PUSH_ANIM_ID -- same anim, if they just pushed they're on cooldown
+local parryCooldownEnd = 0
+local PARRY_CD_PATH = {"Toolbar", "MainToolbar", "Parry", "CooldownFrame"}
+local PARRY_CD_DEFAULT_SIZE = 67.5 -- full size = on cooldown, shrinks to 0 = ready
+local pushCooldownPlayers = {} -- [player] = tick when their push cooldown ends
 local SETTINGS_FILE = "AutoParry_sensitivity.json"
 
 -- Adaptive sensitivity (saved to file)
@@ -273,8 +277,10 @@ end
 local function doParry(player, theirHRP)
 	local now = tick()
 	if now - recentParry < 0.3 then return end
-	-- Respect actual game cooldown from parry animation
-	if now < parryCooldownEnd then return end
+	-- Respect actual game cooldown from UI
+	if isParryOnCooldown() then return end
+	-- Skip if this player just pushed (they're on push cooldown)
+	if isEnemyOnPushCooldown(player) then return end
 	if not shouldParry(theirHRP) then return end
 	-- Record conditions at parry time
 	local ox = myHRP.Position.X - theirHRP.Position.X
@@ -332,7 +338,7 @@ sensLabel.TextSize = 9
 sensLabel.Visible = true
 sensLabel.Parent = gui
 
----------- METHOD 1: AnimationPlayed (catches push windup) ----------
+---------- METHOD 1: AnimationPlayed (primary detection) ----------
 
 local function watchAnimations(player, char)
 	local hum = char:FindFirstChildOfClass("Humanoid")
@@ -345,18 +351,19 @@ local function watchAnimations(player, char)
 		local anim = track.Animation
 		if not anim then return end
 
-		-- Match exact push animation ID
 		if anim.AnimationId == PUSH_ANIM_ID then
+			-- They're pushing — parry and mark their cooldown
 			local hrp = char:FindFirstChild("HumanoidRootPart")
 			if hrp then doParry(player, hrp) end
+			onEnemyPushAnim(player)
 			return
 		end
 
-		-- Also trigger if they have Push equipped and ANY animation plays
-		-- (catches animation ID changes / variants)
+		-- Also trigger if they have Push equipped and ANY new animation plays
 		if char:FindFirstChild("Push") then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
 			if hrp then doParry(player, hrp) end
+			onEnemyPushAnim(player)
 		end
 	end)
 	table.insert(connections, c)
@@ -525,34 +532,33 @@ table.insert(connections, workspace.ChildAdded:Connect(function(child)
 	if child.Name == "PushStuff" then watchPushStuffFeedback(child) end
 end))
 
----------- FEEDBACK: Parry cooldown tracking ----------
+---------- FEEDBACK: Parry cooldown from UI ----------
 
-local function hookParryCooldown(char)
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if not hum then return end
-	local animator = hum:FindFirstChildOfClass("Animator")
-	if not animator then animator = hum:WaitForChild("Animator", 3) end
-	if not animator then return end
-
-	local c = animator.AnimationPlayed:Connect(function(track)
-		if track.Animation and track.Animation.AnimationId == PARRY_ANIM_ID then
-			-- Parry went through — track the animation length as cooldown
-			local len = track.Length
-			if len and len > 0 then
-				parryCooldownEnd = tick() + len + 0.1
-			else
-				parryCooldownEnd = tick() + 1 -- fallback 1s cooldown
-			end
+local function isParryOnCooldown()
+	pcall(function()
+		local current = playerGui
+		for _, name in ipairs(PARRY_CD_PATH) do
+			current = current:FindFirstChild(name)
+			if not current then return false end
 		end
+		-- CooldownFrame shrinks from 67.5 to 0 as cooldown expires
+		-- If size > 1, still on cooldown
+		return current.AbsoluteSize.X > 1
 	end)
-	table.insert(connections, c)
+	return false
 end
 
-if myChar then hookParryCooldown(myChar) end
-lp.CharacterAdded:Connect(function(char)
-	task.wait(0.5)
-	hookParryCooldown(char)
-end)
+---------- FEEDBACK: Track other players' push cooldowns via animation ----------
+
+local function onEnemyPushAnim(player)
+	-- They just pushed — mark them on cooldown so we don't react to stale tool equips
+	pushCooldownPlayers[player] = tick() + 5 -- assume ~5s push cooldown, self-adjusts
+end
+
+local function isEnemyOnPushCooldown(player)
+	local cd = pushCooldownPlayers[player]
+	return cd and tick() < cd
+end
 
 ---------- FEEDBACK: Ragdoll detection ----------
 -- Only counts as a miss if we ragdoll AND we didn't recently parry
