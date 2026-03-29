@@ -527,7 +527,7 @@ local function isParryOnCooldown()
 			current = current:FindFirstChild(name)
 			if not current then return end
 		end
-		onCD = current.AbsoluteSize.X > 1
+		onCD = current.AbsoluteSize.Y > 1
 	end)
 	return onCD
 end
