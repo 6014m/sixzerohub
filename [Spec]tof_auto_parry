@@ -45,16 +45,23 @@ local consecutiveMissfires = 0
 local function onMissfire()
 	sensitivity.missfires = sensitivity.missfires + 1
 	consecutiveMissfires = consecutiveMissfires + 1
-	-- Only tighten after 3+ consecutive missfires (one-off could be legit)
+	-- Only tighten after 3+ consecutive missfires
 	if consecutiveMissfires >= 3 then
-		sensitivity.range = math.max(8, sensitivity.range - 0.5)
-		sensitivity.rangeApproach = math.max(12, sensitivity.rangeApproach - 0.5)
-		sensitivity.dirThreshold = math.min(0.5, sensitivity.dirThreshold + 0.02)
+		-- Use recorded conditions to tune precisely
+		-- If missfires keep happening at long range, tighten range
+		if lastParryDist > sensitivity.range * 0.7 then
+			sensitivity.range = math.max(8, sensitivity.range - 1)
+			sensitivity.rangeApproach = math.max(12, sensitivity.rangeApproach - 1)
+		end
+		-- If missfires happen with low direction dot, tighten direction
+		if lastParryDir < 0.3 then
+			sensitivity.dirThreshold = math.min(0.5, sensitivity.dirThreshold + 0.05)
+		end
 		consecutiveMissfires = 0
 		saveSensitivity()
 	end
 	if sensLabel then
-		sensLabel.Text = "Missfire " .. consecutiveMissfires .. "/3 | R:" .. math.floor(sensitivity.range)
+		sensLabel.Text = string.format("Missfire %d/3 | D:%.0f Dir:%.2f", consecutiveMissfires, lastParryDist, lastParryDir)
 		sensLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
 	end
 end
@@ -72,21 +79,58 @@ end
 local function onMiss()
 	sensitivity.misses = sensitivity.misses + 1
 	consecutiveMissfires = 0
-	-- Misses are definitive — loosen aggressively
-	sensitivity.range = math.min(35, sensitivity.range + 2)
-	sensitivity.rangeApproach = math.min(45, sensitivity.rangeApproach + 3)
-	sensitivity.dirThreshold = math.max(-0.3, sensitivity.dirThreshold - 0.1)
+
+	-- Find how far the nearest player with Push was when we got hit
+	local nearestDist = math.huge
+	local nearestDir = 0
+	if myHRP then
+		for _, p in ipairs(playerCache) do
+			local char = p.Character
+			if char and char:FindFirstChild("Push") then
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local d = (myHRP.Position - hrp.Position).Magnitude
+					if d < nearestDist then
+						nearestDist = d
+						local offset = (myHRP.Position - hrp.Position).Unit
+						nearestDir = hrp.CFrame.LookVector:Dot(offset)
+					end
+				end
+			end
+		end
+	end
+
+	-- Loosen based on how far the attacker was
+	if nearestDist < math.huge then
+		-- They were beyond our range — need to expand
+		if nearestDist > sensitivity.range then
+			sensitivity.range = math.min(35, nearestDist + 3)
+			sensitivity.rangeApproach = math.min(45, nearestDist + 8)
+		end
+		-- They were facing away from our threshold — need to relax direction
+		if nearestDir < sensitivity.dirThreshold then
+			sensitivity.dirThreshold = math.max(-0.3, nearestDir - 0.1)
+		end
+	else
+		-- Couldn't find attacker, loosen generally
+		sensitivity.range = math.min(35, sensitivity.range + 2)
+		sensitivity.rangeApproach = math.min(45, sensitivity.rangeApproach + 3)
+		sensitivity.dirThreshold = math.max(-0.3, sensitivity.dirThreshold - 0.1)
+	end
 	sensitivity.closeRange = math.min(10, sensitivity.closeRange + 0.5)
 	saveSensitivity()
+
 	if sensLabel then
-		sensLabel.Text = "MISSED! Loosening | R:" .. math.floor(sensitivity.range)
+		sensLabel.Text = string.format("MISSED! Nearest:%.0f Dir:%.2f | R:%.0f", nearestDist, nearestDir, sensitivity.range)
 		sensLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
 	end
 end
 
 local connections = {}
 local recentParry = 0
-local parryPending = false -- true = we parried, waiting to see if it was legit
+local parryPending = false
+local lastParryDist = 0 -- distance at parry time
+local lastParryDir = 0 -- direction dot at parry time
 
 ---------- Pre-cached refs (updated constantly) ----------
 
@@ -228,18 +272,24 @@ local function doParry(player, theirHRP)
 	local now = tick()
 	if now - recentParry < 0.5 then return end
 	if not shouldParry(theirHRP) then return end
+	-- Record conditions at parry time
+	local ox = myHRP.Position.X - theirHRP.Position.X
+	local oy = myHRP.Position.Y - theirHRP.Position.Y
+	local oz = myHRP.Position.Z - theirHRP.Position.Z
+	lastParryDist = math.sqrt(ox*ox + oy*oy + oz*oz)
+	local look = theirHRP.CFrame.LookVector
+	lastParryDir = (look.X * ox + look.Y * oy + look.Z * oz) / lastParryDist
+
 	recentParry = now
 	burstHorizontalDensity()
 	if fireParry() then
-		flashLabel.Text = "PARRIED " .. player.Name
+		flashLabel.Text = "PARRIED " .. player.Name .. string.format(" [%.0f studs]", lastParryDist)
 		flashLabel.Visible = true
 		task.delay(1.5, function() flashLabel.Visible = false end)
 
-		-- Track: was this parry legit or a missfire?
 		parryPending = true
 		task.delay(2, function()
 			if parryPending then
-				-- No push confirmed within 2s = missfire
 				parryPending = false
 				onMissfire()
 			end
