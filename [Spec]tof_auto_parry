@@ -124,41 +124,49 @@ Instance.new("UICorner", flashLabel).CornerRadius = UDim.new(0, 6)
 
 ---------- PushStuff Detection ----------
 
+local function isMe(name)
+	return name == lp.Name or name == lp.DisplayName
+		or (myChar and name == myChar.Name)
+end
+
 local function watchPushStuff(pushStuff)
-	-- Watch for our name folder (we're the victim)
-	local function onVictimFolder(folder)
-		if folder.Name ~= lp.Name then return end
-		-- Collision parts appearing = someone is pushing us
-		doParry()
-		-- Also watch DescendantAdded in case parts come in waves
-		local conn = folder.DescendantAdded:Connect(function()
-			doParry()
-		end)
-		table.insert(connections, conn)
-	end
+	-- Watch ALL descendants — check if any collision part targets us
+	local conn = pushStuff.DescendantAdded:Connect(function(desc)
+		-- Check if this descendant or any ancestor matches our name
+		local current = desc
+		for i = 1, 4 do
+			if not current then break end
+			if isMe(current.Name) then
+				doParry()
+				return
+			end
+			current = current.Parent
+		end
 
-	-- Check existing children
-	for _, child in ipairs(pushStuff:GetChildren()) do
-		if child.Name == lp.Name then onVictimFolder(child) end
-	end
-
-	-- Watch for new victim folders
-	local conn = pushStuff.ChildAdded:Connect(function(child)
-		if child.Name == lp.Name then onVictimFolder(child) end
+		-- Fallback: if it's a BasePart, check if it's near us
+		if desc:IsA("BasePart") and myHRP then
+			pcall(function()
+				if (desc.Position - myHRP.Position).Magnitude < 10 then
+					doParry()
+				end
+			end)
+		end
 	end)
 	table.insert(connections, conn)
+
+	-- Also check ChildAdded for victim folders
+	local conn2 = pushStuff.ChildAdded:Connect(function(child)
+		if isMe(child.Name) then doParry() end
+	end)
+	table.insert(connections, conn2)
 end
 
 -- Find or wait for PushStuff
 local pushStuff = workspace:FindFirstChild("PushStuff")
-if pushStuff then
-	watchPushStuff(pushStuff)
-end
+if pushStuff then watchPushStuff(pushStuff) end
 
 local wsConn = workspace.ChildAdded:Connect(function(child)
-	if child.Name == "PushStuff" then
-		watchPushStuff(child)
-	end
+	if child.Name == "PushStuff" then watchPushStuff(child) end
 end)
 table.insert(connections, wsConn)
 
@@ -180,6 +188,7 @@ end
 
 for _, v in ipairs(workspace:GetDescendants()) do checkRope(v) end
 workspace.DescendantAdded:Connect(checkRope)
+
 
 -- SixZeroHub cleanup
 if _G.SixZeroHubRegister then
