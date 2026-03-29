@@ -1,18 +1,82 @@
--- Auto Parry — maximum detection coverage
--- 5 parallel detection methods, pre-cached, zero overhead hot paths
+-- Auto Parry — self-tuning detection
+-- 5 detection methods + adaptive sensitivity from missfires/misses
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 local lp = Players.LocalPlayer
 local playerGui = lp:WaitForChild("PlayerGui")
 
-local RANGE = 20
-local RANGE_APPROACHING = 30
-local CLOSE_RANGE = 5
 local PUSH_ANIM_ID = "rbxassetid://134933487900882"
+local SETTINGS_FILE = "AutoParry_sensitivity.json"
+
+-- Adaptive sensitivity (saved to file)
+local sensitivity = {
+	range = 20,
+	rangeApproach = 30,
+	closeRange = 5,
+	dirThreshold = 0, -- 0 = facing toward, negative = even back-turned
+	missfires = 0,
+	hits = 0,
+	misses = 0,
+}
+
+-- Load saved sensitivity
+pcall(function()
+	if isfile and isfile(SETTINGS_FILE) then
+		local saved = HttpService:JSONDecode(readfile(SETTINGS_FILE))
+		for k, v in pairs(saved) do
+			if sensitivity[k] ~= nil then sensitivity[k] = v end
+		end
+	end
+end)
+
+local function saveSensitivity()
+	pcall(function()
+		if writefile then
+			writefile(SETTINGS_FILE, HttpService:JSONEncode(sensitivity))
+		end
+	end)
+end
+
+-- Tuning: tighten on missfire, loosen on miss
+local function onMissfire()
+	sensitivity.missfires = sensitivity.missfires + 1
+	sensitivity.range = math.max(8, sensitivity.range - 1)
+	sensitivity.rangeApproach = math.max(12, sensitivity.rangeApproach - 1.5)
+	sensitivity.dirThreshold = math.min(0.5, sensitivity.dirThreshold + 0.05)
+	saveSensitivity()
+	if sensLabel then
+		sensLabel.Text = "Missfire #" .. sensitivity.missfires .. " | R:" .. math.floor(sensitivity.range)
+		sensLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+	end
+end
+
+local function onConfirmedHit()
+	sensitivity.hits = sensitivity.hits + 1
+	saveSensitivity()
+	if sensLabel then
+		sensLabel.Text = "Parried! | R:" .. math.floor(sensitivity.range) .. " H:" .. sensitivity.hits
+		sensLabel.TextColor3 = Color3.fromRGB(87, 242, 135)
+	end
+end
+
+local function onMiss()
+	sensitivity.misses = sensitivity.misses + 1
+	sensitivity.range = math.min(35, sensitivity.range + 2)
+	sensitivity.rangeApproach = math.min(45, sensitivity.rangeApproach + 3)
+	sensitivity.dirThreshold = math.max(-0.3, sensitivity.dirThreshold - 0.1)
+	sensitivity.closeRange = math.min(10, sensitivity.closeRange + 0.5)
+	saveSensitivity()
+	if sensLabel then
+		sensLabel.Text = "MISSED! Loosening | R:" .. math.floor(sensitivity.range)
+		sensLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+	end
+end
 
 local connections = {}
 local recentParry = 0
+local parryPending = false -- true = we parried, waiting to see if it was legit
 
 ---------- Pre-cached refs (updated constantly) ----------
 
@@ -121,28 +185,25 @@ local function shouldParry(theirHRP)
 	local oz = myHRP.Position.Z - theirHRP.Position.Z
 	local distSq = ox*ox + oy*oy + oz*oz
 
-	-- Always parry if very close
-	if distSq <= CLOSE_RANGE * CLOSE_RANGE then return true end
+	if distSq <= sensitivity.closeRange * sensitivity.closeRange then return true end
 
-	-- Check if approaching (velocity toward us)
 	local vel = theirHRP.AssemblyLinearVelocity
 	local vMag = vel.Magnitude
-	local maxRange = RANGE
+	local maxRange = sensitivity.range
 	if vMag > 1 then
 		local dist = math.sqrt(distSq)
 		local dirX, dirZ = ox / dist, oz / dist
 		local dot = vel.X * dirX + vel.Z * dirZ
 		if dot > 0.3 * vMag then
-			maxRange = RANGE_APPROACHING
+			maxRange = sensitivity.rangeApproach
 		end
 	end
 
 	if distSq > maxRange * maxRange then return false end
 
-	-- Check facing direction (not back turned)
 	local look = theirHRP.CFrame.LookVector
 	local dist = math.sqrt(distSq)
-	return (look.X * ox + look.Y * oy + look.Z * oz) / dist >= 0
+	return (look.X * ox + look.Y * oy + look.Z * oz) / dist >= sensitivity.dirThreshold
 end
 
 local function doParry(player, theirHRP)
@@ -155,6 +216,16 @@ local function doParry(player, theirHRP)
 		flashLabel.Text = "PARRIED " .. player.Name
 		flashLabel.Visible = true
 		task.delay(1.5, function() flashLabel.Visible = false end)
+
+		-- Track: was this parry legit or a missfire?
+		parryPending = true
+		task.delay(2, function()
+			if parryPending then
+				-- No push confirmed within 2s = missfire
+				parryPending = false
+				onMissfire()
+			end
+		end)
 	end
 end
 
@@ -177,6 +248,17 @@ flashLabel.TextSize = 14
 flashLabel.Visible = false
 flashLabel.Parent = gui
 Instance.new("UICorner", flashLabel).CornerRadius = UDim.new(0, 6)
+
+sensLabel = Instance.new("TextLabel")
+sensLabel.Size = UDim2.new(0, 200, 0, 18)
+sensLabel.Position = UDim2.new(0.5, -100, 0, 82)
+sensLabel.BackgroundTransparency = 1
+sensLabel.Text = "R:" .. math.floor(sensitivity.range) .. " A:" .. math.floor(sensitivity.rangeApproach) .. " H:" .. sensitivity.hits .. " M:" .. sensitivity.misses .. " MF:" .. sensitivity.missfires
+sensLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+sensLabel.Font = Enum.Font.Code
+sensLabel.TextSize = 9
+sensLabel.Visible = true
+sensLabel.Parent = gui
 
 ---------- METHOD 1: AnimationPlayed (catches push windup) ----------
 
@@ -322,6 +404,76 @@ RunService.Heartbeat:Connect(function()
 			end
 		end
 	end
+end)
+
+---------- FEEDBACK: PushStuff confirms hit / miss ----------
+
+local function isMe(name)
+	return name == lp.Name or name == lp.DisplayName or (myChar and name == myChar.Name)
+end
+
+local function watchPushStuffFeedback(pushStuff)
+	local c = pushStuff.ChildAdded:Connect(function(child)
+		if isMe(child.Name) then
+			-- We got pushed
+			if parryPending then
+				-- We parried AND got pushed = confirmed parry was correct timing
+				parryPending = false
+				onConfirmedHit()
+			else
+				-- We got pushed WITHOUT parrying = we missed it
+				onMiss()
+			end
+		end
+	end)
+	table.insert(connections, c)
+
+	local c2 = pushStuff.DescendantAdded:Connect(function(desc)
+		local current = desc
+		for i = 1, 4 do
+			if not current then break end
+			if isMe(current.Name) then
+				if parryPending then
+					parryPending = false
+					onConfirmedHit()
+				else
+					onMiss()
+				end
+				return
+			end
+			current = current.Parent
+		end
+	end)
+	table.insert(connections, c2)
+end
+
+local ps = workspace:FindFirstChild("PushStuff")
+if ps then watchPushStuffFeedback(ps) end
+table.insert(connections, workspace.ChildAdded:Connect(function(child)
+	if child.Name == "PushStuff" then watchPushStuffFeedback(child) end
+end))
+
+---------- FEEDBACK: Ragdoll detection (missed push) ----------
+
+local function hookRagdoll(char)
+	local hum = char:WaitForChild("Humanoid", 5)
+	if not hum then return end
+	local c = hum.StateChanged:Connect(function(_, newState)
+		if newState == Enum.HumanoidStateType.Ragdoll
+			or newState == Enum.HumanoidStateType.FallingDown then
+			-- Ragdolled without active parry = missed
+			if not parryPending and (tick() - recentParry > 1) then
+				onMiss()
+			end
+		end
+	end)
+	table.insert(connections, c)
+end
+
+if myChar then hookRagdoll(myChar) end
+lp.CharacterAdded:Connect(function(char)
+	task.wait(0.5)
+	hookRagdoll(char)
 end)
 
 ---------- Auto Delete Ropes ----------
