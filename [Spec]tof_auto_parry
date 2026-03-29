@@ -253,8 +253,6 @@ local function shouldParry(theirHRP)
 	local oz = myHRP.Position.Z - theirHRP.Position.Z
 	local distSq = ox*ox + oy*oy + oz*oz
 
-	if distSq <= sensitivity.closeRange * sensitivity.closeRange then return true end
-
 	local vel = theirHRP.AssemblyLinearVelocity
 	local vMag = vel.Magnitude
 	local maxRange = sensitivity.range
