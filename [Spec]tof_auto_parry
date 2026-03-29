@@ -494,11 +494,10 @@ local function watchPushStuffFeedback(pushStuff)
 		if isMe(child.Name) then
 			-- We got pushed
 			if parryPending then
-				-- We parried AND got pushed = confirmed parry was correct timing
 				parryPending = false
 				onConfirmedHit()
-			else
-				-- We got pushed WITHOUT parrying = we missed it
+			elseif not isParryOnCooldown() then
+				-- Only a miss if parry was available
 				onMiss()
 			end
 		end
@@ -513,7 +512,7 @@ local function watchPushStuffFeedback(pushStuff)
 				if parryPending then
 					parryPending = false
 					onConfirmedHit()
-				else
+				elseif not isParryOnCooldown() then
 					onMiss()
 				end
 				return
@@ -568,9 +567,8 @@ local function hookRagdoll(char)
 	local c = hum.StateChanged:Connect(function(_, newState)
 		if newState == Enum.HumanoidStateType.Ragdoll
 			or newState == Enum.HumanoidStateType.FallingDown then
-			-- Only a miss if we haven't parried in the last 3 seconds
-			-- (ragdoll right after parry = successful parry on them)
-			if tick() - recentParry > 3 then
+			-- Only a miss if we haven't parried recently AND parry wasn't on cooldown
+			if tick() - recentParry > 3 and not isParryOnCooldown() then
 				onMiss()
 			end
 		end
