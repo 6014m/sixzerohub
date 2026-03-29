@@ -1,144 +1,20 @@
--- Auto Parry — self-tuning detection
--- 5 detection methods + adaptive sensitivity from missfires/misses
+-- Auto Parry — maximum speed
+-- AnimationPlayed + Tool equip + RenderStepped + Heartbeat + Backpack watch
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
 local lp = Players.LocalPlayer
 local playerGui = lp:WaitForChild("PlayerGui")
 
+local RANGE = 20
+local RANGE_APPROACHING = 30
+local CLOSE_RANGE = 5
 local PUSH_ANIM_ID = "rbxassetid://134933487900882"
-local PARRY_ANIM_ID = "rbxassetid://123260433143277"
-local PUSH_COOLDOWN_ANIM_ID = PUSH_ANIM_ID -- same anim, if they just pushed they're on cooldown
-local parryCooldownEnd = 0
-local PARRY_CD_PATH = {"Toolbar", "MainToolbar", "Parry", "CooldownFrame"}
-local PARRY_CD_DEFAULT_SIZE = 67.5 -- full size = on cooldown, shrinks to 0 = ready
-local pushCooldownPlayers = {} -- [player] = tick when their push cooldown ends
-local SETTINGS_FILE = "AutoParry_sensitivity.json"
-
--- Adaptive sensitivity (saved to file)
-local sensitivity = {
-	range = 20,
-	rangeApproach = 30,
-	closeRange = 5,
-	dirThreshold = 0, -- 0 = facing toward, negative = even back-turned
-	missfires = 0,
-	hits = 0,
-	misses = 0,
-}
-
--- Load saved sensitivity
-pcall(function()
-	if isfile and isfile(SETTINGS_FILE) then
-		local saved = HttpService:JSONDecode(readfile(SETTINGS_FILE))
-		for k, v in pairs(saved) do
-			if sensitivity[k] ~= nil then sensitivity[k] = v end
-		end
-	end
-end)
-
-local function saveSensitivity()
-	pcall(function()
-		if writefile then
-			writefile(SETTINGS_FILE, HttpService:JSONEncode(sensitivity))
-		end
-	end)
-end
-
--- Tuning: tighten on REPEATED missfires, loosen on miss
-local consecutiveMissfires = 0
-
-local function onMissfire()
-	sensitivity.missfires = sensitivity.missfires + 1
-	consecutiveMissfires = consecutiveMissfires + 1
-	-- Only tighten after 3+ consecutive missfires
-	if consecutiveMissfires >= 3 then
-		-- Use recorded conditions to tune precisely
-		-- If missfires keep happening at long range, tighten range
-		if lastParryDist > sensitivity.range * 0.7 then
-			sensitivity.range = math.max(8, sensitivity.range - 1)
-			sensitivity.rangeApproach = math.max(12, sensitivity.rangeApproach - 1)
-		end
-		-- If missfires happen with low direction dot, tighten direction
-		if lastParryDir < 0.3 then
-			sensitivity.dirThreshold = math.min(0.5, sensitivity.dirThreshold + 0.05)
-		end
-		consecutiveMissfires = 0
-		saveSensitivity()
-	end
-	if sensLabel then
-		sensLabel.Text = string.format("Missfire %d/3 | D:%.0f Dir:%.2f", consecutiveMissfires, lastParryDist, lastParryDir)
-		sensLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-	end
-end
-
-local function onConfirmedHit()
-	sensitivity.hits = sensitivity.hits + 1
-	consecutiveMissfires = 0 -- reset missfire streak on confirmed hit
-	saveSensitivity()
-	if sensLabel then
-		sensLabel.Text = "Parried! | R:" .. math.floor(sensitivity.range) .. " H:" .. sensitivity.hits
-		sensLabel.TextColor3 = Color3.fromRGB(87, 242, 135)
-	end
-end
-
-local function onMiss()
-	sensitivity.misses = sensitivity.misses + 1
-	consecutiveMissfires = 0
-
-	-- Find how far the nearest player with Push was when we got hit
-	local nearestDist = math.huge
-	local nearestDir = 0
-	if myHRP then
-		for _, p in ipairs(playerCache) do
-			local char = p.Character
-			if char and char:FindFirstChild("Push") then
-				local hrp = char:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					local d = (myHRP.Position - hrp.Position).Magnitude
-					if d < nearestDist then
-						nearestDist = d
-						local offset = (myHRP.Position - hrp.Position).Unit
-						nearestDir = hrp.CFrame.LookVector:Dot(offset)
-					end
-				end
-			end
-		end
-	end
-
-	-- Loosen based on how far the attacker was
-	if nearestDist < math.huge then
-		-- They were beyond our range — need to expand
-		if nearestDist > sensitivity.range then
-			sensitivity.range = math.min(35, nearestDist + 3)
-			sensitivity.rangeApproach = math.min(45, nearestDist + 8)
-		end
-		-- They were facing away from our threshold — need to relax direction
-		if nearestDir < sensitivity.dirThreshold then
-			sensitivity.dirThreshold = math.max(-0.3, nearestDir - 0.1)
-		end
-	else
-		-- Couldn't find attacker, loosen generally
-		sensitivity.range = math.min(35, sensitivity.range + 2)
-		sensitivity.rangeApproach = math.min(45, sensitivity.rangeApproach + 3)
-		sensitivity.dirThreshold = math.max(-0.3, sensitivity.dirThreshold - 0.1)
-	end
-	sensitivity.closeRange = math.min(10, sensitivity.closeRange + 0.5)
-	saveSensitivity()
-
-	if sensLabel then
-		sensLabel.Text = string.format("MISSED! Nearest:%.0f Dir:%.2f | R:%.0f", nearestDist, nearestDir, sensitivity.range)
-		sensLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-	end
-end
 
 local connections = {}
 local recentParry = 0
-local parryPending = false
-local lastParryDist = 0 -- distance at parry time
-local lastParryDir = 0 -- direction dot at parry time
 
----------- Pre-cached refs (updated constantly) ----------
+---------- Pre-cached refs ----------
 
 local myChar, myHRP, myHum, myBackpack, parryTool
 
@@ -153,7 +29,6 @@ end
 cacheLocal()
 lp.CharacterAdded:Connect(function() task.wait(0.2); cacheLocal() end)
 
--- Refresh parry tool ref constantly since it can appear/disappear
 task.spawn(function()
 	while true do
 		myBackpack = lp:FindFirstChild("Backpack")
@@ -165,7 +40,6 @@ end)
 ---------- Player cache ----------
 
 local playerCache = {}
-local playerHRPCache = {} -- [player] = HumanoidRootPart (refreshed each frame)
 
 local function rebuildPlayerCache()
 	playerCache = {}
@@ -209,9 +83,9 @@ local function burstHorizontalDensity()
 		local ws = myHum.WalkSpeed
 		linVel.PlaneVelocity = Vector2.new(moveDir.X * ws, moveDir.Z * ws)
 		local vel = myHRP.AssemblyLinearVelocity
-		myHRP.AssemblyLinearVelocity = Vector3.new(
-			moveDir.X * ws, vel.Y, moveDir.Z * ws
-		)
+		local pushX = vel.X - (moveDir.X * ws)
+		local pushZ = vel.Z - (moveDir.Z * ws)
+		myHRP.AssemblyLinearVelocity = Vector3.new(vel.X - pushX, vel.Y, vel.Z - pushZ)
 	end)
 
 	task.delay(1, function()
@@ -222,7 +96,7 @@ local function burstHorizontalDensity()
 	end)
 end
 
----------- Core parry (as fast as possible) ----------
+---------- Core parry ----------
 
 local function fireParry()
 	if not parryTool or not myHum then
@@ -237,10 +111,9 @@ local function fireParry()
 	return true
 end
 
--- Inline range/direction check — no function call overhead
 local function shouldParry(theirHRP)
 	if not myHRP then return false end
-	-- Skip ragdolled players — they can't push
+	-- Skip ragdolled players
 	local theirHum = theirHRP.Parent and theirHRP.Parent:FindFirstChildOfClass("Humanoid")
 	if theirHum then
 		local state = theirHum:GetState()
@@ -253,15 +126,17 @@ local function shouldParry(theirHRP)
 	local oz = myHRP.Position.Z - theirHRP.Position.Z
 	local distSq = ox*ox + oy*oy + oz*oz
 
+	if distSq <= CLOSE_RANGE * CLOSE_RANGE then return true end
+
 	local vel = theirHRP.AssemblyLinearVelocity
 	local vMag = vel.Magnitude
-	local maxRange = sensitivity.range
+	local maxRange = RANGE
 	if vMag > 1 then
 		local dist = math.sqrt(distSq)
 		local dirX, dirZ = ox / dist, oz / dist
 		local dot = vel.X * dirX + vel.Z * dirZ
 		if dot > 0.3 * vMag then
-			maxRange = sensitivity.rangeApproach
+			maxRange = RANGE_APPROACHING
 		end
 	end
 
@@ -269,37 +144,19 @@ local function shouldParry(theirHRP)
 
 	local look = theirHRP.CFrame.LookVector
 	local dist = math.sqrt(distSq)
-	return (look.X * ox + look.Y * oy + look.Z * oz) / dist >= sensitivity.dirThreshold
+	return (look.X * ox + look.Y * oy + look.Z * oz) / dist >= 0
 end
 
 local function doParry(player, theirHRP)
 	local now = tick()
-	if now - recentParry < 0.3 then return end
-	-- Respect actual game cooldown from UI
-	if isParryOnCooldown() then return end
+	if now - recentParry < 0.5 then return end
 	if not shouldParry(theirHRP) then return end
-	-- Record conditions at parry time
-	local ox = myHRP.Position.X - theirHRP.Position.X
-	local oy = myHRP.Position.Y - theirHRP.Position.Y
-	local oz = myHRP.Position.Z - theirHRP.Position.Z
-	lastParryDist = math.sqrt(ox*ox + oy*oy + oz*oz)
-	local look = theirHRP.CFrame.LookVector
-	lastParryDir = (look.X * ox + look.Y * oy + look.Z * oz) / lastParryDist
-
 	recentParry = now
 	burstHorizontalDensity()
 	if fireParry() then
-		flashLabel.Text = "PARRIED " .. player.Name .. string.format(" [%.0f studs]", lastParryDist)
+		flashLabel.Text = "PARRIED " .. player.Name
 		flashLabel.Visible = true
 		task.delay(1.5, function() flashLabel.Visible = false end)
-
-		parryPending = true
-		task.delay(2, function()
-			if parryPending then
-				parryPending = false
-				onMissfire()
-			end
-		end)
 	end
 end
 
@@ -323,31 +180,16 @@ flashLabel.Visible = false
 flashLabel.Parent = gui
 Instance.new("UICorner", flashLabel).CornerRadius = UDim.new(0, 6)
 
-sensLabel = Instance.new("TextLabel")
-sensLabel.Size = UDim2.new(0, 200, 0, 18)
-sensLabel.Position = UDim2.new(0.5, -100, 0, 82)
-sensLabel.BackgroundTransparency = 1
-sensLabel.Text = "R:" .. math.floor(sensitivity.range) .. " A:" .. math.floor(sensitivity.rangeApproach) .. " H:" .. sensitivity.hits .. " M:" .. sensitivity.misses .. " MF:" .. sensitivity.missfires
-sensLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-sensLabel.Font = Enum.Font.Code
-sensLabel.TextSize = 9
-sensLabel.Visible = true
-sensLabel.Parent = gui
-
----------- METHOD 1: AnimationPlayed (primary detection) ----------
+---------- METHOD 1: AnimationPlayed ----------
 
 local function watchAnimations(player, char)
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hum then return end
-	local animator = hum:FindFirstChildOfClass("Animator")
-	if not animator then animator = hum:WaitForChild("Animator", 3) end
+	local animator = hum:FindFirstChildOfClass("Animator") or hum:WaitForChild("Animator", 2)
 	if not animator then return end
 
 	local c = animator.AnimationPlayed:Connect(function(track)
-		local anim = track.Animation
-		if not anim then return end
-		-- Only react to the exact push animation — not every anim
-		if anim.AnimationId == PUSH_ANIM_ID then
+		if track.Animation and track.Animation.AnimationId == PUSH_ANIM_ID then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
 			if hrp then doParry(player, hrp) end
 		end
@@ -355,7 +197,7 @@ local function watchAnimations(player, char)
 	table.insert(connections, c)
 end
 
----------- METHOD 2: Tool equip (Push enters Character) ----------
+---------- METHOD 2: Tool equip ----------
 
 local function watchToolEquip(player, char)
 	local c = char.ChildAdded:Connect(function(child)
@@ -367,8 +209,7 @@ local function watchToolEquip(player, char)
 	table.insert(connections, c)
 end
 
----------- METHOD 3: Backpack ChildRemoved (Push leaves Backpack = equipped) ----------
--- This can fire BEFORE ChildAdded on Character due to replication order
+---------- METHOD 3: Backpack ChildRemoved ----------
 
 local function watchBackpack(player)
 	local function hookBackpack(backpack)
@@ -385,7 +226,6 @@ local function watchBackpack(player)
 	local bp = player:FindFirstChild("Backpack")
 	if bp then hookBackpack(bp) end
 
-	-- Backpack gets recreated on respawn
 	local c = player.ChildAdded:Connect(function(child)
 		if child.Name == "Backpack" then hookBackpack(child) end
 	end)
@@ -413,44 +253,12 @@ end
 for _, p in ipairs(Players:GetPlayers()) do watchPlayer(p) end
 Players.PlayerAdded:Connect(watchPlayer)
 
----------- METHOD 4: RenderStepped scan (earliest in frame pipeline) ----------
+---------- METHOD 4: RenderStepped ----------
 
 RunService.RenderStepped:Connect(function()
 	if tick() - recentParry < 0.5 then return end
 	if not myHRP then cacheLocal(); return end
-
 	local myPos = myHRP.Position
-
-	for i = 1, #playerCache do
-		local p = playerCache[i]
-		local char = p.Character
-		if char then
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				-- Quick squared distance pre-check before expensive FindFirstChild
-				local dx = myPos.X - hrp.Position.X
-				local dz = myPos.Z - hrp.Position.Z
-				local distSq = dx*dx + dz*dz
-				if distSq < RANGE_APPROACHING * RANGE_APPROACHING then
-					local push = char:FindFirstChild("Push")
-					if push and push:IsA("Tool") then
-						doParry(p, hrp)
-						return
-					end
-				end
-			end
-		end
-	end
-end)
-
----------- METHOD 5: Heartbeat backup (physics step, different timing) ----------
-
-RunService.Heartbeat:Connect(function()
-	if tick() - recentParry < 0.5 then return end
-	if not myHRP then return end
-
-	local myPos = myHRP.Position
-
 	for i = 1, #playerCache do
 		local p = playerCache[i]
 		local char = p.Character
@@ -471,102 +279,30 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
----------- FEEDBACK: PushStuff confirms hit / miss ----------
+---------- METHOD 5: Heartbeat ----------
 
-local function isMe(name)
-	return name == lp.Name or name == lp.DisplayName or (myChar and name == myChar.Name)
-end
-
-local function watchPushStuffFeedback(pushStuff)
-	local c = pushStuff.ChildAdded:Connect(function(child)
-		if isMe(child.Name) then
-			-- We got pushed
-			if parryPending then
-				parryPending = false
-				onConfirmedHit()
-			elseif not isParryOnCooldown() then
-				-- Only a miss if parry was available
-				onMiss()
-			end
-		end
-	end)
-	table.insert(connections, c)
-
-	local c2 = pushStuff.DescendantAdded:Connect(function(desc)
-		local current = desc
-		for i = 1, 4 do
-			if not current then break end
-			if isMe(current.Name) then
-				if parryPending then
-					parryPending = false
-					onConfirmedHit()
-				elseif not isParryOnCooldown() then
-					onMiss()
+RunService.Heartbeat:Connect(function()
+	if tick() - recentParry < 0.5 then return end
+	if not myHRP then return end
+	local myPos = myHRP.Position
+	for i = 1, #playerCache do
+		local p = playerCache[i]
+		local char = p.Character
+		if char then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local dx = myPos.X - hrp.Position.X
+				local dz = myPos.Z - hrp.Position.Z
+				if dx*dx + dz*dz < RANGE_APPROACHING * RANGE_APPROACHING then
+					local push = char:FindFirstChild("Push")
+					if push and push:IsA("Tool") then
+						doParry(p, hrp)
+						return
+					end
 				end
-				return
-			end
-			current = current.Parent
-		end
-	end)
-	table.insert(connections, c2)
-end
-
-local ps = workspace:FindFirstChild("PushStuff")
-if ps then watchPushStuffFeedback(ps) end
-table.insert(connections, workspace.ChildAdded:Connect(function(child)
-	if child.Name == "PushStuff" then watchPushStuffFeedback(child) end
-end))
-
----------- FEEDBACK: Parry cooldown from UI ----------
-
-local function isParryOnCooldown()
-	local onCD = false
-	pcall(function()
-		local current = playerGui
-		for _, name in ipairs(PARRY_CD_PATH) do
-			current = current:FindFirstChild(name)
-			if not current then return end
-		end
-		onCD = current.AbsoluteSize.Y > 1
-	end)
-	return onCD
-end
-
----------- FEEDBACK: Track other players' push cooldowns via animation ----------
-
-local function onEnemyPushAnim(player)
-	-- They just pushed — mark them on cooldown so we don't react to stale tool equips
-	pushCooldownPlayers[player] = tick() + 5 -- assume ~5s push cooldown, self-adjusts
-end
-
-local function isEnemyOnPushCooldown(player)
-	local cd = pushCooldownPlayers[player]
-	return cd and tick() < cd
-end
-
----------- FEEDBACK: Ragdoll detection ----------
--- Only counts as a miss if we ragdoll AND we didn't recently parry
--- (ragdoll after parry = they got parried, that's a success)
-
-local function hookRagdoll(char)
-	local hum = char:WaitForChild("Humanoid", 5)
-	if not hum then return end
-	local c = hum.StateChanged:Connect(function(_, newState)
-		if newState == Enum.HumanoidStateType.Ragdoll
-			or newState == Enum.HumanoidStateType.FallingDown then
-			-- Only a miss if we haven't parried recently AND parry wasn't on cooldown
-			if tick() - recentParry > 3 and not isParryOnCooldown() then
-				onMiss()
 			end
 		end
-	end)
-	table.insert(connections, c)
-end
-
-if myChar then hookRagdoll(myChar) end
-lp.CharacterAdded:Connect(function(char)
-	task.wait(0.5)
-	hookRagdoll(char)
+	end
 end)
 
 ---------- Auto Delete Ropes ----------
@@ -593,32 +329,3 @@ if _G.SixZeroHubRegister then
 		pcall(function() gui:Destroy() end)
 	end, "spec")
 end
-
-task.delay(2, function()
-	if _G.SixZeroHubRegisterSettings then
-		_G.SixZeroHubRegisterSettings("[Spec]tof_auto_parry", {
-			_title = "Auto Parry",
-			{
-				name = "reset_sensitivity",
-				label = "Reset Sensitivity",
-				type = "button",
-				buttonText = "Reset",
-				onClick = function()
-					sensitivity.range = 20
-					sensitivity.rangeApproach = 30
-					sensitivity.closeRange = 5
-					sensitivity.dirThreshold = 0
-					sensitivity.missfires = 0
-					sensitivity.hits = 0
-					sensitivity.misses = 0
-					consecutiveMissfires = 0
-					saveSensitivity()
-					if sensLabel then
-						sensLabel.Text = "RESET | R:20 A:30"
-						sensLabel.TextColor3 = Color3.fromRGB(88, 101, 242)
-					end
-				end,
-			},
-		})
-	end
-end)
