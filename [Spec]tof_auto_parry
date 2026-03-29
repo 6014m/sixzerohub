@@ -39,21 +39,29 @@ local function saveSensitivity()
 	end)
 end
 
--- Tuning: tighten on missfire, loosen on miss
+-- Tuning: tighten on REPEATED missfires, loosen on miss
+local consecutiveMissfires = 0
+
 local function onMissfire()
 	sensitivity.missfires = sensitivity.missfires + 1
-	sensitivity.range = math.max(8, sensitivity.range - 1)
-	sensitivity.rangeApproach = math.max(12, sensitivity.rangeApproach - 1.5)
-	sensitivity.dirThreshold = math.min(0.5, sensitivity.dirThreshold + 0.05)
-	saveSensitivity()
+	consecutiveMissfires = consecutiveMissfires + 1
+	-- Only tighten after 3+ consecutive missfires (one-off could be legit)
+	if consecutiveMissfires >= 3 then
+		sensitivity.range = math.max(8, sensitivity.range - 0.5)
+		sensitivity.rangeApproach = math.max(12, sensitivity.rangeApproach - 0.5)
+		sensitivity.dirThreshold = math.min(0.5, sensitivity.dirThreshold + 0.02)
+		consecutiveMissfires = 0
+		saveSensitivity()
+	end
 	if sensLabel then
-		sensLabel.Text = "Missfire #" .. sensitivity.missfires .. " | R:" .. math.floor(sensitivity.range)
+		sensLabel.Text = "Missfire " .. consecutiveMissfires .. "/3 | R:" .. math.floor(sensitivity.range)
 		sensLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
 	end
 end
 
 local function onConfirmedHit()
 	sensitivity.hits = sensitivity.hits + 1
+	consecutiveMissfires = 0 -- reset missfire streak on confirmed hit
 	saveSensitivity()
 	if sensLabel then
 		sensLabel.Text = "Parried! | R:" .. math.floor(sensitivity.range) .. " H:" .. sensitivity.hits
@@ -63,6 +71,8 @@ end
 
 local function onMiss()
 	sensitivity.misses = sensitivity.misses + 1
+	consecutiveMissfires = 0
+	-- Misses are definitive — loosen aggressively
 	sensitivity.range = math.min(35, sensitivity.range + 2)
 	sensitivity.rangeApproach = math.min(45, sensitivity.rangeApproach + 3)
 	sensitivity.dirThreshold = math.max(-0.3, sensitivity.dirThreshold - 0.1)
