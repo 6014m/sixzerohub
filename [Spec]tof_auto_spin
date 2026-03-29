@@ -187,23 +187,23 @@ end)
 task.spawn(function()
 	local touchTick = 0
 	while spinning do
-		if dailyActive then
-			-- Fire touch interest every 3s to keep/open the GUI
-			if tick() - touchTick >= 3 then
-				pcall(function()
-					local part = workspace:FindFirstChild("SpinAreaThing")
-					if part then
-						local ti = part:FindFirstChild("TouchInterest")
-						if ti then
-							firetouchinterest(lp.Character and lp.Character:FindFirstChild("HumanoidRootPart"), part, 0)
-							task.wait(0.1)
-							firetouchinterest(lp.Character and lp.Character:FindFirstChild("HumanoidRootPart"), part, 1)
-						end
+		-- Fire touch interest every 3s to keep/open the GUI (only when ON)
+		if dailyActive and tick() - touchTick >= 3 then
+			pcall(function()
+				local part = workspace:FindFirstChild("SpinAreaThing")
+				if part then
+					local ti = part:FindFirstChild("TouchInterest")
+					if ti then
+						firetouchinterest(lp.Character and lp.Character:FindFirstChild("HumanoidRootPart"), part, 0)
+						task.wait(0.1)
+						firetouchinterest(lp.Character and lp.Character:FindFirstChild("HumanoidRootPart"), part, 1)
 					end
-				end)
-				touchTick = tick()
-			end
+				end
+			end)
+			touchTick = tick()
+		end
 
+		if dailyActive then
 			-- Hide the game's daily spin UI
 			pcall(function()
 				local dsGui = playerGui:FindFirstChild("DailySpinGive")
@@ -212,6 +212,17 @@ task.spawn(function()
 						if v:IsA("GuiObject") then
 							v.Visible = false
 						end
+					end
+				end
+			end)
+		else
+			-- When OFF, close the daily spin UI via Exit button
+			pcall(function()
+				local dsGui = playerGui:FindFirstChild("DailySpinGive")
+				if dsGui then
+					local exitBtn = dsGui:FindFirstChild("Exit")
+					if exitBtn then
+						firesignal(exitBtn.MouseButton1Click)
 					end
 				end
 			end)
