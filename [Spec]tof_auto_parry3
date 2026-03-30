@@ -207,7 +207,30 @@ local function shouldParry(theirHRP)
 
 	local look = theirHRP.CFrame.LookVector
 	local dist = math.sqrt(distSq)
-	return (look.X * ox + look.Y * oy + look.Z * oz) / dist >= DIR_THRESHOLD
+	local myDot = (look.X * ox + look.Y * oy + look.Z * oz) / dist
+	if myDot < DIR_THRESHOLD then return false end
+
+	-- Skip if they're clearly aiming at someone else, not me
+	for i = 1, #playerCache do
+		local other = playerCache[i]
+		if other ~= lp then
+			local oChar = other.Character
+			local oHRP = oChar and oChar:FindFirstChild("HumanoidRootPart")
+			if oHRP then
+				local dx = oHRP.Position.X - theirHRP.Position.X
+				local dy = oHRP.Position.Y - theirHRP.Position.Y
+				local dz = oHRP.Position.Z - theirHRP.Position.Z
+				local oDist = math.sqrt(dx*dx + dy*dy + dz*dz)
+				if oDist > 0.5 and oDist <= RANGE_APPROACHING then
+					local oDot = (look.X * dx + look.Y * dy + look.Z * dz) / oDist
+					-- They're aimed at someone else (high dot) and not at me (low dot)
+					if oDot > 0.7 and myDot < 0.2 then return false end
+				end
+			end
+		end
+	end
+
+	return true
 end
 
 ---------- Notify ----------
