@@ -97,7 +97,7 @@ local PARRY_CD = 0.3
 local FEINT_CD = 0.3
 local GUARDBREAK_CD = 0.3
 local SWING_CD = 0.3
-local RANGE = 12
+local RANGE = 20
 
 -- Track who's currently blocking
 local enemyBlocking = {} -- [playerName] = true
@@ -573,9 +573,10 @@ end
 
 local function watchEnemy(player, char)
 	local hum = char:WaitForChild("Humanoid", 5)
-	if not hum then return end
+	if not hum then flash("NO HUM: " .. player.Name, Color3.fromRGB(255, 0, 0), 1); return end
 	local animator = hum:FindFirstChildOfClass("Animator") or hum:WaitForChild("Animator", 3)
-	if not animator then return end
+	if not animator then flash("NO ANIM: " .. player.Name, Color3.fromRGB(255, 0, 0), 1); return end
+	flash("HOOKED " .. player.Name, Color3.fromRGB(100, 100, 100), 0.5)
 
 	local c = animator.AnimationPlayed:Connect(function(track)
 		if not track.Animation then return end
