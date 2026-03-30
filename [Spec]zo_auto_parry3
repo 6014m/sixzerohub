@@ -534,31 +534,11 @@ task.spawn(function()
 				end)
 			end
 
-			-- Smart block release: if we're blocking, check if attacker is still threatening
-			if blocking and blockTarget and now - lastBlock > 0.3 then
-				local stillThreat = false
-				local tChar = blockTarget.Character
-				local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-				if tRoot and myRoot and (myRoot.Position - tRoot.Position).Magnitude <= RANGE then
-					-- Check if they're still playing any attack animation
-					for _, entry in ipairs(allAnims) do
-						if entry.player == blockTarget and entry.track.IsPlaying and entry.track.Animation then
-							local aid = entry.track.Animation.AnimationId:match("%d+")
-							if aid and ATTACK_IDS[aid] then
-								stillThreat = true
-								break
-							end
-						end
-					end
-				end
-
-				-- Release block if: confirmed block hit and no more attacks, or they moved away
-				if not stillThreat and (blockConfirmed or now - lastBlock > 0.6) then
-					blockUp()
-					blocking = false
-					blockTarget = nil
-					flash("Block released", Color3.fromRGB(140, 140, 140))
-				end
+			-- Release block after hold time
+			if blocking and now - lastBlock > BLOCK_HOLD then
+				blockUp()
+				blocking = false
+				blockTarget = nil
 			end
 
 			-- Auto feint: if we're swinging and nearest enemy starts blocking, feint
