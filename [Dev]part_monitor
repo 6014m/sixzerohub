@@ -288,9 +288,44 @@ local function addEntry(inst)
         end)
     end)
 
+    local reBtn = Instance.new("TextButton")
+    reBtn.Size = UDim2.new(0, 22, 0, 18)
+    reBtn.Position = UDim2.new(0, 208, 0, 2)
+    reBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 110)
+    reBtn.BorderSizePixel = 0
+    reBtn.Text = "RE"
+    reBtn.TextSize = 8
+    reBtn.Font = Enum.Font.GothamBold
+    reBtn.TextColor3 = Color3.new(1, 1, 1)
+    reBtn.AutoButtonColor = false
+    reBtn.Parent = row
+    Instance.new("UICorner", reBtn).CornerRadius = UDim.new(0, 3)
+
+    reBtn.MouseButton1Click:Connect(function()
+        local lp = Players.LocalPlayer
+        local char = lp and lp.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then reBtn.Text = "X"; task.delay(1, function() if reBtn.Parent then reBtn.Text = "RE" end end); return end
+        if inst and inst.Parent then
+            local clone = inst:Clone()
+            if clone then
+                clone.CFrame = hrp.CFrame * CFrame.new(0, 0, -6)
+                clone.Anchored = true
+                clone.CanCollide = false
+                clone.Parent = workspace
+                reBtn.Text = "OK"
+                task.delay(10, function() pcall(function() clone:Destroy() end) end)
+            end
+        else
+            reBtn.Text = "X"
+            reBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+        end
+        task.delay(1, function() if reBtn.Parent then reBtn.Text = "RE"; reBtn.TextColor3 = Color3.new(1, 1, 1) end end)
+    end)
+
     local pathLbl = Instance.new("TextLabel")
-    pathLbl.Size = UDim2.new(1, -212, 1, 0)
-    pathLbl.Position = UDim2.new(0, 210, 0, 0)
+    pathLbl.Size = UDim2.new(1, -238, 1, 0)
+    pathLbl.Position = UDim2.new(0, 234, 0, 0)
     pathLbl.BackgroundTransparency = 1
     pathLbl.Text = fullPath
     pathLbl.TextColor3 = COLORS.path
