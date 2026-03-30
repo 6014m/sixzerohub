@@ -74,7 +74,38 @@ animDB["15612208633"] = { type = 6, weapon = "Any", move = "Stagger" }
 
 local DATA_FILE = "ZoCombat_data.json"
 local DISCOVER_FILE = "ZoCombat_discovered.json"
-local data = { events = {}, perWeapon = {}, kickData = {}, hits = {} }
+local data = { events = {}, perWeapon = {}, kickData = {}, hits = {}, toolReach = {} }
+
+---------- Tool Size → Reach ----------
+
+local ARM_LENGTH = 4
+
+local function measureToolReach(char)
+	if not char then return nil end
+	for _, child in ipairs(char:GetChildren()) do
+		if child:IsA("Tool") then
+			local minB = Vector3.new(math.huge, math.huge, math.huge)
+			local maxB = Vector3.new(-math.huge, -math.huge, -math.huge)
+			local found = false
+			for _, part in ipairs(child:GetDescendants()) do
+				if part:IsA("BasePart") then
+					local pos = part.Position
+					local half = part.Size / 2
+					minB = Vector3.new(math.min(minB.X, pos.X - half.X), math.min(minB.Y, pos.Y - half.Y), math.min(minB.Z, pos.Z - half.Z))
+					maxB = Vector3.new(math.max(maxB.X, pos.X + half.X), math.max(maxB.Y, pos.Y + half.Y), math.max(maxB.Z, pos.Z + half.Z))
+					found = true
+				end
+			end
+			if found then
+				local size = maxB - minB
+				return math.max(size.X, size.Y, size.Z) + ARM_LENGTH, child.Name
+			end
+		end
+	end
+	return nil, nil
+end
+
+local playerToolData = {} -- [playerName] = { weapon, reach, toolName }
 
 -- Discovered animations from context clues
 local discovered = {} -- [animId] = { type = "BLOCK"/"ATTACK", confidence = N, firstSeen = time }
@@ -588,8 +619,30 @@ local function watchPlayer(player, char)
 			eventType = "FEINT"
 		elseif info.type == EQUIP then
 			eventType = "EQUIP"
+			-- Measure tool reach
+			local reach, toolName = measureToolReach(player.Character)
+			if reach then
+				playerToolData[pName] = { weapon = info.weapon, reach = math.floor(reach * 10) / 10, toolName = toolName }
+				-- Save per-weapon reach data
+				if not data.toolReach[info.weapon] then data.toolReach[info.weapon] = {} end
+				local existing = data.toolReach[info.weapon]
+				existing[#existing + 1] = reach
+				saveData()
+				addRow(string.format("TOOL %s: %s reach %.1f studs", pName, info.weapon, reach), Color3.fromRGB(0, 255, 200))
+			end
 		elseif info.type == IDLE then
 			eventType = "IDLE"
+			-- Measure if not already
+			if not playerToolData[pName] then
+				local reach, toolName = measureToolReach(player.Character)
+				if reach then
+					playerToolData[pName] = { weapon = info.weapon, reach = math.floor(reach * 10) / 10, toolName = toolName }
+					if not data.toolReach[info.weapon] then data.toolReach[info.weapon] = {} end
+					data.toolReach[info.weapon][#data.toolReach[info.weapon] + 1] = reach
+					saveData()
+					addRow(string.format("TOOL %s: %s reach %.1f studs", pName, info.weapon, reach), Color3.fromRGB(0, 255, 200))
+				end
+			end
 		elseif info.type == KICK then
 			-- Someone kicked — record timing
 			-- Find who they kicked (nearest blocker)
