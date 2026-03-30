@@ -68,8 +68,12 @@ registerWeapon("Scythe", {
 
 ---------- Data Storage ----------
 
+local KICK = 7
+animDB["6907975812"] = { type = KICK, weapon = "Any", move = "Kick" }
+animDB["15612208633"] = { type = 6, weapon = "Any", move = "Stagger" }
+
 local DATA_FILE = "ZoCombat_data.json"
-local data = { events = {}, perWeapon = {} }
+local data = { events = {}, perWeapon = {}, kickData = {} }
 
 pcall(function()
 	if isfile and isfile(DATA_FILE) then
@@ -340,6 +344,53 @@ local function logCombatEvent(player, animInfo, eventType)
 	if logged > 0 then saveData() end
 end
 
+---------- Kick Timing Tracker ----------
+
+-- blockStarts[playerName] = tick() when they started blocking
+-- kickAttempts tracks: who kicked, when relative to block start, did it break
+local blockStarts = {}
+local lastKickTime = {}
+
+local terrain = workspace:FindFirstChild("Terrain")
+if terrain then
+	local kickConn = terrain.ChildAdded:Connect(function(child)
+		if child.Name == "BLOCK BROKEN BY KICK" and child:IsA("BasePart") then
+			-- Find which blocker is nearest to the part
+			local partPos = child.Position
+			local nearest, bestDist = nil, math.huge
+			for bName, bTime in pairs(blockStarts) do
+				local bPlayer = Players:FindFirstChild(bName)
+				local bChar = bPlayer and bPlayer.Character
+				local bHRP = bChar and bChar:FindFirstChild("HumanoidRootPart")
+				if bHRP then
+					local d = (bHRP.Position - partPos).Magnitude
+					if d < bestDist then bestDist = d; nearest = bName end
+				end
+			end
+
+			if nearest and lastKickTime[nearest] then
+				local blockStart = blockStarts[nearest]
+				local kickTime = lastKickTime[nearest]
+				local blockToKick = kickTime - blockStart
+				local kickToBreak = tick() - kickTime
+
+				local entry = {
+					target = nearest,
+					blockToKick = math.floor(blockToKick * 1000),  -- ms from block start to kick
+					kickToBreak = math.floor(kickToBreak * 1000),  -- ms from kick to break confirm
+					result = "BREAK",
+					time = os.clock(),
+				}
+				data.kickData[#data.kickData + 1] = entry
+				saveData()
+				addRow(string.format("KICK BREAK %s | block→kick %dms | kick→break %dms",
+					nearest, entry.blockToKick, entry.kickToBreak), Color3.fromRGB(255, 50, 255))
+			end
+		end
+	end)
+	table.insert(connections, kickConn)
+end
+
 ---------- Watch Players ----------
 
 local function watchPlayer(player, char)
@@ -355,15 +406,69 @@ local function watchPlayer(player, char)
 		local info = animDB[id]
 		if not info then return end
 
+		local pName = player.Name
 		local eventType
-		if info.type == ATTACK then eventType = "ATTACK"
-		elseif info.type == BLOCK then eventType = "BLOCK"
-		elseif info.type == FEINT then eventType = "FEINT"
-		elseif info.type == EQUIP then eventType = "EQUIP"
-		elseif info.type == IDLE then eventType = "IDLE"
+
+		if info.type == ATTACK then
+			eventType = "ATTACK"
+		elseif info.type == BLOCK then
+			eventType = "BLOCK"
+			blockStarts[pName] = tick()
+			track.Stopped:Connect(function()
+				-- Block ended — if we kicked and it didn't break, it got parried
+				if lastKickTime[pName] and lastKickTime[pName] > (blockStarts[pName] or 0) then
+					local blockToKick = lastKickTime[pName] - (blockStarts[pName] or lastKickTime[pName])
+					local entry = {
+						target = pName,
+						blockToKick = math.floor(blockToKick * 1000),
+						result = "PARRIED",
+						time = os.clock(),
+					}
+					data.kickData[#data.kickData + 1] = entry
+					saveData()
+					addRow(string.format("KICK PARRIED by %s | block→kick %dms",
+						pName, entry.blockToKick), Color3.fromRGB(255, 100, 100))
+				end
+				blockStarts[pName] = nil
+				lastKickTime[pName] = nil
+			end)
+		elseif info.type == FEINT then
+			eventType = "FEINT"
+		elseif info.type == EQUIP then
+			eventType = "EQUIP"
+		elseif info.type == IDLE then
+			eventType = "IDLE"
+		elseif info.type == KICK then
+			-- Someone kicked — record timing
+			-- Find who they kicked (nearest blocker)
+			local kickerChar = player.Character
+			local kickerHRP = kickerChar and kickerChar:FindFirstChild("HumanoidRootPart")
+			if kickerHRP then
+				local nearest, bestDist = nil, math.huge
+				for bName in pairs(blockStarts) do
+					local bPlayer = Players:FindFirstChild(bName)
+					local bChar = bPlayer and bPlayer.Character
+					local bHRP = bChar and bChar:FindFirstChild("HumanoidRootPart")
+					if bHRP then
+						local d = (kickerHRP.Position - bHRP.Position).Magnitude
+						if d < bestDist then bestDist = d; nearest = bName end
+					end
+				end
+				if nearest then
+					lastKickTime[nearest] = tick()
+					local delay = tick() - (blockStarts[nearest] or tick())
+					addRow(string.format("KICK %s→%s | %.0fms after block | %.1f studs",
+						pName, nearest, delay * 1000, bestDist), Color3.fromRGB(255, 170, 0))
+				end
+			end
+			eventType = "KICK"
+		elseif info.type == 6 then
+			-- Stagger
+			eventType = "STAGGER"
+			addRow("STAGGER " .. pName, Color3.fromRGB(255, 50, 255))
 		end
 
-		if eventType then
+		if eventType and info.type ~= KICK and info.type ~= 6 then
 			logCombatEvent(player, info, eventType)
 		end
 	end)
@@ -371,7 +476,7 @@ local function watchPlayer(player, char)
 end
 
 local function hookPlayer(player)
-	if player == lp then return end
+	-- Watch ALL players including self (need to see our own kicks + everyone's blocks)
 	if player.Character then task.spawn(watchPlayer, player, player.Character) end
 	local c = player.CharacterAdded:Connect(function(char)
 		task.wait(0.3)
