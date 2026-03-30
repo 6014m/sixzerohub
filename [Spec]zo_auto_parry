@@ -74,6 +74,12 @@ animDB["15612208633"] = { type = STAGGER, weapon = "Any", move = "Stagger" }
 local KICK = 7
 animDB["6907975812"] = { type = KICK, weapon = "Any", move = "Kick" }
 
+-- Discovered from combat logger (auto-identified as attacks)
+animDB["182393478"] = { type = ATTACK, weapon = "Unknown", move = "Discovered1" }
+animDB["6678894658"] = { type = ATTACK, weapon = "Unknown", move = "Discovered2" }
+animDB["6856453579"] = { type = ATTACK, weapon = "Unknown", move = "Discovered3" }
+animDB["6678892469"] = { type = ATTACK, weapon = "Unknown", move = "Discovered4" }
+
 -- Track which weapon each player has equipped
 local playerWeapons = {} -- [playerName] = { weapon, equipTime }
 
@@ -95,15 +101,16 @@ local RANGE = 25 -- fallback for unknown weapons
 
 -- Per-weapon attack ranges from combat data (max confirmed hit distance + buffer)
 local WEAPON_RANGE = {
-	Scythe = 14,      -- max hit 11.2, +buffer
-	Katana = 16,      -- max hit 13.5, +buffer
-	Odachi = 10,      -- max hit 7.2, +buffer
-	Kanabo = 8,       -- limited data, max hit 2.9, generous buffer
-	Kick = 10,        -- max hit 8.5, +buffer
-	Tanto = 8,        -- no data yet, short weapon
-	Naginata = 16,    -- no close data yet, long weapon assumed similar to katana
-	Kusarigama = 16,  -- no data yet, chain weapon assumed mid-long
-	Caestus = 8,      -- no data yet, fist weapon assumed short
+	Katana = 24,      -- max hit 21.3
+	Kusarigama = 24,  -- max hit 21.4, chain weapon long reach
+	Naginata = 14,    -- max hit 10.7
+	Scythe = 14,      -- max hit 11.2
+	Odachi = 10,      -- max hit 7.2 (limited data)
+	Kanabo = 10,      -- limited data
+	Kick = 10,        -- max hit 7.9
+	Tanto = 8,        -- short weapon
+	Caestus = 8,      -- fist weapon
+	Unknown = 25,     -- discovered anims, use default
 }
 
 -- Track who's currently blocking
@@ -111,7 +118,7 @@ local enemyBlocking = {} -- [playerName] = true
 
 -- Feint window: wait this long after seeing an attack before blocking
 -- If opponent feints during this window, we punish instead of wasting a block
-local FEINT_WINDOW = 0.25 -- baseline (seconds)
+local FEINT_WINDOW = 0.20 -- baseline (seconds)
 local FEINT_WINDOW_MIN = 0.10
 local FEINT_WINDOW_MAX = 0.50
 local pendingAttacks = {} -- [playerName] = { time, info, cancelled }
@@ -154,41 +161,70 @@ local function tuneDown()
 end
 
 ---------- Input Emulation ----------
+-- Try multiple methods: executor functions first (most reliable), VIM as fallback
 
 local function rightClick()
-	VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton2, true, game, 1)
-	task.delay(0.15, function()
-		VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton2, false, game, 1)
-	end)
+	if mouse2press then
+		mouse2press()
+		task.delay(0.15, function() if mouse2release then mouse2release() end end)
+	else
+		VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton2, true, game, 1)
+		task.delay(0.15, function()
+			VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton2, false, game, 1)
+		end)
+	end
 end
 
 local function rightClickDown()
-	VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton2, true, game, 1)
+	if mouse2press then
+		mouse2press()
+	else
+		VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton2, true, game, 1)
+	end
 end
 
 local function rightClickUp()
-	VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton2, false, game, 1)
+	if mouse2release then
+		mouse2release()
+	else
+		VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton2, false, game, 1)
+	end
 end
 
 local function leftClick()
-	VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton1, true, game, 1)
-	task.delay(0.15, function()
-		VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton1, false, game, 1)
-	end)
+	if mouse1press then
+		mouse1press()
+		task.delay(0.15, function() if mouse1release then mouse1release() end end)
+	else
+		VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton1, true, game, 1)
+		task.delay(0.15, function()
+			VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton1, false, game, 1)
+		end)
+	end
 end
 
 local function pressF()
-	VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-	task.delay(0.15, function()
-		VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game)
-	end)
+	if keypress then
+		keypress(0x46) -- F
+		task.delay(0.15, function() if keyrelease then keyrelease(0x46) end end)
+	else
+		VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+		task.delay(0.15, function()
+			VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+		end)
+	end
 end
 
 local function pressE()
-	VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-	task.delay(0.15, function()
-		VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-	end)
+	if keypress then
+		keypress(0x45) -- E
+		task.delay(0.15, function() if keyrelease then keyrelease(0x45) end end)
+	else
+		VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+		task.delay(0.15, function()
+			VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+		end)
+	end
 end
 
 ---------- Threat Priority ----------
@@ -450,7 +486,7 @@ local function onEnemyAnimation(player, animInfo, track)
 		-- Delay kick so they can't parry it
 		if now - lastGuardBreakTime > GUARDBREAK_CD then
 			lastGuardBreakTime = now
-			task.delay(0.3, function()
+			task.delay(0.7, function()
 				if enemyBlocking[pName] then
 					pressF()
 					flash("GUARD BREAK " .. pName, Color3.fromRGB(255, 100, 100))
