@@ -15,7 +15,7 @@ local connections = {}
 local RANGE = 20
 local POLL_RATE = 0.03
 local BLOCK_HOLD = 0.4
-local FOV = 220
+local FOV = 0.5 -- lower = stricter, 0 = directly facing, 1 = any direction
 
 ---------- Animation IDs ----------
 
@@ -48,11 +48,7 @@ reg("Scythe",     14349499924, 14349501923, 14349504049, 14349506078, 6708116223
 -- Extra ID found in working script
 ATTACK_IDS["11753430563"] = "Katana"
 
--- Discovered from logger
-ATTACK_IDS["182393478"] = "Unknown"
-ATTACK_IDS["6678894658"] = "Unknown"
-ATTACK_IDS["6856453579"] = "Unknown"
-ATTACK_IDS["6678892469"] = "Unknown"
+-- Discovered from logger (removed — likely false positives)
 
 ---------- Input ----------
 
