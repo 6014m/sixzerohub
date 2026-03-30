@@ -1,19 +1,227 @@
--- Audio Logger — logs all playing sounds to F9 (no duplicates)
+-- [Dev] Audio Logger
+-- Logs all sounds that play, deduped by SoundId
+-- Click an entry to copy the asset ID
 
-local seen = {}
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+local connections = {}
+local active = true
 
-local function logSound(sound)
-	if not sound:IsA("Sound") then return end
-	local function onPlay()
-		local id = sound.SoundId
-		if id == "" or seen[id] then return end
-		seen[id] = true
-		local path = sound:GetFullName()
-		warn("[AudioLog] " .. id .. " | " .. path)
+local logged = {} -- { { id, name, path, volume, time } }
+local seen = {} -- dedup: soundId -> true
+local MAX_LOG = 200
+
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "AudioLogger"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 10
+local ok, hui = pcall(gethui)
+gui.Parent = ok and hui or localPlayer:WaitForChild("PlayerGui")
+
+local panel = Instance.new("Frame")
+panel.Size = UDim2.new(0, 320, 0, 340)
+panel.Position = UDim2.new(1, -330, 0, 360)
+panel.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+panel.BackgroundTransparency = 0.05
+panel.BorderSizePixel = 0
+panel.Parent = gui
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", panel).Color = Color3.fromRGB(255, 170, 0)
+
+-- Title bar (draggable)
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 26)
+titleBar.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = panel
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 8)
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(1, -60, 1, 0)
+titleLbl.Position = UDim2.new(0, 8, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "Audio Logger"
+titleLbl.TextColor3 = Color3.fromRGB(255, 170, 0)
+titleLbl.TextSize = 11
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Parent = titleBar
+
+local countLbl = Instance.new("TextLabel")
+countLbl.Size = UDim2.new(0, 40, 1, 0)
+countLbl.Position = UDim2.new(1, -60, 0, 0)
+countLbl.BackgroundTransparency = 1
+countLbl.Text = "0"
+countLbl.TextColor3 = Color3.fromRGB(140, 140, 140)
+countLbl.TextSize = 10
+countLbl.Font = Enum.Font.Gotham
+countLbl.Parent = titleBar
+
+-- Drag
+local dragging, dragStart, dragPos = false, nil, nil
+titleBar.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; dragStart = i.Position; dragPos = panel.Position end end)
+game:GetService("UserInputService").InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then local d = i.Position - dragStart; panel.Position = UDim2.new(dragPos.X.Scale, dragPos.X.Offset + d.X, dragPos.Y.Scale, dragPos.Y.Offset + d.Y) end end)
+game:GetService("UserInputService").InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+
+-- Filter row
+local filterRow = Instance.new("Frame")
+filterRow.Size = UDim2.new(1, -8, 0, 22)
+filterRow.Position = UDim2.new(0, 4, 0, 28)
+filterRow.BackgroundTransparency = 1
+filterRow.Parent = panel
+
+local filterBox = Instance.new("TextBox")
+filterBox.Size = UDim2.new(1, -50, 1, 0)
+filterBox.BackgroundColor3 = Color3.fromRGB(36, 36, 40)
+filterBox.BorderSizePixel = 0
+filterBox.Text = ""
+filterBox.PlaceholderText = "Filter..."
+filterBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
+filterBox.TextColor3 = Color3.new(1, 1, 1)
+filterBox.TextSize = 10
+filterBox.Font = Enum.Font.Gotham
+filterBox.ClearTextOnFocus = false
+filterBox.Parent = filterRow
+Instance.new("UICorner", filterBox).CornerRadius = UDim.new(0, 4)
+Instance.new("UIPadding", filterBox).PaddingLeft = UDim.new(0, 6)
+
+local clearBtn = Instance.new("TextButton")
+clearBtn.Size = UDim2.new(0, 44, 1, 0)
+clearBtn.Position = UDim2.new(1, -44, 0, 0)
+clearBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+clearBtn.BorderSizePixel = 0
+clearBtn.Text = "Clear"
+clearBtn.TextColor3 = Color3.new(1, 1, 1)
+clearBtn.TextSize = 10
+clearBtn.Font = Enum.Font.GothamBold
+clearBtn.Parent = filterRow
+Instance.new("UICorner", clearBtn).CornerRadius = UDim.new(0, 4)
+
+-- Scroll list
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, -8, 1, -56)
+scroll.Position = UDim2.new(0, 4, 0, 52)
+scroll.BackgroundColor3 = Color3.fromRGB(28, 28, 32)
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 3
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.Parent = panel
+Instance.new("UICorner", scroll).CornerRadius = UDim.new(0, 6)
+Instance.new("UIListLayout", scroll).Padding = UDim.new(0, 1)
+
+local function refreshList()
+	for _, c in ipairs(scroll:GetChildren()) do
+		if c:IsA("TextButton") then c:Destroy() end
 	end
-	if sound.IsPlaying then onPlay() end
-	sound.Played:Connect(onPlay)
+	local filter = filterBox.Text:lower()
+	local shown = 0
+	for i = #logged, 1, -1 do
+		local entry = logged[i]
+		local searchStr = (entry.id .. " " .. entry.name .. " " .. entry.path):lower()
+		if filter == "" or searchStr:find(filter, 1, true) then
+			shown = shown + 1
+			local row = Instance.new("TextButton")
+			row.Size = UDim2.new(1, 0, 0, 36)
+			row.BackgroundColor3 = (shown % 2 == 0) and Color3.fromRGB(32, 32, 38) or Color3.fromRGB(26, 26, 30)
+			row.BorderSizePixel = 0
+			row.Text = ""
+			row.AutoButtonColor = false
+			row.Parent = scroll
+
+			local idLbl = Instance.new("TextLabel")
+			idLbl.Size = UDim2.new(1, -8, 0, 16)
+			idLbl.Position = UDim2.new(0, 6, 0, 2)
+			idLbl.BackgroundTransparency = 1
+			idLbl.Text = entry.id .. "  |  vol " .. string.format("%.1f", entry.volume)
+			idLbl.TextColor3 = Color3.fromRGB(255, 170, 0)
+			idLbl.TextSize = 10
+			idLbl.Font = Enum.Font.GothamBold
+			idLbl.TextXAlignment = Enum.TextXAlignment.Left
+			idLbl.Parent = row
+
+			local pathLbl = Instance.new("TextLabel")
+			pathLbl.Size = UDim2.new(1, -8, 0, 14)
+			pathLbl.Position = UDim2.new(0, 6, 0, 18)
+			pathLbl.BackgroundTransparency = 1
+			pathLbl.Text = entry.path
+			pathLbl.TextColor3 = Color3.fromRGB(160, 160, 170)
+			pathLbl.TextSize = 9
+			pathLbl.Font = Enum.Font.Gotham
+			pathLbl.TextXAlignment = Enum.TextXAlignment.Left
+			pathLbl.TextTruncate = Enum.TextTruncate.AtEnd
+			pathLbl.Parent = row
+
+			row.MouseButton1Click:Connect(function()
+				pcall(function()
+					if setclipboard then setclipboard("rbxassetid://" .. entry.id)
+					elseif toclipboard then toclipboard("rbxassetid://" .. entry.id) end
+				end)
+				idLbl.Text = "Copied!"
+				task.delay(1, function()
+					if idLbl.Parent then
+						idLbl.Text = entry.id .. "  |  vol " .. string.format("%.1f", entry.volume)
+					end
+				end)
+			end)
+		end
+	end
+	countLbl.Text = tostring(#logged)
 end
 
-for _, v in ipairs(game:GetDescendants()) do logSound(v) end
-game.DescendantAdded:Connect(logSound)
+clearBtn.MouseButton1Click:Connect(function()
+	logged = {}
+	seen = {}
+	refreshList()
+end)
+
+filterBox:GetPropertyChangedSignal("Text"):Connect(refreshList)
+
+-- Sound tracking
+local function onSoundPlayed(sound)
+	if not active then return end
+	local rawId = sound.SoundId
+	if rawId == "" then return end
+	local id = rawId:match("%d+") or "?"
+	if id == "?" or id == "0" then return end
+	if seen[id] then return end
+	seen[id] = true
+
+	local entry = {
+		id = id,
+		name = sound.Name,
+		path = sound:GetFullName(),
+		volume = sound.Volume,
+		time = os.clock(),
+	}
+	if #logged >= MAX_LOG then table.remove(logged, 1) end
+	table.insert(logged, entry)
+	refreshList()
+end
+
+local function hookSound(sound)
+	if not sound:IsA("Sound") then return end
+	if sound.IsPlaying then onSoundPlayed(sound) end
+	local conn = sound.Played:Connect(function() onSoundPlayed(sound) end)
+	table.insert(connections, conn)
+end
+
+for _, v in ipairs(game:GetDescendants()) do hookSound(v) end
+local addConn = game.DescendantAdded:Connect(function(v) hookSound(v) end)
+table.insert(connections, addConn)
+
+---------- SIXZEROHUB REGISTRATION ----------
+
+local function cleanup()
+	active = false
+	for _, c in ipairs(connections) do
+		pcall(function() c:Disconnect() end)
+	end
+	connections = {}
+	pcall(function() gui:Destroy() end)
+end
+
+if _G.SixZeroHubRegister then
+	_G.SixZeroHubRegister("Audio Logger", "[Dev]audio_logger", cleanup, "dev")
+end
