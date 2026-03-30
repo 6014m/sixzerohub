@@ -515,8 +515,6 @@ local function watchEnemy(player, char)
 		local info = animDB[id]
 		if info then
 			onEnemyAnimation(player, info, track)
-		else
-			flash(player.Name .. " UNK:" .. id, Color3.fromRGB(180, 180, 180), 0.5)
 		end
 	end)
 	table.insert(connections, c)
