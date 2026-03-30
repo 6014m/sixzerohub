@@ -1372,6 +1372,7 @@ local SPEC_SCRIPTS = {
     { name = "Auto Parry", file = "[Spec]tof_auto_parry3", gameId = 106861549205304 },
     { name = "Auto Spin", file = "[Spec]tof_auto_spin2", gameId = 106861549205304 },
     { name = "Auto Parry", file = "[Spec]zo_auto_parry", gameId = 6678877691 },
+    { name = "Combat Logger", file = "[Spec]zo_combat_logger", gameId = 6678877691 },
 }
 
 local currentGameId = game.PlaceId
