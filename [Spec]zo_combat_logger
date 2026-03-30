@@ -73,10 +73,15 @@ animDB["6907975812"] = { type = KICK, weapon = "Any", move = "Kick" }
 animDB["15612208633"] = { type = 6, weapon = "Any", move = "Stagger" }
 
 local DATA_FILE = "ZoCombat_data.json"
-local data = { events = {}, perWeapon = {}, kickData = {} }
+local data = { events = {}, perWeapon = {}, kickData = {}, hits = {} }
+
+-- Clear old data on load (fresh start)
+pcall(function()
+	if writefile then writefile(DATA_FILE, HttpService:JSONEncode(data)) end
+end)
 
 pcall(function()
-	if isfile and isfile(DATA_FILE) then
+	if false and isfile and isfile(DATA_FILE) then -- disabled: fresh start
 		local d = HttpService:JSONDecode(readfile(DATA_FILE))
 		if type(d) == "table" then data = d end
 	end
@@ -260,6 +265,80 @@ end
 
 local allPlayers = true -- log relative to all players, not just me
 
+---------- Health Tracking ----------
+
+local playerHealth = {} -- [playerName] = currentHealth
+
+local function snapshotHealth()
+	for _, p in ipairs(Players:GetPlayers()) do
+		local char = p.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			playerHealth[p.Name] = hum.Health
+		end
+	end
+end
+
+local function checkDamage(attacker, attackerHRP, animInfo)
+	-- Compare current health to snapshot — anyone who lost health got hit
+	for _, target in ipairs(Players:GetPlayers()) do
+		if target ~= attacker then
+			local char = target.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			local tHRP = char and char:FindFirstChild("HumanoidRootPart")
+			if hum and tHRP and attackerHRP then
+				local prevHP = playerHealth[target.Name] or hum.MaxHealth
+				local curHP = hum.Health
+				local dmg = prevHP - curHP
+				if dmg > 0.5 then
+					local dist = (tHRP.Position - attackerHRP.Position).Magnitude
+					local orient = getOrientation(attackerHRP, tHRP)
+					local killed = curHP <= 0
+
+					local hit = {
+						weapon = animInfo.weapon,
+						move = animInfo.move,
+						attacker = attacker.Name,
+						target = target.Name,
+						dist = math.floor(dist * 10) / 10,
+						damage = math.floor(dmg * 10) / 10,
+						killed = killed,
+						targetToAttacker = orient.theyAreToMy,
+						attackerToTarget = orient.iAmToTheir,
+						fDot = math.floor(orient.fDot * 100) / 100,
+						rDot = math.floor(orient.rDot * 100) / 100,
+						time = os.clock(),
+					}
+
+					data.hits[#data.hits + 1] = hit
+
+					-- Per-weapon hit ranges
+					local wpnKey = animInfo.weapon .. "_" .. animInfo.move
+					if not data.perWeapon[animInfo.weapon] then data.perWeapon[animInfo.weapon] = {} end
+					if not data.perWeapon[animInfo.weapon][animInfo.move] then
+						data.perWeapon[animInfo.weapon][animInfo.move] = { dists = {}, orientations = {}, hitDists = {}, hitOrients = {} }
+					end
+					local wpnMove = data.perWeapon[animInfo.weapon][animInfo.move]
+					if not wpnMove.hitDists then wpnMove.hitDists = {} end
+					if not wpnMove.hitOrients then wpnMove.hitOrients = {} end
+					wpnMove.hitDists[#wpnMove.hitDists + 1] = hit.dist
+					wpnMove.hitOrients[#wpnMove.hitOrients + 1] = hit.attackerToTarget
+
+					saveData()
+
+					local killTag = killed and " KILLED" or ""
+					local meTag = target == lp and " [ME]" or ""
+					addRow(string.format("HIT %s %s→%s | %.1f studs | %.0f dmg%s%s",
+						animInfo.weapon, attacker.Name, target.Name, dist, dmg, killTag, meTag),
+						killed and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(255, 200, 50))
+				end
+			end
+		end
+	end
+	-- Re-snapshot after checking
+	snapshotHealth()
+end
+
 ---------- Event Logging ----------
 
 local function logSingleTarget(attacker, attackerHRP, target, targetHRP, animInfo, eventType)
@@ -342,6 +421,16 @@ local function logCombatEvent(player, animInfo, eventType)
 	end
 
 	if logged > 0 then saveData() end
+
+	-- For attacks: snapshot health now, check for damage shortly after
+	if eventType == "ATTACK" then
+		snapshotHealth()
+		local atkHRP = attackerHRP
+		local atkInfo = animInfo
+		local atkPlayer = player
+		task.delay(0.3, function() checkDamage(atkPlayer, atkHRP, atkInfo) end)
+		task.delay(0.6, function() checkDamage(atkPlayer, atkHRP, atkInfo) end)
+	end
 end
 
 ---------- Kick Timing Tracker ----------
@@ -497,6 +586,15 @@ end
 
 for _, p in ipairs(Players:GetPlayers()) do task.spawn(hookPlayer, p) end
 Players.PlayerAdded:Connect(function(p) task.spawn(hookPlayer, p) end)
+
+-- Keep health snapshots fresh
+snapshotHealth()
+task.spawn(function()
+	while true do
+		snapshotHealth()
+		task.wait(0.5)
+	end
+end)
 
 ---------- SIXZEROHUB REGISTRATION ----------
 
