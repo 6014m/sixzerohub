@@ -13,7 +13,7 @@ local connections = {}
 
 ---------- Settings ----------
 
-local RANGE = 20
+local RANGE = 16
 local BLOCK_PERCENT = 30    -- block when attack animation reaches this % (after feint window)
 local BLOCK_PERCENT_MAX = 50 -- stop checking after this %
 local BLOCK_HOLD = 0.4
