@@ -70,6 +70,10 @@ registerWeapon("Scythe", {
 -- Stagger (guard broken) — universal, not per-weapon
 animDB["15612208633"] = { type = STAGGER, weapon = "Any", move = "Stagger" }
 
+-- Kick animation — track when our kick finishes
+local KICK = 7
+animDB["6907975812"] = { type = KICK, weapon = "Any", move = "Kick" }
+
 -- Track which weapon each player has equipped
 local playerWeapons = {} -- [playerName] = { weapon, equipTime }
 
@@ -78,15 +82,19 @@ local playerWeapons = {} -- [playerName] = { weapon, equipTime }
 local mySwinging = false
 local mySwingTime = 0
 local myBlocking = false
+local myKicking = false
 local lastParryTime = 0
 local lastFeintTime = 0
 local lastGuardBreakTime = 0
 local lastSwingTime = 0
 local PARRY_CD = 0.3
 local FEINT_CD = 0.3
-local GUARDBREAK_CD = 0.5
+local GUARDBREAK_CD = 0.3
 local SWING_CD = 0.3
 local RANGE = 25
+
+-- Track who's currently blocking
+local enemyBlocking = {} -- [playerName] = true
 
 -- Feint window: wait this long after seeing an attack before blocking
 -- If opponent feints during this window, we punish instead of wasting a block
@@ -241,6 +249,28 @@ local function watchSelf(char)
 				track.Stopped:Connect(function()
 					myBlocking = false
 				end)
+			elseif info.type == KICK then
+				myKicking = true
+				track.Stopped:Connect(function()
+					myKicking = false
+					-- Kick finished — if someone nearby is still blocking, kick again
+					for bName in pairs(enemyBlocking) do
+						local bPlayer = Players:FindFirstChild(bName)
+						if bPlayer then
+							local bChar = bPlayer.Character
+							local bHRP = bChar and bChar:FindFirstChild("HumanoidRootPart")
+							if bHRP and inRange(bHRP) then
+								task.delay(0.3, function()
+									if enemyBlocking[bName] then
+										pressF()
+										flash("RE-KICK " .. bName, Color3.fromRGB(255, 100, 100))
+									end
+								end)
+								break
+							end
+						end
+					end
+				end)
 			end
 		end
 	end)
@@ -298,12 +328,19 @@ local function onEnemyAnimation(player, animInfo, track)
 		end)
 
 	elseif animInfo.type == BLOCK then
-		-- They're blocking — delay kick so they can't parry it
+		-- Track that they're blocking
+		enemyBlocking[pName] = true
+		track.Stopped:Connect(function()
+			enemyBlocking[pName] = nil
+		end)
+		-- Delay kick so they can't parry it
 		if now - lastGuardBreakTime > GUARDBREAK_CD then
 			lastGuardBreakTime = now
 			task.delay(0.3, function()
-				pressF()
-				flash("GUARD BREAK " .. pName, Color3.fromRGB(255, 100, 100))
+				if enemyBlocking[pName] then
+					pressF()
+					flash("GUARD BREAK " .. pName, Color3.fromRGB(255, 100, 100))
+				end
 			end)
 		end
 
