@@ -176,9 +176,37 @@ titleLbl.Font = Enum.Font.GothamBold
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 titleLbl.Parent = titleBar
 
+local modeBtn = Instance.new("TextButton")
+modeBtn.Size = UDim2.new(0, 50, 0, 16)
+modeBtn.Position = UDim2.new(1, -56, 0, 3)
+modeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 56)
+modeBtn.BorderSizePixel = 0
+modeBtn.Text = "ALL"
+modeBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
+modeBtn.TextSize = 9
+modeBtn.Font = Enum.Font.GothamBold
+modeBtn.Parent = titleBar
+Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0, 4)
+
+local function updateModeBtn()
+	if allPlayers then
+		modeBtn.Text = "ALL"
+		modeBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
+	else
+		modeBtn.Text = "ME"
+		modeBtn.TextColor3 = Color3.fromRGB(255, 170, 0)
+	end
+end
+updateModeBtn()
+
+modeBtn.MouseButton1Click:Connect(function()
+	allPlayers = not allPlayers
+	updateModeBtn()
+end)
+
 -- Drag
 local dragging, dragStart, dragPos = false, nil, nil
-titleBar.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; dragStart = i.Position; dragPos = panel.Position end end)
+titleBar.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 and i.Position.X < modeBtn.AbsolutePosition.X then dragging = true; dragStart = i.Position; dragPos = panel.Position end end)
 game:GetService("UserInputService").InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then local d = i.Position - dragStart; panel.Position = UDim2.new(dragPos.X.Scale, dragPos.X.Offset + d.X, dragPos.Y.Scale, dragPos.Y.Offset + d.Y) end end)
 game:GetService("UserInputService").InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
 
@@ -220,17 +248,16 @@ local function addRow(text, color)
 	scroll.CanvasPosition = Vector2.new(0, scroll.AbsoluteCanvasSize.Y)
 end
 
+---------- Settings ----------
+
+local allPlayers = true -- log relative to all players, not just me
+
 ---------- Event Logging ----------
 
-local function logCombatEvent(player, animInfo, eventType)
-	cacheLocal()
-	local char = player.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if not myHRP or not hrp then return end
-
-	local dist = (myHRP.Position - hrp.Position).Magnitude
-	local orient = getOrientation(hrp, myHRP)
-	local yDiff = myHRP.Position.Y - hrp.Position.Y
+local function logSingleTarget(attacker, attackerHRP, target, targetHRP, animInfo, eventType)
+	local dist = (targetHRP.Position - attackerHRP.Position).Magnitude
+	local orient = getOrientation(attackerHRP, targetHRP)
+	local yDiff = targetHRP.Position.Y - attackerHRP.Position.Y
 
 	local entry = {
 		type = eventType,
@@ -244,7 +271,8 @@ local function logCombatEvent(player, animInfo, eventType)
 		rDot = math.floor(orient.rDot * 100) / 100,
 		myFDot = math.floor(orient.myFDot * 100) / 100,
 		myRDot = math.floor(orient.myRDot * 100) / 100,
-		attacker = player.Name,
+		attacker = attacker.Name,
+		target = target.Name,
 		time = os.clock(),
 	}
 
@@ -260,18 +288,50 @@ local function logCombatEvent(player, animInfo, eventType)
 	wpnMove.orientations[#wpnMove.orientations + 1] = orient.iAmToTheir
 
 	data.events[#data.events + 1] = entry
-	saveData()
+	return entry, dist, orient
+end
 
-	-- UI
+local function logCombatEvent(player, animInfo, eventType)
+	cacheLocal()
+	local attackerChar = player.Character
+	local attackerHRP = attackerChar and attackerChar:FindFirstChild("HumanoidRootPart")
+	if not attackerHRP then return end
+
 	local color
 	if eventType == "ATTACK" then color = Color3.fromRGB(255, 100, 100)
 	elseif eventType == "BLOCK" then color = Color3.fromRGB(87, 242, 135)
 	elseif eventType == "FEINT" then color = Color3.fromRGB(0, 170, 255)
 	end
 
-	local text = string.format("%s %s %s | %.1f studs | I'm %s | They're %s",
-		eventType, animInfo.weapon, animInfo.move, dist, orient.iAmToTheir, orient.theyAreToMy)
-	addRow(text, color)
+	local logged = 0
+
+	if allPlayers then
+		-- Log relative to every other player in the server
+		for _, target in ipairs(Players:GetPlayers()) do
+			if target ~= player then
+				local tChar = target.Character
+				local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+				if tHRP then
+					local _, dist, orient = logSingleTarget(player, attackerHRP, target, tHRP, animInfo, eventType)
+					logged = logged + 1
+					local tag = target == lp and " [ME]" or ""
+					addRow(string.format("%s %s %s | %s%.1f | %s→%s%s",
+						eventType, animInfo.weapon, animInfo.move, tag, dist,
+						orient.iAmToTheir, orient.theyAreToMy, tag), color)
+				end
+			end
+		end
+	else
+		-- Log relative to local player only
+		if myHRP then
+			local _, dist, orient = logSingleTarget(player, attackerHRP, lp, myHRP, animInfo, eventType)
+			logged = 1
+			addRow(string.format("%s %s %s | %.1f studs | I'm %s | They're %s",
+				eventType, animInfo.weapon, animInfo.move, dist, orient.iAmToTheir, orient.theyAreToMy), color)
+		end
+	end
+
+	if logged > 0 then saveData() end
 end
 
 ---------- Watch Players ----------
