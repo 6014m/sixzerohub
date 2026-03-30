@@ -655,19 +655,29 @@ local function stopHandleFD()
 	flashLabel.Visible = false
 end
 
+local function isUnanchoredPart(obj)
+	if not obj:IsA("BasePart") then return false end
+	if obj.Anchored then return false end
+	-- Skip parts inside player characters
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character and obj:IsDescendantOf(p.Character) then return false end
+	end
+	return true
+end
+
 local function checkHandle(obj)
-	if obj.Name == "Handle" and obj:IsA("BasePart") and obj.Parent == workspace then
+	if isUnanchoredPart(obj) then
 		trackedHandles[obj] = true
 	end
 end
 
-workspace.ChildAdded:Connect(checkHandle)
-workspace.ChildRemoved:Connect(function(obj)
+workspace.DescendantAdded:Connect(checkHandle)
+workspace.DescendantRemoving:Connect(function(obj)
 	if trackedHandles[obj] then trackedHandles[obj] = nil end
 end)
-for _, v in ipairs(workspace:GetChildren()) do checkHandle(v) end
+for _, v in ipairs(workspace:GetDescendants()) do checkHandle(v) end
 
--- Proximity loop: repel handles away + keep FD active while any within 10 studs
+-- Proximity loop: repel all unanchored parts away + keep FD active while any within 10 studs
 local REPEL_RANGE = 15
 local REPEL_FORCE = 200
 
@@ -677,23 +687,24 @@ task.spawn(function()
 		local near = false
 		if myHRP then
 			local myPos = myHRP.Position
-			for handle in pairs(trackedHandles) do
-				if handle.Parent == workspace then
-					local diff = handle.Position - myPos
-					local dist = diff.Magnitude
-					if dist <= REPEL_RANGE and isNetOwner(handle) then
-						near = near or dist <= 10
-						pcall(function()
-							local dir = dist > 0.1 and (diff / dist) or Vector3.new(0, 0, 1)
-							local strength = REPEL_FORCE * (1 - dist / REPEL_RANGE)
-							-- CFrame nudge + velocity for reliable replication
-							handle.CFrame = handle.CFrame + dir * 2
-							handle.AssemblyLinearVelocity = dir * strength
-							handle.Velocity = dir * strength
-						end)
+			for part in pairs(trackedHandles) do
+				if part.Parent and part:IsDescendantOf(workspace) and not part.Anchored then
+					local ok, diff = pcall(function() return part.Position - myPos end)
+					if ok and diff then
+						local dist = diff.Magnitude
+						if dist <= REPEL_RANGE and isNetOwner(part) then
+							near = near or dist <= 10
+							pcall(function()
+								local dir = dist > 0.1 and (diff / dist) or Vector3.new(0, 0, 1)
+								local strength = REPEL_FORCE * (1 - dist / REPEL_RANGE)
+								part.CFrame = part.CFrame + dir * 2
+								part.AssemblyLinearVelocity = dir * strength
+								part.Velocity = dir * strength
+							end)
+						end
 					end
 				else
-					trackedHandles[handle] = nil
+					trackedHandles[part] = nil
 				end
 			end
 		end
