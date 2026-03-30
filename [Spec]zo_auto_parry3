@@ -103,20 +103,29 @@ local function swing()
 	task.delay(0.15, function() VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0) end)
 end
 local function kick()
-	if keypress then keypress(0x46); task.delay(0.15, function() keyrelease(0x46) end)
-	else VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game); task.delay(0.15, function() VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game) end) end
+	keyDown(0x46, Enum.KeyCode.F)
+	task.delay(0.15, function() keyUp(0x46, Enum.KeyCode.F) end)
 end
 local function execute()
-	if keypress then keypress(0x45); task.delay(0.15, function() keyrelease(0x45) end)
-	else VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.delay(0.15, function() VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game) end) end
+	keyDown(0x45, Enum.KeyCode.E)
+	task.delay(0.15, function() keyUp(0x45, Enum.KeyCode.E) end)
+end
+local function keyDown(vk, enumKey)
+	if keypress then keypress(vk)
+	else VIM:SendKeyEvent(true, enumKey, false, game) end
+end
+local function keyUp(vk, enumKey)
+	if keyrelease then keyrelease(vk)
+	else VIM:SendKeyEvent(false, enumKey, false, game) end
 end
 local function backDash()
 	blockUp()
-	if keypress then
-		keypress(0x53)
-		task.delay(0.05, function() keypress(0x52); task.delay(0.15, function() keyrelease(0x52) end) end)
-		task.delay(0.4, function() keyrelease(0x53) end)
-	end
+	keyDown(0x53, Enum.KeyCode.S)
+	task.delay(0.05, function()
+		keyDown(0x52, Enum.KeyCode.R)
+		task.delay(0.15, function() keyUp(0x52, Enum.KeyCode.R) end)
+	end)
+	task.delay(0.4, function() keyUp(0x53, Enum.KeyCode.S) end)
 end
 
 ---------- GUI ----------
