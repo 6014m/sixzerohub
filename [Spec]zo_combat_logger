@@ -16,6 +16,8 @@ local connections = {}
 local ATTACK = 1
 local BLOCK = 2
 local FEINT = 3
+local IDLE = 4
+local EQUIP = 5
 
 local animDB = {}
 
@@ -27,39 +29,41 @@ local function registerWeapon(name, ids)
 	end
 	if ids.Block then animDB[tostring(ids.Block)] = { type = BLOCK, weapon = name, move = "Block" } end
 	if ids.Feint then animDB[tostring(ids.Feint)] = { type = FEINT, weapon = name, move = "Feint" } end
+	if ids.Idle then animDB[tostring(ids.Idle)] = { type = IDLE, weapon = name, move = "Idle" } end
+	if ids.Equip then animDB[tostring(ids.Equip)] = { type = EQUIP, weapon = name, move = "Equip" } end
 end
 
 registerWeapon("Katana", {
 	Attack1 = 6678908798, Attack2 = 6678909967, Attack3 = 6678913068, Attack4 = 6678914641,
-	Block = 6678915740, Feint = 13522514295,
+	Block = 6678915740, Feint = 13522514295, Idle = 6678900639, Equip = 6678901989,
 })
 registerWeapon("Naginata", {
 	Attack1 = 6708118912, Attack2 = 6835409260, Attack3 = 6708121991, Attack4 = 6708121121,
-	Block = 6708116223, Feint = 13521669139,
+	Block = 6708116223, Feint = 13521669139, Idle = 6708117523, Equip = 6708366285,
 })
 registerWeapon("Tanto", {
 	Attack1 = 7845695759, Attack2 = 7845695236, Attack3 = 7845696985, Attack4 = 7845696360,
-	Block = 7845348044, Feint = 13521591312,
+	Block = 7845348044, Feint = 13521591312, Idle = 7845346204, Equip = 7845344059,
 })
 registerWeapon("Kanabo", {
 	Attack1 = 14483365680, Attack2 = 6995853850, Attack3 = 6996771877, Attack4 = 7011157033,
-	Block = 6986985774, Feint = 13521582897,
+	Block = 6986985774, Feint = 13521582897, Idle = 6986949965, Equip = 6986949380,
 })
 registerWeapon("Kusarigama", {
 	Attack1 = 11941288362, Attack2 = 11941292174, Attack3 = 11941309395, Attack4 = 11941314458,
-	Block = 11941247104, Feint = 13521767819,
+	Block = 11941247104, Feint = 13521767819, Idle = 10714550736, Equip = 10714577721,
 })
 registerWeapon("Caestus", {
 	Attack1 = 11752087150, Attack2 = 11752098805, Attack3 = 11752104735, Attack4 = 11752111783,
-	Block = 11579873330, Feint = 13521763633,
+	Block = 11579873330, Feint = 13521763633, Idle = 11579973012, Equip = 11579966570,
 })
 registerWeapon("Odachi", {
 	Attack1 = 13537213350, Attack2 = 13537219514, Attack3 = 13537224645, Attack4 = 13537230809,
-	Block = 13537206453, Feint = 13540496277,
+	Block = 13537206453, Feint = 13540496277, Idle = 13537091635, Equip = 13537187380,
 })
 registerWeapon("Scythe", {
 	Attack1 = 14349499924, Attack2 = 14349501923, Attack3 = 14349504049, Attack4 = 14349506078,
-	Block = 6708116223, Feint = 13521669139,
+	Block = 6708116223, Feint = 13521669139, Idle = 14349489152, Equip = 8574242501,
 })
 
 ---------- Data Storage ----------
@@ -301,6 +305,8 @@ local function logCombatEvent(player, animInfo, eventType)
 	if eventType == "ATTACK" then color = Color3.fromRGB(255, 100, 100)
 	elseif eventType == "BLOCK" then color = Color3.fromRGB(87, 242, 135)
 	elseif eventType == "FEINT" then color = Color3.fromRGB(0, 170, 255)
+	elseif eventType == "EQUIP" then color = Color3.fromRGB(255, 170, 0)
+	elseif eventType == "IDLE" then color = Color3.fromRGB(140, 140, 140)
 	end
 
 	local logged = 0
@@ -353,6 +359,8 @@ local function watchPlayer(player, char)
 		if info.type == ATTACK then eventType = "ATTACK"
 		elseif info.type == BLOCK then eventType = "BLOCK"
 		elseif info.type == FEINT then eventType = "FEINT"
+		elseif info.type == EQUIP then eventType = "EQUIP"
+		elseif info.type == IDLE then eventType = "IDLE"
 		end
 
 		if eventType then
