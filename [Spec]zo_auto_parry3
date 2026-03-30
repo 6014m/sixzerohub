@@ -1,11 +1,12 @@
--- Zo Samurai Auto Parry v3
--- Polling-based like proven working scripts + GLINT detection + full combat responses
+-- Zo Samurai Auto Parry v4
+-- Animation percentage timing + ReplicatedStorage scan + dot product facing
 
 task.spawn(function()
 
 local Players = game:GetService("Players")
-local VIM = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VIM = game:GetService("VirtualInputManager")
 local lp = Players.LocalPlayer
 local playerGui = lp:WaitForChild("PlayerGui")
 local connections = {}
@@ -13,88 +14,107 @@ local connections = {}
 ---------- Settings ----------
 
 local RANGE = 20
-local POLL_RATE = 0.03
+local BLOCK_PERCENT = 30    -- block when attack animation reaches this % (after feint window)
+local BLOCK_PERCENT_MAX = 50 -- stop checking after this %
 local BLOCK_HOLD = 0.4
-local FOV = 0.5 -- lower = stricter, 0 = directly facing, 1 = any direction
+local POLL_RATE = 0.02 -- ~50hz
 
----------- Animation IDs ----------
+---------- Scan animations from ReplicatedStorage ----------
 
 local ATTACK_IDS = {}
 local BLOCK_IDS = {}
 local FEINT_IDS = {}
 local KICK_IDS = { ["6907975812"] = true }
 local STAGGER_IDS = { ["15612208633"] = true }
-local EQUIP_IDS = {}
+local IGNORE_IDS = {} -- idle, walk, dash, etc
 
-local function reg(name, a1, a2, a3, a4, block, feint, equip)
-	if a1 then ATTACK_IDS[tostring(a1)] = name end
-	if a2 then ATTACK_IDS[tostring(a2)] = name end
-	if a3 then ATTACK_IDS[tostring(a3)] = name end
-	if a4 then ATTACK_IDS[tostring(a4)] = name end
-	if block then BLOCK_IDS[tostring(block)] = name end
-	if feint then FEINT_IDS[tostring(feint)] = name end
-	if equip then EQUIP_IDS[tostring(equip)] = name end
+local function scanGameAnimations()
+	pcall(function()
+		-- Try to find combat animations in ReplicatedStorage
+		local function scanFolder(folder, depth)
+			if depth > 6 then return end
+			for _, obj in ipairs(folder:GetChildren()) do
+				if obj:IsA("Animation") then
+					local id = obj.AnimationId:match("%d+")
+					if id then
+						local name = obj.Name:lower()
+						local parentName = obj.Parent and obj.Parent.Name:lower() or ""
+						if name:find("attack") or name:find("slash") or name:find("swing")
+							or name:find("uppercut") or name:find("crit") then
+							ATTACK_IDS[id] = obj.Parent and obj.Parent.Name or "Unknown"
+						elseif name:find("block") or name:find("guard") then
+							BLOCK_IDS[id] = obj.Parent and obj.Parent.Name or "Unknown"
+						elseif name:find("feint") or name:find("cancel") then
+							FEINT_IDS[id] = obj.Parent and obj.Parent.Name or "Unknown"
+						elseif name:find("kick") then
+							KICK_IDS[id] = true
+						elseif name:find("idle") or name:find("walk") or name:find("sprint")
+							or name:find("dash") or name:find("grip") or name:find("equip") then
+							IGNORE_IDS[id] = true
+						end
+					end
+				end
+				if obj:IsA("Folder") or obj:IsA("ModuleScript") or obj:IsA("Configuration") then
+					scanFolder(obj, depth + 1)
+				end
+			end
+		end
+		scanFolder(ReplicatedStorage, 0)
+	end)
 end
 
-reg("Katana",     6678908798, 6678909967, 6678913068, 6678914641, 6678915740, 13522514295, 6678901989)
-reg("Naginata",   6708118912, 6835409260, 6708121991, 6708121121, 6708116223, 13521669139, 6708366285)
-reg("Tanto",      7845695759, 7845695236, 7845696985, 7845696360, 7845348044, 13521591312, 7845344059)
-reg("Kanabo",     14483365680, 6995853850, 6996771877, 7011157033, 6986985774, 13521582897, 6986949380)
-reg("Kusarigama", 11941288362, 11941292174, 11941309395, 11941314458, 11941247104, 13521767819, 10714577721)
-reg("Caestus",    11752087150, 11752098805, 11752104735, 11752111783, 11579873330, 13521763633, 11579966570)
-reg("Odachi",     13537213350, 13537219514, 13537224645, 13537230809, 13537206453, 13540496277, 13537187380)
-reg("Scythe",     14349499924, 14349501923, 14349504049, 14349506078, 6708116223, 13521669139, 8574242501)
+-- Hardcoded fallback IDs
+local function registerHardcoded()
+	local function reg(name, a1, a2, a3, a4, block, feint)
+		if a1 then ATTACK_IDS[tostring(a1)] = name end
+		if a2 then ATTACK_IDS[tostring(a2)] = name end
+		if a3 then ATTACK_IDS[tostring(a3)] = name end
+		if a4 then ATTACK_IDS[tostring(a4)] = name end
+		if block then BLOCK_IDS[tostring(block)] = name end
+		if feint then FEINT_IDS[tostring(feint)] = name end
+	end
+	reg("Katana",     6678908798, 6678909967, 6678913068, 6678914641, 6678915740, 13522514295)
+	reg("Naginata",   6708118912, 6835409260, 6708121991, 6708121121, 6708116223, 13521669139)
+	reg("Tanto",      7845695759, 7845695236, 7845696985, 7845696360, 7845348044, 13521591312)
+	reg("Kanabo",     14483365680, 6995853850, 6996771877, 7011157033, 6986985774, 13521582897)
+	reg("Kusarigama", 11941288362, 11941292174, 11941309395, 11941314458, 11941247104, 13521767819)
+	reg("Caestus",    11752087150, 11752098805, 11752104735, 11752111783, 11579873330, 13521763633)
+	reg("Odachi",     13537213350, 13537219514, 13537224645, 13537230809, 13537206453, 13540496277)
+	reg("Scythe",     14349499924, 14349501923, 14349504049, 14349506078, 6708116223, 13521669139)
+	ATTACK_IDS["11753430563"] = "Katana" -- from reference script
+end
 
--- Extra ID found in working script
-ATTACK_IDS["11753430563"] = "Katana"
+registerHardcoded()
+scanGameAnimations()
 
--- Discovered from logger (removed — likely false positives)
+local attackCount = 0
+for _ in pairs(ATTACK_IDS) do attackCount = attackCount + 1 end
 
 ---------- Input ----------
 
 local function blockDown()
 	VIM:SendMouseButtonEvent(0, 0, 1, true, game, 0)
 end
-
 local function blockUp()
 	VIM:SendMouseButtonEvent(0, 0, 1, false, game, 0)
 end
-
 local function swing()
 	VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-	task.delay(0.15, function()
-		VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-	end)
+	task.delay(0.15, function() VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0) end)
 end
-
 local function kick()
-	if keypress then
-		keypress(0x46)
-		task.delay(0.15, function() keyrelease(0x46) end)
-	else
-		VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-		task.delay(0.15, function() VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game) end)
-	end
+	if keypress then keypress(0x46); task.delay(0.15, function() keyrelease(0x46) end)
+	else VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game); task.delay(0.15, function() VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game) end) end
 end
-
 local function execute()
-	if keypress then
-		keypress(0x45)
-		task.delay(0.15, function() keyrelease(0x45) end)
-	else
-		VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-		task.delay(0.15, function() VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
-	end
+	if keypress then keypress(0x45); task.delay(0.15, function() keyrelease(0x45) end)
+	else VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.delay(0.15, function() VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game) end) end
 end
-
 local function backDash()
 	blockUp()
 	if keypress then
 		keypress(0x53)
-		task.delay(0.05, function()
-			keypress(0x52)
-			task.delay(0.15, function() keyrelease(0x52) end)
-		end)
+		task.delay(0.05, function() keypress(0x52); task.delay(0.15, function() keyrelease(0x52) end) end)
 		task.delay(0.4, function() keyrelease(0x53) end)
 	end
 end
@@ -115,7 +135,7 @@ label.BorderSizePixel = 0
 label.TextColor3 = Color3.fromRGB(87, 242, 135)
 label.Font = Enum.Font.GothamBold
 label.TextSize = 11
-label.Text = "Auto Parry v3 loading..."
+label.Text = ""
 label.Visible = true
 label.Parent = gui
 Instance.new("UICorner", label).CornerRadius = UDim.new(0, 6)
@@ -127,53 +147,93 @@ end
 
 ---------- Helpers ----------
 
-local function getHRP(player)
-	local char = player and player.Character
-	return char and char:FindFirstChild("HumanoidRootPart")
-end
+local myRoot
+task.spawn(function()
+	while true do
+		local char = lp.Character
+		myRoot = char and char:FindFirstChild("HumanoidRootPart")
+		task.wait()
+	end
+end)
 
-local function myHRP()
-	local char = lp.Character
-	return char and char:FindFirstChild("HumanoidRootPart")
-end
-
-local function myTool()
+local function hasTool()
 	local char = lp.Character
 	return char and char:FindFirstChildOfClass("Tool")
 end
 
-local function distTo(player)
-	local a, b = myHRP(), getHRP(player)
-	if not a or not b then return 999 end
-	return (a.Position - b.Position).Magnitude
+local function isFacingMe(theirRoot)
+	if not myRoot or not theirRoot then return false end
+	local dot = (myRoot.Position - theirRoot.Position):Dot(theirRoot.CFrame.LookVector)
+	return dot > 0
 end
 
-local function isFacing(player)
-	local a, b = myHRP(), getHRP(player)
-	if not a or not b then return false end
-	local look = b.CFrame.LookVector
-	local dir = (a.Position - b.Position).Unit
-	local val = ((look - dir).Magnitude / 2) ^ 2
-	return val < FOV
+---------- Track active animations per player ----------
+
+local allAnims = {} -- { {track, player, root} }
+
+local function hookPlayer(player)
+	if player == lp then return end
+	local char = player.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+
+	local c = hum.AnimationPlayed:Connect(function(track)
+		if not track.Animation then return end
+		local entry = { track = track, player = player, root = char:FindFirstChild("HumanoidRootPart") }
+		table.insert(allAnims, entry)
+
+		track.Ended:Connect(function()
+			for i = #allAnims, 1, -1 do
+				if allAnims[i] == entry then
+					table.remove(allAnims, i)
+					break
+				end
+			end
+		end)
+	end)
+	table.insert(connections, c)
+
+	-- GLINT
+	local g = char.DescendantAdded:Connect(function(desc)
+		if desc.Name == "GLINT" and myRoot then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp and (myRoot.Position - hrp.Position).Magnitude <= RANGE and hasTool() then
+				blockDown()
+				flash("GLINT BLOCK " .. player.Name, Color3.fromRGB(0, 255, 150))
+				task.delay(BLOCK_HOLD, function() blockUp() end)
+			end
+		end
+	end)
+	table.insert(connections, g)
 end
 
-local function getAnimTracks(player)
-	local char = player and player.Character
-	local hum = char and char:FindFirstChild("Humanoid")
-	local animator = hum and hum:FindFirstChildOfClass("Animator")
-	if not animator then return {} end
-	return animator:GetPlayingAnimationTracks()
-end
-
-local function isPlayingAnim(player, idTable)
-	for _, track in ipairs(getAnimTracks(player)) do
-		if track.Animation then
-			local id = track.Animation.AnimationId:match("%d+")
-			if id and idTable[id] then return true, idTable[id] end
+local function hookAll()
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= lp and p.Character then
+			hookPlayer(p)
 		end
 	end
-	return false
 end
+
+-- Hook existing + new players + respawns
+hookAll()
+Players.PlayerAdded:Connect(function(p)
+	p.CharacterAdded:Connect(function() task.wait(0.5); hookPlayer(p) end)
+end)
+for _, p in ipairs(Players:GetPlayers()) do
+	if p ~= lp then
+		p.CharacterAdded:Connect(function() task.wait(0.5); hookPlayer(p) end)
+	end
+end
+
+-- Rehook periodically to catch missed players
+task.spawn(function()
+	while true do
+		task.wait(5)
+		hookAll()
+	end
+end)
 
 ---------- State ----------
 
@@ -182,52 +242,44 @@ local lastBlock = 0
 local lastKick = 0
 local lastPunish = 0
 local lastDodge = 0
+local blockedAnims = {} -- [track] = true, don't double-block same attack
 
 ---------- Main Poll Loop ----------
 
-flash("Auto Parry v3 — polling", Color3.fromRGB(87, 242, 135))
+flash("v4 loaded | " .. attackCount .. " attacks | " .. #Players:GetPlayers() - 1 .. " players", Color3.fromRGB(87, 242, 135))
 
 task.spawn(function()
 	while true do
-		local root = myHRP()
-		if root then
-			-- Sort by distance, focus nearest first
-			local nearby = {}
-			for _, player in ipairs(Players:GetPlayers()) do
-				if player ~= lp then
-					local d = distTo(player)
-					if d <= RANGE then
-						nearby[#nearby + 1] = { player = player, dist = d }
-					end
-				end
-			end
-			table.sort(nearby, function(a, b) return a.dist < b.dist end)
+		if myRoot and hasTool() then
+			local now = tick()
 
-			for _, entry in ipairs(nearby) do
-				local player = entry.player
-				local d = entry.dist
-				local now = tick()
+			-- Find nearest threat
+			local bestTrack, bestPlayer, bestDist, bestId, bestPct = nil, nil, 999, nil, 0
 
-						-- Check ATTACK — block
-						local attacking, wpn = isPlayingAnim(player, ATTACK_IDS)
-						if attacking and isFacing(player) and myTool() and not blocking then
-							if now - lastBlock > 0.3 then
-								lastBlock = now
-								blocking = true
-								blockDown()
-								flash("BLOCK " .. player.Name .. " [" .. (wpn or "?") .. "] " .. math.floor(d) .. "s", Color3.fromRGB(87, 242, 135))
-								task.delay(BLOCK_HOLD, function()
-									if blocking then
-										blockUp()
-										blocking = false
-									end
-								end)
+			for i = #allAnims, 1, -1 do
+				local entry = allAnims[i]
+				local track = entry.track
+				local root = entry.root
+
+				if track.IsPlaying and root and root.Parent then
+					local dist = (myRoot.Position - root.Position).Magnitude
+					if dist <= RANGE then
+						local id = track.Animation and track.Animation.AnimationId:match("%d+")
+						if id and ATTACK_IDS[id] and not blockedAnims[track] then
+							local pct = track.Length > 0 and (track.TimePosition / track.Length) * 100 or 0
+							if pct >= BLOCK_PERCENT and pct <= BLOCK_PERCENT_MAX then
+								if isFacingMe(root) and dist < bestDist then
+									bestTrack = track
+									bestPlayer = entry.player
+									bestDist = dist
+									bestId = id
+									bestPct = pct
+								end
 							end
 						end
 
-						-- Check FEINT — release block + punish
-						local feinting = isPlayingAnim(player, FEINT_IDS)
-						if feinting then
+						-- Feint detection
+						if id and FEINT_IDS[id] then
 							if blocking then
 								blockUp()
 								blocking = false
@@ -235,80 +287,73 @@ task.spawn(function()
 							if now - lastPunish > 0.3 then
 								lastPunish = now
 								swing()
-								flash("PUNISH FEINT " .. player.Name, Color3.fromRGB(0, 170, 255))
+								flash("PUNISH FEINT " .. entry.player.Name, Color3.fromRGB(0, 170, 255))
 							end
 						end
 
-						-- Check BLOCK — kick them
-						local isBlocking = isPlayingAnim(player, BLOCK_IDS)
-						if isBlocking and now - lastKick > 1 then
-							lastKick = now
-							task.delay(0.7, function()
-								if distTo(player) <= RANGE and isPlayingAnim(player, BLOCK_IDS) then
-									kick()
-									flash("KICK " .. player.Name, Color3.fromRGB(255, 100, 100))
-								end
-							end)
+						-- Block detection — kick
+						if id and BLOCK_IDS[id] and now - lastKick > 1 then
+							if isFacingMe(root) then
+								lastKick = now
+								local targetPlayer = entry.player
+								task.delay(0.7, function()
+									local r2 = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+									if r2 and myRoot and (myRoot.Position - r2.Position).Magnitude <= RANGE then
+										kick()
+										flash("KICK " .. targetPlayer.Name, Color3.fromRGB(255, 100, 100))
+									end
+								end)
+							end
 						end
 
-						-- Check KICK on us — dodge
-						local kicking = isPlayingAnim(player, KICK_IDS)
-						if kicking and blocking and now - lastDodge > 1 then
+						-- Kick detection — dodge
+						if id and KICK_IDS[id] and blocking and now - lastDodge > 1 then
 							lastDodge = now
 							blocking = false
 							backDash()
-							flash("DODGE KICK " .. player.Name, Color3.fromRGB(255, 255, 0))
+							flash("DODGE KICK " .. entry.player.Name, Color3.fromRGB(255, 255, 0))
 						end
 
-						-- Check STAGGER — execute
-						local staggered = isPlayingAnim(player, STAGGER_IDS)
-						if staggered and d <= 10 then
+						-- Stagger — execute
+						if id and STAGGER_IDS[id] and dist <= 10 then
 							execute()
-							flash("EXECUTE " .. player.Name, Color3.fromRGB(255, 50, 255))
+							flash("EXECUTE " .. entry.player.Name, Color3.fromRGB(255, 50, 255))
 						end
+					end
+				end
+			end
+
+			-- Block the nearest committed attack
+			if bestTrack and not blocking and now - lastBlock > 0.3 then
+				lastBlock = now
+				blocking = true
+				blockedAnims[bestTrack] = true
+				blockDown()
+				flash(string.format("BLOCK %s [%s] %.0f%% %.0fs",
+					bestPlayer.Name, ATTACK_IDS[bestId], bestPct, bestDist), Color3.fromRGB(87, 242, 135))
+				task.delay(BLOCK_HOLD, function()
+					if blocking then
+						blockUp()
+						blocking = false
+					end
+				end)
 			end
 		end
 		task.wait(POLL_RATE)
 	end
 end)
 
----------- GLINT Detection (fastest path, supplements polling) ----------
-
-local function hookGlint(player, char)
-	if not char or player == lp then return end
-	local c = char.DescendantAdded:Connect(function(desc)
-		if desc.Name == "GLINT" then
-			local d = distTo(player)
-			if d <= RANGE and not blocking and myTool() then
-				local now = tick()
-				if now - lastBlock > 0.3 then
-					lastBlock = now
-					blocking = true
-					blockDown()
-					flash("GLINT BLOCK " .. player.Name .. " " .. math.floor(d) .. "s", Color3.fromRGB(0, 255, 150))
-					task.delay(BLOCK_HOLD, function()
-						if blocking then
-							blockUp()
-							blocking = false
-						end
-					end)
-				end
-			end
+-- Clean stale blocked anims
+task.spawn(function()
+	while true do
+		task.wait(2)
+		for track in pairs(blockedAnims) do
+			if not track.IsPlaying then blockedAnims[track] = nil end
 		end
-	end)
-	table.insert(connections, c)
-end
-
-for _, p in ipairs(Players:GetPlayers()) do
-	if p.Character then hookGlint(p, p.Character) end
-	p.CharacterAdded:Connect(function(char) task.wait(0.3); hookGlint(p, char) end)
-end
-Players.PlayerAdded:Connect(function(p)
-	if p.Character then hookGlint(p, p.Character) end
-	p.CharacterAdded:Connect(function(char) task.wait(0.3); hookGlint(p, char) end)
+	end
 end)
 
----------- Kick landed watcher ----------
+---------- Kick landed ----------
 
 local terrain = workspace:FindFirstChild("Terrain")
 if terrain then
@@ -343,6 +388,8 @@ if _G.SixZeroHubRegister then
 	_G.SixZeroHubRegister("Auto Parry", "[Spec]zo_auto_parry3", function()
 		for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
 		connections = {}
+		allAnims = {}
+		blockedAnims = {}
 		pcall(function() gui:Destroy() end)
 	end, "spec")
 end
