@@ -455,8 +455,18 @@ local function watchPlayer(player, char)
 					end
 				end
 				if nearest then
-					lastKickTime[nearest] = tick()
-					local delay = tick() - (blockStarts[nearest] or tick())
+					local now = tick()
+					-- Measure cooldown between consecutive kicks on same target
+					if lastKickTime[nearest] then
+						local cd = now - lastKickTime[nearest]
+						if cd < 5 then -- only track if reasonable (not across fights)
+							if not data.kickCooldowns then data.kickCooldowns = {} end
+							data.kickCooldowns[#data.kickCooldowns + 1] = math.floor(cd * 1000)
+							addRow(string.format("KICK CD: %dms", math.floor(cd * 1000)), Color3.fromRGB(200, 200, 50))
+						end
+					end
+					lastKickTime[nearest] = now
+					local delay = now - (blockStarts[nearest] or now)
 					addRow(string.format("KICK %s→%s | %.0fms after block | %.1f studs",
 						pName, nearest, delay * 1000, bestDist), Color3.fromRGB(255, 170, 0))
 				end
