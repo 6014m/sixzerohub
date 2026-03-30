@@ -661,40 +661,6 @@ local rsConn = RunService.RenderStepped:Connect(function()
 end)
 table.insert(connections, rsConn)
 
----------- Feint Detection via Workspace.Ignore.Handle ----------
-
-local ignoreFolder = workspace:FindFirstChild("Ignore")
-if ignoreFolder then
-	local handleFolder = ignoreFolder:FindFirstChild("Handle")
-	if handleFolder then
-		local feintConn = handleFolder.ChildAdded:Connect(function(child)
-			-- Something landed in Ignore.Handle = someone feinted
-			-- Find nearest player to the child to figure out who feinted
-			cacheLocal()
-			if not myHRP then return end
-			local pos = nil
-			pcall(function() pos = child.Position or child.CFrame.Position end)
-			if not pos then return end
-
-			local nearest, bestDist = nil, math.huge
-			for i = 1, #playerCache do
-				local p = playerCache[i]
-				local char = p.Character
-				local hrp = char and char:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					local d = (hrp.Position - pos).Magnitude
-					if d < bestDist then bestDist = d; nearest = p end
-				end
-			end
-
-			if nearest and bestDist < RANGE then
-				releaseBlockForFeint(nearest.Name)
-			end
-		end)
-		table.insert(connections, feintConn)
-	end
-end
-
 ---------- BLOCK BROKEN BY KICK — terrain part watcher (info only) ----------
 
 local terrain = workspace:FindFirstChild("Terrain")
