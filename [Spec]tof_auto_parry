@@ -206,7 +206,7 @@ gui.Name = "AutoParry"
 gui.ResetOnSpawn = false
 gui.Parent = playerGui
 
-flashLabel = Instance.new("TextLabel")
+local flashLabel = Instance.new("TextLabel")
 flashLabel.Size = UDim2.new(0, 200, 0, 30)
 flashLabel.Position = UDim2.new(0.5, -100, 0, 50)
 flashLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
@@ -230,8 +230,6 @@ local function watchAnimations(player, char)
 	local c = animator.AnimationPlayed:Connect(function(track)
 		if not track.Animation then return end
 		local id = track.Animation.AnimationId
-		-- Log ALL animations from nearby players to F9
-		warn("[AutoParry] " .. player.Name .. " played: " .. id)
 		if id == PUSH_ANIM_ID then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
 			if hrp then doParry(player, hrp) end
@@ -638,7 +636,7 @@ task.spawn(function()
 					local diff = handle.Position - myPos
 					local dist = diff.Magnitude
 					if dist <= REPEL_RANGE then
-						near = dist <= 10
+						near = near or dist <= 10
 						-- Push it away from us — closer = stronger
 						pcall(function()
 							local dir = dist > 0.1 and (diff / dist) or Vector3.new(0, 0, 1)
