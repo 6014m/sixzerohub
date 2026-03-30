@@ -150,9 +150,10 @@ end
 
 local function shouldParry(theirHRP)
 	if not myHRP then return false end
-	-- Skip ragdolled players
+	-- Skip ragdolled or 1hp players
 	local theirHum = theirHRP.Parent and theirHRP.Parent:FindFirstChildOfClass("Humanoid")
 	if theirHum then
+		if theirHum.Health <= 1 then return false end
 		local state = theirHum:GetState()
 		if state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown then
 			return false
