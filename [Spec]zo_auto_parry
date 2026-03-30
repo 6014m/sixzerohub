@@ -132,21 +132,21 @@ end
 
 local function rightClick()
 	VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton2, true, game, 1)
-	task.delay(0.05, function()
+	task.delay(0.15, function()
 		VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton2, false, game, 1)
 	end)
 end
 
 local function leftClick()
 	VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton1, true, game, 1)
-	task.delay(0.05, function()
+	task.delay(0.15, function()
 		VIM:SendMouseButtonEvent(0, 0, Enum.UserInputType.MouseButton1, false, game, 1)
 	end)
 end
 
 local function pressF()
 	VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-	task.delay(0.05, function()
+	task.delay(0.15, function()
 		VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game)
 	end)
 end
