@@ -378,126 +378,37 @@ local function flash(text, color, duration)
 	task.delay(duration or 1, function() flashLabel.Visible = false end)
 end
 
----------- Test Panel ----------
+---------- Hub Settings: Input Tests ----------
 
-local testPanel = Instance.new("Frame")
-testPanel.Size = UDim2.new(0, 160, 0, 220)
-testPanel.Position = UDim2.new(0, 10, 0.5, -110)
-testPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
-testPanel.BackgroundTransparency = 0.05
-testPanel.BorderSizePixel = 0
-testPanel.Visible = false
-testPanel.Parent = gui
-Instance.new("UICorner", testPanel).CornerRadius = UDim.new(0, 8)
-Instance.new("UIStroke", testPanel).Color = Color3.fromRGB(255, 170, 0)
-
-local testTitle = Instance.new("TextLabel")
-testTitle.Size = UDim2.new(1, 0, 0, 22)
-testTitle.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-testTitle.BorderSizePixel = 0
-testTitle.Text = " Input Test"
-testTitle.TextColor3 = Color3.fromRGB(255, 170, 0)
-testTitle.TextSize = 10
-testTitle.Font = Enum.Font.GothamBold
-testTitle.TextXAlignment = Enum.TextXAlignment.Left
-testTitle.Parent = testPanel
-Instance.new("UICorner", testTitle).CornerRadius = UDim.new(0, 8)
-
--- Drag
-local tDrag, tDragS, tDragP = false, nil, nil
-testTitle.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then tDrag = true; tDragS = i.Position; tDragP = testPanel.Position end end)
-game:GetService("UserInputService").InputChanged:Connect(function(i) if tDrag and i.UserInputType == Enum.UserInputType.MouseMovement then local d = i.Position - tDragS; testPanel.Position = UDim2.new(tDragP.X.Scale, tDragP.X.Offset + d.X, tDragP.Y.Scale, tDragP.Y.Offset + d.Y) end end)
-game:GetService("UserInputService").InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then tDrag = false end end)
-
-local testLayout = Instance.new("UIListLayout")
-testLayout.Padding = UDim.new(0, 3)
-testLayout.SortOrder = Enum.SortOrder.LayoutOrder
-testLayout.Parent = testPanel
-
--- Spacer for title
-local spacer = Instance.new("Frame")
-spacer.Size = UDim2.new(1, 0, 0, 22)
-spacer.BackgroundTransparency = 1
-spacer.LayoutOrder = 0
-spacer.Parent = testPanel
-
-local function makeTestBtn(name, layoutOrder, fn)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, -12, 0, 24)
-	btn.Position = UDim2.new(0, 6, 0, 0)
-	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 46)
-	btn.BorderSizePixel = 0
-	btn.Text = name
-	btn.TextColor3 = Color3.new(1, 1, 1)
-	btn.TextSize = 10
-	btn.Font = Enum.Font.GothamBold
-	btn.AutoButtonColor = false
-	btn.LayoutOrder = layoutOrder
-	btn.Parent = testPanel
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-	btn.MouseButton1Click:Connect(fn)
-	return btn
+if _G.SixZeroHubRegisterSettings then
+	_G.SixZeroHubRegisterSettings("[Spec]zo_auto_parry", {
+		{ name = "test_block_05", label = "Test Block (0.5s)", type = "button", buttonText = "Block", onClick = function()
+			rightClickDown()
+			flash("TEST: Block DOWN", Color3.fromRGB(87, 242, 135), 0.5)
+			task.delay(0.5, function() rightClickUp(); flash("TEST: Block UP", Color3.fromRGB(255, 100, 100), 0.5) end)
+		end },
+		{ name = "test_block_1", label = "Test Block (1s)", type = "button", buttonText = "Block", onClick = function()
+			rightClickDown()
+			flash("TEST: Block DOWN 1s", Color3.fromRGB(87, 242, 135), 1)
+			task.delay(1, function() rightClickUp(); flash("TEST: Block UP", Color3.fromRGB(255, 100, 100), 0.5) end)
+		end },
+		{ name = "test_lclick", label = "Test Left Click", type = "button", buttonText = "Swing", onClick = function()
+			leftClick(); flash("TEST: Left Click", Color3.fromRGB(0, 170, 255), 0.5)
+		end },
+		{ name = "test_rclick", label = "Test Right Click", type = "button", buttonText = "Block", onClick = function()
+			rightClick(); flash("TEST: Right Click", Color3.fromRGB(0, 170, 255), 0.5)
+		end },
+		{ name = "test_kick", label = "Test Kick (F)", type = "button", buttonText = "Kick", onClick = function()
+			pressF(); flash("TEST: Kick", Color3.fromRGB(255, 100, 100), 0.5)
+		end },
+		{ name = "test_execute", label = "Test Execute (E)", type = "button", buttonText = "Exec", onClick = function()
+			pressE(); flash("TEST: Execute", Color3.fromRGB(255, 50, 255), 0.5)
+		end },
+		{ name = "test_backdash", label = "Test Back Dash", type = "button", buttonText = "Dash", onClick = function()
+			backDash(); flash("TEST: Back Dash", Color3.fromRGB(255, 255, 0), 0.5)
+		end },
+	})
 end
-
-makeTestBtn("Block (hold 0.5s)", 1, function()
-	rightClickDown()
-	flash("TEST: Block DOWN", Color3.fromRGB(87, 242, 135), 0.5)
-	task.delay(0.5, function()
-		rightClickUp()
-		flash("TEST: Block UP", Color3.fromRGB(255, 100, 100), 0.5)
-	end)
-end)
-
-makeTestBtn("Block (hold 1s)", 2, function()
-	rightClickDown()
-	flash("TEST: Block DOWN 1s", Color3.fromRGB(87, 242, 135), 1)
-	task.delay(1, function()
-		rightClickUp()
-		flash("TEST: Block UP", Color3.fromRGB(255, 100, 100), 0.5)
-	end)
-end)
-
-makeTestBtn("Left Click", 3, function()
-	leftClick()
-	flash("TEST: Left Click", Color3.fromRGB(0, 170, 255), 0.5)
-end)
-
-makeTestBtn("Right Click", 4, function()
-	rightClick()
-	flash("TEST: Right Click", Color3.fromRGB(0, 170, 255), 0.5)
-end)
-
-makeTestBtn("Kick (F)", 5, function()
-	pressF()
-	flash("TEST: Kick", Color3.fromRGB(255, 100, 100), 0.5)
-end)
-
-makeTestBtn("Execute (E)", 6, function()
-	pressE()
-	flash("TEST: Execute", Color3.fromRGB(255, 50, 255), 0.5)
-end)
-
-makeTestBtn("Back Dash", 7, function()
-	backDash()
-	flash("TEST: Back Dash", Color3.fromRGB(255, 255, 0), 0.5)
-end)
-
--- Toggle button on the flash label area
-local testToggle = Instance.new("TextButton")
-testToggle.Size = UDim2.new(0, 40, 0, 20)
-testToggle.Position = UDim2.new(0.5, 125, 0, 55)
-testToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 46)
-testToggle.BorderSizePixel = 0
-testToggle.Text = "TEST"
-testToggle.TextColor3 = Color3.fromRGB(255, 170, 0)
-testToggle.TextSize = 9
-testToggle.Font = Enum.Font.GothamBold
-testToggle.Parent = gui
-Instance.new("UICorner", testToggle).CornerRadius = UDim.new(0, 4)
-
-testToggle.MouseButton1Click:Connect(function()
-	testPanel.Visible = not testPanel.Visible
-end)
 
 ---------- Self Tracking ----------
 
