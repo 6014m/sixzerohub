@@ -612,15 +612,8 @@ local function stopHandleFD()
 end
 
 local function checkHandle(obj)
-	if obj.Name == "Handle" and obj:IsA("BasePart") then
-		-- Skip handles inside tools (every equipped/backpack tool has a Handle)
-		if obj.Parent and obj.Parent:IsA("Tool") then return end
-		-- Skip handles inside any player character
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p.Character and obj:IsDescendantOf(p.Character) then return end
-		end
+	if obj.Name == "Handle" and obj:IsA("BasePart") and obj.Parent == workspace then
 		trackedHandles[obj] = true
-		-- Yeet it
 		pcall(function()
 			obj.CFrame = CFrame.new(0, -500, 0)
 			obj.AssemblyLinearVelocity = Vector3.new(0, -1000, 0)
@@ -629,13 +622,11 @@ local function checkHandle(obj)
 	end
 end
 
--- Clean up removed handles
-workspace.DescendantRemoving:Connect(function(obj)
+workspace.ChildAdded:Connect(checkHandle)
+workspace.ChildRemoving:Connect(function(obj)
 	if trackedHandles[obj] then trackedHandles[obj] = nil end
 end)
-
-for _, v in ipairs(workspace:GetDescendants()) do checkHandle(v) end
-workspace.DescendantAdded:Connect(checkHandle)
+for _, v in ipairs(workspace:GetChildren()) do checkHandle(v) end
 
 -- Proximity loop: keep FD active while any Handle is within 10 studs
 task.spawn(function()
