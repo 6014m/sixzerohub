@@ -213,6 +213,34 @@ local function pressE()
 	end
 end
 
+local function backDash()
+	-- Release block, hold S, tap R for backwards dash
+	rightClickUp()
+	if keypress then
+		keypress(0x53) -- S down
+		task.delay(0.05, function()
+			keypress(0x52) -- R tap
+			task.delay(0.15, function()
+				if keyrelease then keyrelease(0x52) end
+			end)
+		end)
+		task.delay(0.4, function()
+			if keyrelease then keyrelease(0x53) end -- S up
+		end)
+	else
+		VIM:SendKeyEvent(true, Enum.KeyCode.S, false, game)
+		task.delay(0.05, function()
+			VIM:SendKeyEvent(true, Enum.KeyCode.R, false, game)
+			task.delay(0.15, function()
+				VIM:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+			end)
+		end)
+		task.delay(0.4, function()
+			VIM:SendKeyEvent(false, Enum.KeyCode.S, false, game)
+		end)
+	end
+end
+
 ---------- Threat Priority ----------
 
 -- Lower threat score = more dangerous (closer relative to weapon range)
@@ -478,6 +506,15 @@ local function onEnemyAnimation(player, animInfo, track)
 		-- They're staggered from broken guard — execute with E
 		pressE()
 		flash("EXECUTE " .. pName, Color3.fromRGB(255, 50, 255))
+
+	elseif animInfo.type == KICK and player ~= lp then
+		-- Enemy is kicking — if we're blocking, back dash to dodge
+		if holdingBlock or myBlocking then
+			holdingBlock = false
+			glintSource = nil
+			backDash()
+			flash("DODGE KICK — " .. pName, Color3.fromRGB(255, 255, 0))
+		end
 
 	elseif animInfo.type == FEINT then
 		-- They feinted — release our held block and punish
