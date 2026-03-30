@@ -1,6 +1,8 @@
 -- Auto Parry — maximum speed
 -- AnimationPlayed + Tool equip + RenderStepped + Heartbeat + Backpack watch
 
+task.spawn(function()
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local lp = Players.LocalPlayer
@@ -676,3 +678,5 @@ task.spawn(function()
 		task.wait(0.05)
 	end
 end)
+
+end) -- end task.spawn wrapper
