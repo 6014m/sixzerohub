@@ -545,13 +545,14 @@ if terrain then
 				flash("BLOCK CONFIRMED", Color3.fromRGB(87, 242, 135))
 			end
 		elseif child.Name == "PERFECT BLOCK" then
-			-- Perfect block — release and back dash immediately
-			if blocking then
-				blocking = false
-				blockTarget = nil
-			end
-			backDash()
-			flash("PERFECT BLOCK — DASH", Color3.fromRGB(255, 0, 255))
+			-- Someone hit a perfect block — check if the part is near me (I got perfect blocked)
+			pcall(function()
+				if myRoot and child:IsA("BasePart") and (myRoot.Position - child.Position).Magnitude <= RANGE then
+					if blocking then blocking = false; blockTarget = nil; blockUp() end
+					backDash()
+					flash("GOT PERFECT BLOCKED — DASH", Color3.fromRGB(255, 0, 255))
+				end
+			end)
 		end
 	end)
 end
