@@ -333,7 +333,7 @@ end
 
 local function startMonitoring()
 	local conn = game.DescendantAdded:Connect(function(desc)
-		if isEffect(desc) and not isPlayerDescendant(desc) then
+		if isEffect(desc) then
 			addEntry(desc)
 		end
 	end)
