@@ -142,7 +142,7 @@ local function refreshList()
 			idLbl.Parent = row
 
 			local pathLbl = Instance.new("TextLabel")
-			pathLbl.Size = UDim2.new(1, -8, 0, 14)
+			pathLbl.Size = UDim2.new(1, -38, 0, 14)
 			pathLbl.Position = UDim2.new(0, 6, 0, 18)
 			pathLbl.BackgroundTransparency = 1
 			pathLbl.Text = entry.path
@@ -153,6 +153,46 @@ local function refreshList()
 			pathLbl.TextTruncate = Enum.TextTruncate.AtEnd
 			pathLbl.Parent = row
 
+			-- Play/stop preview button
+			local playBtn = Instance.new("TextButton")
+			playBtn.Size = UDim2.new(0, 28, 0, 28)
+			playBtn.Position = UDim2.new(1, -32, 0, 4)
+			playBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 56)
+			playBtn.BorderSizePixel = 0
+			playBtn.Text = ">"
+			playBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
+			playBtn.TextSize = 14
+			playBtn.Font = Enum.Font.GothamBold
+			playBtn.Parent = row
+			Instance.new("UICorner", playBtn).CornerRadius = UDim.new(0, 4)
+
+			local previewSound = nil
+			playBtn.MouseButton1Click:Connect(function()
+				if previewSound and previewSound.IsPlaying then
+					previewSound:Stop()
+					previewSound:Destroy()
+					previewSound = nil
+					playBtn.Text = ">"
+					playBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
+				else
+					if previewSound then pcall(function() previewSound:Destroy() end) end
+					previewSound = Instance.new("Sound")
+					previewSound.SoundId = "rbxassetid://" .. entry.id
+					previewSound.Volume = 0.5
+					previewSound.Parent = game:GetService("SoundService")
+					previewSound:Play()
+					playBtn.Text = "||"
+					playBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+					previewSound.Ended:Connect(function()
+						playBtn.Text = ">"
+						playBtn.TextColor3 = Color3.fromRGB(87, 242, 135)
+						pcall(function() previewSound:Destroy() end)
+						previewSound = nil
+					end)
+				end
+			end)
+
+			-- Click row to copy ID
 			row.MouseButton1Click:Connect(function()
 				pcall(function()
 					if setclipboard then setclipboard("rbxassetid://" .. entry.id)
