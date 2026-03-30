@@ -164,6 +164,25 @@ local function backDash()
 	end)
 end
 
+---------- Camera Lock-On ----------
+
+local camera = workspace.CurrentCamera
+local lockTarget = nil
+
+local function lookAt(targetRoot)
+	if not myRoot or not targetRoot or not camera then return end
+	local myPos = myRoot.Position
+	local theirPos = targetRoot.Position
+	-- Horizontal only — keep current Y angle
+	local dir = Vector3.new(theirPos.X - myPos.X, 0, theirPos.Z - myPos.Z)
+	if dir.Magnitude < 0.1 then return end
+	dir = dir.Unit
+	local camPos = camera.CFrame.Position
+	local currentLook = camera.CFrame.LookVector
+	local newLook = Vector3.new(dir.X, currentLook.Y, dir.Z).Unit
+	camera.CFrame = CFrame.lookAt(camPos, camPos + newLook)
+end
+
 ---------- GUI ----------
 
 local gui = Instance.new("ScreenGui")
@@ -274,6 +293,7 @@ local function hookPlayer(player)
 			local root = char:FindFirstChild("HumanoidRootPart")
 			if root and myRoot and (myRoot.Position - root.Position).Magnitude <= RANGE then
 				lastFeint = tick()
+				lookAt(root)
 				blockDown()
 				task.delay(0.15, function() blockUp() end)
 				flash("INSTANT FEINT — " .. player.Name, Color3.fromRGB(255, 150, 50))
@@ -300,6 +320,7 @@ local function hookPlayer(player)
 				blocking = true
 				blockTarget = player
 				blockConfirmed = false
+				lookAt(hrp)
 				blockDown()
 				flash("GLINT BLOCK " .. player.Name, Color3.fromRGB(0, 255, 150))
 				-- Safety release 2s
@@ -458,6 +479,7 @@ task.spawn(function()
 							end
 							if now - lastPunish > 0.3 then
 								lastPunish = now
+								lookAt(root)
 								swing()
 								flash("PUNISH FEINT " .. entry.player.Name, Color3.fromRGB(0, 170, 255))
 							end
@@ -471,6 +493,7 @@ task.spawn(function()
 								task.delay(0.5, function()
 									local r2 = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
 									if r2 and myRoot and (myRoot.Position - r2.Position).Magnitude <= RANGE then
+										lookAt(r2)
 										kick()
 										flash("KICK " .. targetPlayer.Name, Color3.fromRGB(255, 100, 100))
 									end
@@ -488,6 +511,7 @@ task.spawn(function()
 
 						-- Stagger — execute
 						if id and STAGGER_IDS[id] and dist <= 10 then
+							lookAt(root)
 							execute()
 							flash("EXECUTE " .. entry.player.Name, Color3.fromRGB(255, 50, 255))
 						end
@@ -502,6 +526,8 @@ task.spawn(function()
 				blockTarget = bestPlayer
 				blockConfirmed = false
 				blockedAnims[bestTrack] = true
+				local bRoot = bestPlayer.Character and bestPlayer.Character:FindFirstChild("HumanoidRootPart")
+				if bRoot then lookAt(bRoot) end
 				blockDown()
 				flash(string.format("BLOCK %s [%s] %.0f%% %.0fs",
 					bestPlayer.Name, ATTACK_IDS[bestId], bestPct, bestDist), Color3.fromRGB(87, 242, 135))
@@ -564,6 +590,20 @@ task.spawn(function()
 
 			-- Auto attack when safe
 			if canSwingSafely() then
+				-- Face nearest target before swinging
+				local nearDist, nearRoot = 999, nil
+				for _, p in ipairs(Players:GetPlayers()) do
+					if p ~= lp then
+						local c = p.Character
+						local r = c and c:FindFirstChild("HumanoidRootPart")
+						local h = c and c:FindFirstChildOfClass("Humanoid")
+						if r and h and h.Health > 0 and myRoot then
+							local d = (myRoot.Position - r.Position).Magnitude
+							if d < nearDist then nearDist = d; nearRoot = r end
+						end
+					end
+				end
+				if nearRoot then lookAt(nearRoot) end
 				lastSwing = tick()
 				swing()
 				flash("ATTACK", Color3.fromRGB(255, 200, 50))
