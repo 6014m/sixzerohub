@@ -1,0 +1,345 @@
+-- Zo Samurai Auto Parry v3
+-- Polling-based like proven working scripts + GLINT detection + full combat responses
+
+task.spawn(function()
+
+local Players = game:GetService("Players")
+local VIM = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
+local lp = Players.LocalPlayer
+local playerGui = lp:WaitForChild("PlayerGui")
+local connections = {}
+
+---------- Settings ----------
+
+local RANGE = 20
+local POLL_RATE = 0.03
+local BLOCK_HOLD = 0.4
+local FOV = 220
+
+---------- Animation IDs ----------
+
+local ATTACK_IDS = {}
+local BLOCK_IDS = {}
+local FEINT_IDS = {}
+local KICK_IDS = { ["6907975812"] = true }
+local STAGGER_IDS = { ["15612208633"] = true }
+local EQUIP_IDS = {}
+
+local function reg(name, a1, a2, a3, a4, block, feint, equip)
+	if a1 then ATTACK_IDS[tostring(a1)] = name end
+	if a2 then ATTACK_IDS[tostring(a2)] = name end
+	if a3 then ATTACK_IDS[tostring(a3)] = name end
+	if a4 then ATTACK_IDS[tostring(a4)] = name end
+	if block then BLOCK_IDS[tostring(block)] = name end
+	if feint then FEINT_IDS[tostring(feint)] = name end
+	if equip then EQUIP_IDS[tostring(equip)] = name end
+end
+
+reg("Katana",     6678908798, 6678909967, 6678913068, 6678914641, 6678915740, 13522514295, 6678901989)
+reg("Naginata",   6708118912, 6835409260, 6708121991, 6708121121, 6708116223, 13521669139, 6708366285)
+reg("Tanto",      7845695759, 7845695236, 7845696985, 7845696360, 7845348044, 13521591312, 7845344059)
+reg("Kanabo",     14483365680, 6995853850, 6996771877, 7011157033, 6986985774, 13521582897, 6986949380)
+reg("Kusarigama", 11941288362, 11941292174, 11941309395, 11941314458, 11941247104, 13521767819, 10714577721)
+reg("Caestus",    11752087150, 11752098805, 11752104735, 11752111783, 11579873330, 13521763633, 11579966570)
+reg("Odachi",     13537213350, 13537219514, 13537224645, 13537230809, 13537206453, 13540496277, 13537187380)
+reg("Scythe",     14349499924, 14349501923, 14349504049, 14349506078, 6708116223, 13521669139, 8574242501)
+
+-- Extra ID found in working script
+ATTACK_IDS["11753430563"] = "Katana"
+
+-- Discovered from logger
+ATTACK_IDS["182393478"] = "Unknown"
+ATTACK_IDS["6678894658"] = "Unknown"
+ATTACK_IDS["6856453579"] = "Unknown"
+ATTACK_IDS["6678892469"] = "Unknown"
+
+---------- Input ----------
+
+local function blockDown()
+	VIM:SendMouseButtonEvent(0, 0, 1, true, game, 0)
+end
+
+local function blockUp()
+	VIM:SendMouseButtonEvent(0, 0, 1, false, game, 0)
+end
+
+local function swing()
+	VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+	task.delay(0.15, function()
+		VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+	end)
+end
+
+local function kick()
+	if keypress then
+		keypress(0x46)
+		task.delay(0.15, function() keyrelease(0x46) end)
+	else
+		VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+		task.delay(0.15, function() VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game) end)
+	end
+end
+
+local function execute()
+	if keypress then
+		keypress(0x45)
+		task.delay(0.15, function() keyrelease(0x45) end)
+	else
+		VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+		task.delay(0.15, function() VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
+	end
+end
+
+local function backDash()
+	blockUp()
+	if keypress then
+		keypress(0x53)
+		task.delay(0.05, function()
+			keypress(0x52)
+			task.delay(0.15, function() keyrelease(0x52) end)
+		end)
+		task.delay(0.4, function() keyrelease(0x53) end)
+	end
+end
+
+---------- GUI ----------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "ZoAutoParry"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local label = Instance.new("TextLabel")
+label.Size = UDim2.new(0, 300, 0, 26)
+label.Position = UDim2.new(0.5, -150, 0, 50)
+label.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+label.BackgroundTransparency = 0.1
+label.BorderSizePixel = 0
+label.TextColor3 = Color3.fromRGB(87, 242, 135)
+label.Font = Enum.Font.GothamBold
+label.TextSize = 11
+label.Text = "Auto Parry v3 loading..."
+label.Visible = true
+label.Parent = gui
+Instance.new("UICorner", label).CornerRadius = UDim.new(0, 6)
+
+local function flash(text, color)
+	label.Text = text
+	label.TextColor3 = color or Color3.fromRGB(87, 242, 135)
+end
+
+---------- Helpers ----------
+
+local function getHRP(player)
+	local char = player and player.Character
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function myHRP()
+	local char = lp.Character
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function myTool()
+	local char = lp.Character
+	return char and char:FindFirstChildOfClass("Tool")
+end
+
+local function distTo(player)
+	local a, b = myHRP(), getHRP(player)
+	if not a or not b then return 999 end
+	return (a.Position - b.Position).Magnitude
+end
+
+local function isFacing(player)
+	local a, b = myHRP(), getHRP(player)
+	if not a or not b then return false end
+	local look = b.CFrame.LookVector
+	local dir = (a.Position - b.Position).Unit
+	local val = ((look - dir).Magnitude / 2) ^ 2
+	return val < FOV
+end
+
+local function getAnimTracks(player)
+	local char = player and player.Character
+	local hum = char and char:FindFirstChild("Humanoid")
+	local animator = hum and hum:FindFirstChildOfClass("Animator")
+	if not animator then return {} end
+	return animator:GetPlayingAnimationTracks()
+end
+
+local function isPlayingAnim(player, idTable)
+	for _, track in ipairs(getAnimTracks(player)) do
+		if track.Animation then
+			local id = track.Animation.AnimationId:match("%d+")
+			if id and idTable[id] then return true, idTable[id] end
+		end
+	end
+	return false
+end
+
+---------- State ----------
+
+local blocking = false
+local lastBlock = 0
+local lastKick = 0
+local lastPunish = 0
+local lastDodge = 0
+
+---------- Main Poll Loop ----------
+
+flash("Auto Parry v3 — polling", Color3.fromRGB(87, 242, 135))
+
+task.spawn(function()
+	while true do
+		local root = myHRP()
+		if root then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= lp then
+					local d = distTo(player)
+					if d <= RANGE then
+						local now = tick()
+
+						-- Check ATTACK — block
+						local attacking, wpn = isPlayingAnim(player, ATTACK_IDS)
+						if attacking and isFacing(player) and myTool() and not blocking then
+							if now - lastBlock > 0.3 then
+								lastBlock = now
+								blocking = true
+								blockDown()
+								flash("BLOCK " .. player.Name .. " [" .. (wpn or "?") .. "] " .. math.floor(d) .. "s", Color3.fromRGB(87, 242, 135))
+								task.delay(BLOCK_HOLD, function()
+									if blocking then
+										blockUp()
+										blocking = false
+									end
+								end)
+							end
+						end
+
+						-- Check FEINT — release block + punish
+						local feinting = isPlayingAnim(player, FEINT_IDS)
+						if feinting then
+							if blocking then
+								blockUp()
+								blocking = false
+							end
+							if now - lastPunish > 0.3 then
+								lastPunish = now
+								swing()
+								flash("PUNISH FEINT " .. player.Name, Color3.fromRGB(0, 170, 255))
+							end
+						end
+
+						-- Check BLOCK — kick them
+						local isBlocking = isPlayingAnim(player, BLOCK_IDS)
+						if isBlocking and now - lastKick > 1 then
+							lastKick = now
+							task.delay(0.7, function()
+								if distTo(player) <= RANGE and isPlayingAnim(player, BLOCK_IDS) then
+									kick()
+									flash("KICK " .. player.Name, Color3.fromRGB(255, 100, 100))
+								end
+							end)
+						end
+
+						-- Check KICK on us — dodge
+						local kicking = isPlayingAnim(player, KICK_IDS)
+						if kicking and blocking and now - lastDodge > 1 then
+							lastDodge = now
+							blocking = false
+							backDash()
+							flash("DODGE KICK " .. player.Name, Color3.fromRGB(255, 255, 0))
+						end
+
+						-- Check STAGGER — execute
+						local staggered = isPlayingAnim(player, STAGGER_IDS)
+						if staggered and d <= 10 then
+							execute()
+							flash("EXECUTE " .. player.Name, Color3.fromRGB(255, 50, 255))
+						end
+					end
+				end
+			end
+		end
+		task.wait(POLL_RATE)
+	end
+end)
+
+---------- GLINT Detection (fastest path, supplements polling) ----------
+
+local function hookGlint(player, char)
+	if not char or player == lp then return end
+	local c = char.DescendantAdded:Connect(function(desc)
+		if desc.Name == "GLINT" then
+			local d = distTo(player)
+			if d <= RANGE and not blocking and myTool() then
+				local now = tick()
+				if now - lastBlock > 0.3 then
+					lastBlock = now
+					blocking = true
+					blockDown()
+					flash("GLINT BLOCK " .. player.Name .. " " .. math.floor(d) .. "s", Color3.fromRGB(0, 255, 150))
+					task.delay(BLOCK_HOLD, function()
+						if blocking then
+							blockUp()
+							blocking = false
+						end
+					end)
+				end
+			end
+		end
+	end)
+	table.insert(connections, c)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+	if p.Character then hookGlint(p, p.Character) end
+	p.CharacterAdded:Connect(function(char) task.wait(0.3); hookGlint(p, char) end)
+end
+Players.PlayerAdded:Connect(function(p)
+	if p.Character then hookGlint(p, p.Character) end
+	p.CharacterAdded:Connect(function(char) task.wait(0.3); hookGlint(p, char) end)
+end)
+
+---------- Kick landed watcher ----------
+
+local terrain = workspace:FindFirstChild("Terrain")
+if terrain then
+	terrain.ChildAdded:Connect(function(child)
+		if child.Name == "BLOCK BROKEN BY KICK" then
+			flash("KICK LANDED", Color3.fromRGB(255, 170, 0))
+		end
+	end)
+end
+
+---------- Hub ----------
+
+if _G.SixZeroHubRegisterSettings then
+	_G.SixZeroHubRegisterSettings("[Spec]zo_auto_parry3", {
+		{ name = "test_block", label = "Test Block", type = "button", buttonText = "Block", onClick = function()
+			blockDown(); flash("BLOCK DOWN", Color3.fromRGB(87, 242, 135))
+			task.delay(0.5, function() blockUp(); flash("BLOCK UP", Color3.fromRGB(255, 100, 100)) end)
+		end },
+		{ name = "test_swing", label = "Test Swing", type = "button", buttonText = "Swing", onClick = function()
+			swing(); flash("SWING", Color3.fromRGB(0, 170, 255))
+		end },
+		{ name = "test_kick", label = "Test Kick", type = "button", buttonText = "Kick", onClick = function()
+			kick(); flash("KICK", Color3.fromRGB(255, 100, 100))
+		end },
+		{ name = "test_dash", label = "Test Back Dash", type = "button", buttonText = "Dash", onClick = function()
+			backDash(); flash("BACK DASH", Color3.fromRGB(255, 255, 0))
+		end },
+	})
+end
+
+if _G.SixZeroHubRegister then
+	_G.SixZeroHubRegister("Auto Parry", "[Spec]zo_auto_parry3", function()
+		for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
+		connections = {}
+		pcall(function() gui:Destroy() end)
+	end, "spec")
+end
+
+end)
