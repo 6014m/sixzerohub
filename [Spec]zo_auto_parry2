@@ -583,6 +583,9 @@ local function watchEnemy(player, char)
 		if not id then return end
 		local info = animDB[id]
 		if info then
+			if info.type == ATTACK and inRange(char:FindFirstChild("HumanoidRootPart")) then
+				flash("DETECTED " .. player.Name .. " " .. info.weapon .. " " .. info.move, Color3.fromRGB(255, 255, 255), 0.3)
+			end
 			onEnemyAnimation(player, info, track)
 		end
 	end)
