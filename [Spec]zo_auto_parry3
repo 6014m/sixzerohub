@@ -540,11 +540,18 @@ if terrain then
 		if child.Name == "BLOCK BROKEN BY KICK" then
 			flash("KICK LANDED", Color3.fromRGB(255, 170, 0))
 		elseif child.Name == "NORMAL BLOCK" then
-			-- Our block caught a hit — safe to release after attack ends
 			if blocking then
 				blockConfirmed = true
 				flash("BLOCK CONFIRMED", Color3.fromRGB(87, 242, 135))
 			end
+		elseif child.Name == "PERFECT BLOCK" then
+			-- Perfect block — release and back dash immediately
+			if blocking then
+				blocking = false
+				blockTarget = nil
+			end
+			backDash()
+			flash("PERFECT BLOCK — DASH", Color3.fromRGB(255, 0, 255))
 		end
 	end)
 end
