@@ -642,10 +642,33 @@ if terrain then
 		elseif child.Name == "PERFECT BLOCK" then
 			pcall(function()
 				if myRoot and child:IsA("BasePart") and (myRoot.Position - child.Position).Magnitude <= RANGE then
-					if blocking then blocking = false; blockTarget = nil; blockUp() end
-					lastPerfectBlocked = tick()
-					backDash()
-					flash("GOT PERFECT BLOCKED — DASH", Color3.fromRGB(255, 0, 255))
+					if blocking then
+						-- WE landed the perfect block — release and punish
+						blockUp()
+						blocking = false
+						blockTarget = nil
+						-- Face nearest enemy and swing
+						local nearRoot = nil
+						local nearDist = 999
+						for _, p in ipairs(Players:GetPlayers()) do
+							if p ~= lp then
+								local c = p.Character
+								local r = c and c:FindFirstChild("HumanoidRootPart")
+								if r then
+									local d = (myRoot.Position - r.Position).Magnitude
+									if d < nearDist then nearDist = d; nearRoot = r end
+								end
+							end
+						end
+						if nearRoot then lookAt(nearRoot) end
+						swing()
+						flash("PERFECT BLOCK — PUNISH", Color3.fromRGB(0, 255, 100))
+					else
+						-- THEY perfect blocked us — back dash
+						lastPerfectBlocked = tick()
+						backDash()
+						flash("GOT PERFECT BLOCKED — DASH", Color3.fromRGB(255, 0, 255))
+					end
 				end
 			end)
 		end
