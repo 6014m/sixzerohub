@@ -639,7 +639,7 @@ local function checkHandle(obj)
 end
 
 workspace.ChildAdded:Connect(checkHandle)
-workspace.ChildRemoving:Connect(function(obj)
+workspace.ChildRemoved:Connect(function(obj)
 	if trackedHandles[obj] then trackedHandles[obj] = nil end
 end)
 for _, v in ipairs(workspace:GetChildren()) do checkHandle(v) end
