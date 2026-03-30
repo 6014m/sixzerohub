@@ -90,6 +90,40 @@ scanGameAnimations()
 local attackCount = 0
 for _ in pairs(ATTACK_IDS) do attackCount = attackCount + 1 end
 
+---------- Per-weapon ranges (measured reach - 1 stud) ----------
+
+local WEAPON_HIT_RANGE = {
+	Naginata = 12,
+	Odachi = 11,
+	Tanto = 6,
+	-- No measured data yet, estimates from wiki ranking
+	Scythe = 12,
+	Kusarigama = 12,
+	Katana = 9,
+	Kanabo = 9,
+	Caestus = 6,
+}
+
+local function getMyWeaponRange()
+	local char = lp.Character
+	if not char then return 8 end
+	local tool = char:FindFirstChildOfClass("Tool")
+	if not tool then return 8 end
+	-- Match tool name to known weapons
+	local name = tool.Name:lower()
+	for wpn, range in pairs(WEAPON_HIT_RANGE) do
+		if name:find(wpn:lower()) then return range end
+	end
+	-- Fallback: measure the tool
+	local maxLen = 0
+	for _, part in ipairs(tool:GetDescendants()) do
+		if part:IsA("BasePart") then
+			maxLen = math.max(maxLen, part.Size.X, part.Size.Y, part.Size.Z)
+		end
+	end
+	return maxLen > 0 and math.floor(maxLen + 3) or 8
+end
+
 ---------- Input ----------
 
 local function blockDown()
@@ -330,7 +364,6 @@ local blockedAnims = {} -- [track] = true, don't double-block same attack
 -- and we're not currently blocking
 
 local SWING_CD = 0.5
-local SWING_RANGE = 12 -- only swing when close enough to actually hit
 
 local function isPlayerDoingAnim(root, idTable)
 	for _, entry in ipairs(allAnims) do
@@ -349,14 +382,15 @@ local function canSwingSafely()
 	if now - lastBlock < 0.3 then return false end -- just blocked, wait
 	if now - lastSwing < SWING_CD then return false end
 
-	-- Check all nearby players
+	-- Check all nearby players — only swing if our weapon can reach
+	local myRange = getMyWeaponRange()
 	local hasTarget = false
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= lp then
 			local char = p.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
 			local root = char and char:FindFirstChild("HumanoidRootPart")
-			if root and hum and hum.Health > 0 and (myRoot.Position - root.Position).Magnitude <= SWING_RANGE then
+			if root and hum and hum.Health > 0 and (myRoot.Position - root.Position).Magnitude <= myRange then
 				-- Someone alive is in swing range
 				hasTarget = true
 
