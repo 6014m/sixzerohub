@@ -214,12 +214,21 @@ local function hookPlayer(player)
 
 	-- GLINT
 	local g = char.DescendantAdded:Connect(function(desc)
-		if desc.Name == "GLINT" and myRoot then
+		if desc.Name == "GLINT" and myRoot and not blocking then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp and (myRoot.Position - hrp.Position).Magnitude <= RANGE and hasTool() then
+			if hrp and isFacingMe(hrp) and (myRoot.Position - hrp.Position).Magnitude <= RANGE and hasTool() then
+				lastBlock = tick()
+				blocking = true
+				blockTarget = player
+				blockConfirmed = false
 				blockDown()
 				flash("GLINT BLOCK " .. player.Name, Color3.fromRGB(0, 255, 150))
-				task.delay(BLOCK_HOLD, function() blockUp() end)
+				-- Safety release 2s
+				task.delay(2, function()
+					if blocking and blockTarget == player then
+						blockUp(); blocking = false; blockTarget = nil
+					end
+				end)
 			end
 		end
 	end)
@@ -256,6 +265,8 @@ end)
 ---------- State ----------
 
 local blocking = false
+local blockTarget = nil -- player we're blocking against
+local blockConfirmed = false -- NORMAL BLOCK appeared = our block caught a hit
 local lastBlock = 0
 local lastKick = 0
 local lastPunish = 0
@@ -401,16 +412,48 @@ task.spawn(function()
 			if bestTrack and not blocking and now - lastBlock > 0.3 then
 				lastBlock = now
 				blocking = true
+				blockTarget = bestPlayer
+				blockConfirmed = false
 				blockedAnims[bestTrack] = true
 				blockDown()
 				flash(string.format("BLOCK %s [%s] %.0f%% %.0fs",
 					bestPlayer.Name, ATTACK_IDS[bestId], bestPct, bestDist), Color3.fromRGB(87, 242, 135))
-				task.delay(BLOCK_HOLD, function()
-					if blocking then
+
+				-- Safety release after 2s max
+				task.delay(2, function()
+					if blocking and blockTarget == bestPlayer then
 						blockUp()
 						blocking = false
+						blockTarget = nil
 					end
 				end)
+			end
+
+			-- Smart block release: if we're blocking, check if attacker is still threatening
+			if blocking and blockTarget and now - lastBlock > 0.3 then
+				local stillThreat = false
+				local tChar = blockTarget.Character
+				local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+				if tRoot and myRoot and (myRoot.Position - tRoot.Position).Magnitude <= RANGE then
+					-- Check if they're still playing any attack animation
+					for _, entry in ipairs(allAnims) do
+						if entry.player == blockTarget and entry.track.IsPlaying and entry.track.Animation then
+							local aid = entry.track.Animation.AnimationId:match("%d+")
+							if aid and ATTACK_IDS[aid] then
+								stillThreat = true
+								break
+							end
+						end
+					end
+				end
+
+				-- Release block if: confirmed block hit and no more attacks, or they moved away
+				if not stillThreat and (blockConfirmed or now - lastBlock > 0.6) then
+					blockUp()
+					blocking = false
+					blockTarget = nil
+					flash("Block released", Color3.fromRGB(140, 140, 140))
+				end
 			end
 
 			-- Auto attack when safe
@@ -441,6 +484,12 @@ if terrain then
 	terrain.ChildAdded:Connect(function(child)
 		if child.Name == "BLOCK BROKEN BY KICK" then
 			flash("KICK LANDED", Color3.fromRGB(255, 170, 0))
+		elseif child.Name == "NORMAL BLOCK" then
+			-- Our block caught a hit — safe to release after attack ends
+			if blocking then
+				blockConfirmed = true
+				flash("BLOCK CONFIRMED", Color3.fromRGB(87, 242, 135))
+			end
 		end
 	end)
 end
