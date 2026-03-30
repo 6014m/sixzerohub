@@ -83,36 +83,6 @@ animDB["6678892469"] = { type = ATTACK, weapon = "Unknown", move = "Discovered4"
 -- Track which weapon each player has equipped
 local playerWeapons = {} -- [playerName] = { weapon, equipTime, reach }
 
----------- Tool Size → Reach ----------
-
-local ARM_LENGTH = 4 -- approximate character arm length in studs
-
-local function measureToolReach(char)
-	if not char then return nil end
-	for _, child in ipairs(char:GetChildren()) do
-		if child:IsA("Tool") then
-			local minB, maxB = Vector3.new(math.huge, math.huge, math.huge), Vector3.new(-math.huge, -math.huge, -math.huge)
-			local found = false
-			for _, part in ipairs(child:GetDescendants()) do
-				if part:IsA("BasePart") then
-					local pos = part.Position
-					local half = part.Size / 2
-					minB = Vector3.new(math.min(minB.X, pos.X - half.X), math.min(minB.Y, pos.Y - half.Y), math.min(minB.Z, pos.Z - half.Z))
-					maxB = Vector3.new(math.max(maxB.X, pos.X + half.X), math.max(maxB.Y, pos.Y + half.Y), math.max(maxB.Z, pos.Z + half.Z))
-					found = true
-				end
-			end
-			if found then
-				local size = maxB - minB
-				-- Longest axis = weapon length
-				local weaponLen = math.max(size.X, size.Y, size.Z)
-				return weaponLen + ARM_LENGTH
-			end
-		end
-	end
-	return nil
-end
-
 ---------- State ----------
 
 local mySwinging = false
@@ -127,29 +97,7 @@ local PARRY_CD = 0.3
 local FEINT_CD = 0.3
 local GUARDBREAK_CD = 0.3
 local SWING_CD = 0.3
-local RANGE = 25 -- fallback for unknown weapons
-
--- Static weapon ranges as fallback (from combat data)
-local WEAPON_RANGE_STATIC = {
-	Katana = 12,
-	Kusarigama = 18,
-	Naginata = 14,
-	Scythe = 14,
-	Odachi = 10,
-	Kanabo = 8,
-	Kick = 10,
-	Tanto = 8,
-	Caestus = 8,
-	Unknown = 25,
-}
-
-local function getWeaponRange(playerName, weapon)
-	-- Prefer measured tool reach, fall back to static data
-	local pw = playerWeapons[playerName]
-	if pw and pw.reach then return pw.reach end
-	if weapon and WEAPON_RANGE_STATIC[weapon] then return WEAPON_RANGE_STATIC[weapon] end
-	return RANGE
-end
+local RANGE = 12
 
 -- Track who's currently blocking
 local enemyBlocking = {} -- [playerName] = true
@@ -270,13 +218,11 @@ end
 -- Lower threat score = more dangerous (closer relative to weapon range)
 local currentThreat = nil -- { name, score, time }
 
-local function getThreatScore(hrp, weapon, playerName)
+local function getThreatScore(hrp)
 	if not myHRP or not hrp then return math.huge end
 	local dx = myHRP.Position.X - hrp.Position.X
 	local dz = myHRP.Position.Z - hrp.Position.Z
-	local dist = math.sqrt(dx * dx + dz * dz)
-	local r = getWeaponRange(playerName, weapon)
-	return dist / r
+	return math.sqrt(dx * dx + dz * dz)
 end
 
 local function isHigherThreat(newScore)
@@ -295,15 +241,12 @@ local function onGlint(player)
 	local char = player.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if not myHRP or not hrp then return end
-	local pWeapon = playerWeapons[player.Name]
-	local wpnName = pWeapon and pWeapon.weapon
-	local r = getWeaponRange(player.Name, wpnName)
 	local dx = myHRP.Position.X - hrp.Position.X
 	local dz = myHRP.Position.Z - hrp.Position.Z
-	if dx * dx + dz * dz > r * r then return end
+	if dx * dx + dz * dz > RANGE * RANGE then return end
 
 	-- Check threat priority — only react to the most dangerous player
-	local score = getThreatScore(hrp, wpnName, player.Name)
+	local score = getThreatScore(hrp)
 	if not isHigherThreat(score) then return end
 	currentThreat = { name = player.Name, score = score, time = tick() }
 
@@ -465,12 +408,11 @@ lp.CharacterAdded:Connect(function(char) task.wait(0.3); task.spawn(watchSelf, c
 
 ---------- Distance Check ----------
 
-local function inRange(theirHRP, weapon, playerName)
+local function inRange(theirHRP)
 	if not myHRP or not theirHRP then return false end
 	local dx = myHRP.Position.X - theirHRP.Position.X
 	local dz = myHRP.Position.Z - theirHRP.Position.Z
-	local r = getWeaponRange(playerName, weapon)
-	return dx * dx + dz * dz <= r * r
+	return dx * dx + dz * dz <= RANGE * RANGE
 end
 
 ---------- Core Response ----------
@@ -478,14 +420,14 @@ end
 local function onEnemyAnimation(player, animInfo, track)
 	local char = player.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if not inRange(hrp, animInfo.weapon, player.Name) then return end
+	if not inRange(hrp) then return end
 
 	local now = tick()
 	local pName = player.Name
 
 	if animInfo.type == ATTACK then
 		-- Check threat priority
-		local score = getThreatScore(hrp, animInfo.weapon, pName)
+		local score = getThreatScore(hrp)
 		if not isHigherThreat(score) then return end
 		currentThreat = { name = pName, score = score, time = now }
 		-- Don't block instantly — wait for feint window to pass
@@ -550,17 +492,11 @@ local function onEnemyAnimation(player, animInfo, track)
 		if currentThreat and currentThreat.name == pName then currentThreat = nil end
 
 	elseif animInfo.type == EQUIP then
-		-- They just pulled out their weapon — measure it for reach
-		local reach = measureToolReach(char)
-		playerWeapons[pName] = { weapon = animInfo.weapon, equipTime = now, reach = reach }
-		local rangeStr = reach and string.format(" (%.0f reach)", reach) or ""
-		flash(pName .. " EQUIP " .. animInfo.weapon .. rangeStr, Color3.fromRGB(255, 170, 0), 0.8)
+		playerWeapons[pName] = { weapon = animInfo.weapon, equipTime = now }
+		flash(pName .. " EQUIP " .. animInfo.weapon, Color3.fromRGB(255, 170, 0), 0.8)
 
 	elseif animInfo.type == IDLE then
-		-- Weapon identification + measure if not already
-		local existing = playerWeapons[pName]
-		local reach = (existing and existing.reach) or measureToolReach(char)
-		playerWeapons[pName] = { weapon = animInfo.weapon, equipTime = existing and existing.equipTime or 0, reach = reach }
+		playerWeapons[pName] = { weapon = animInfo.weapon, equipTime = playerWeapons[pName] and playerWeapons[pName].equipTime or 0 }
 	end
 end
 
