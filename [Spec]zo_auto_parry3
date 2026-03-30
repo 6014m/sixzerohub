@@ -220,8 +220,20 @@ local function hookPlayer(player)
 
 	local c = hum.AnimationPlayed:Connect(function(track)
 		if not track.Animation then return end
+		local id = track.Animation.AnimationId:match("%d+")
 		local entry = { track = track, player = player, root = char:FindFirstChild("HumanoidRootPart") }
 		table.insert(allAnims, entry)
+
+		-- Instant feint: if we're swinging and they start blocking, feint NOW
+		if id and BLOCK_IDS[id] and swinging and tick() - lastFeint > 0.5 then
+			local root = char:FindFirstChild("HumanoidRootPart")
+			if root and myRoot and (myRoot.Position - root.Position).Magnitude <= RANGE then
+				lastFeint = tick()
+				blockDown()
+				task.delay(0.15, function() blockUp() end)
+				flash("INSTANT FEINT — " .. player.Name, Color3.fromRGB(255, 150, 50))
+			end
+		end
 
 		track.Ended:Connect(function()
 			for i = #allAnims, 1, -1 do
