@@ -15,6 +15,28 @@ local PUSH_ANIM_ID = "rbxassetid://134933487900882"
 local connections = {}
 local recentParry = 0
 
+---------- Simulation radius (needed for network ownership of unanchored parts) ----------
+
+pcall(function()
+	if setsimulationradius then
+		setsimulationradius(1e308, 1 / 0)
+	end
+end)
+pcall(function()
+	if sethiddenproperty then
+		sethiddenproperty(lp, "MaximumSimulationRadius", 1 / 0)
+		sethiddenproperty(lp, "SimulationRadius", 1e308)
+	end
+end)
+
+local function isNetOwner(part)
+	if isnetworkowner then
+		local ok, result = pcall(isnetworkowner, part)
+		if ok then return result end
+	end
+	return part.ReceiveAge == 0
+end
+
 ---------- Pre-cached refs ----------
 
 local myChar, myHRP, myHum, myBackpack, parryTool
@@ -634,13 +656,15 @@ task.spawn(function()
 				if handle.Parent == workspace then
 					local diff = handle.Position - myPos
 					local dist = diff.Magnitude
-					if dist <= REPEL_RANGE then
+					if dist <= REPEL_RANGE and isNetOwner(handle) then
 						near = near or dist <= 10
-						-- Push it away from us — closer = stronger
 						pcall(function()
 							local dir = dist > 0.1 and (diff / dist) or Vector3.new(0, 0, 1)
 							local strength = REPEL_FORCE * (1 - dist / REPEL_RANGE)
+							-- CFrame nudge + velocity for reliable replication
+							handle.CFrame = handle.CFrame + dir * 2
 							handle.AssemblyLinearVelocity = dir * strength
+							handle.Velocity = dir * strength
 						end)
 					end
 				else
