@@ -475,25 +475,30 @@ local function logCombatEvent(player, animInfo, eventType)
 
 	local logged = 0
 
+	local LOG_RANGE = 16 -- match auto parry range
+
 	if allPlayers then
-		-- Log relative to every other player in the server
+		-- Log relative to every other player within range
 		for _, target in ipairs(Players:GetPlayers()) do
 			if target ~= player then
 				local tChar = target.Character
 				local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
 				if tHRP then
-					local _, dist, orient = logSingleTarget(player, attackerHRP, target, tHRP, animInfo, eventType)
-					logged = logged + 1
-					local tag = target == lp and " [ME]" or ""
-					addRow(string.format("%s %s %s | %s%.1f | %s→%s%s",
-						eventType, animInfo.weapon, animInfo.move, tag, dist,
-						orient.iAmToTheir, orient.theyAreToMy, tag), color)
+					local checkDist = (attackerHRP.Position - tHRP.Position).Magnitude
+					if checkDist <= LOG_RANGE then
+						local _, dist, orient = logSingleTarget(player, attackerHRP, target, tHRP, animInfo, eventType)
+						logged = logged + 1
+						local tag = target == lp and " [ME]" or ""
+						addRow(string.format("%s %s %s | %s%.1f | %s→%s%s",
+							eventType, animInfo.weapon, animInfo.move, tag, dist,
+							orient.iAmToTheir, orient.theyAreToMy, tag), color)
+					end
 				end
 			end
 		end
 	else
-		-- Log relative to local player only
-		if myHRP then
+		-- Log relative to local player only if in range
+		if myHRP and (attackerHRP.Position - myHRP.Position).Magnitude <= LOG_RANGE then
 			local _, dist, orient = logSingleTarget(player, attackerHRP, lp, myHRP, animInfo, eventType)
 			logged = 1
 			addRow(string.format("%s %s %s | %.1f studs | I'm %s | They're %s",
