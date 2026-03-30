@@ -320,6 +320,8 @@ local lastDodge = 0
 local lastSwing = 0
 local lastFeint = 0
 local lastHitBlock = 0 -- when our attack hit their block (NORMAL BLOCK while we're swinging)
+local lastPerfectBlocked = 0 -- when we got perfect blocked (stunned, can't act)
+local STUN_DURATION = 0.4 -- brief stun after getting perfect blocked
 local blockedAnims = {} -- [track] = true, don't double-block same attack
 
 ---------- Auto Attack Logic ----------
@@ -381,6 +383,9 @@ task.spawn(function()
 	while true do
 		if myRoot and hasTool() then
 			local now = tick()
+
+			-- Skip everything if stunned from perfect block
+			if now - lastPerfectBlocked < STUN_DURATION then task.wait(POLL_RATE); continue end
 
 			-- Find nearest threat
 			local bestTrack, bestPlayer, bestDist, bestId, bestPct = nil, nil, 999, nil, 0
@@ -563,10 +568,10 @@ if terrain then
 				flash("HIT THEIR BLOCK — WAIT", Color3.fromRGB(255, 200, 100))
 			end
 		elseif child.Name == "PERFECT BLOCK" then
-			-- Someone hit a perfect block — check if the part is near me (I got perfect blocked)
 			pcall(function()
 				if myRoot and child:IsA("BasePart") and (myRoot.Position - child.Position).Magnitude <= RANGE then
 					if blocking then blocking = false; blockTarget = nil; blockUp() end
+					lastPerfectBlocked = tick()
 					backDash()
 					flash("GOT PERFECT BLOCKED — DASH", Color3.fromRGB(255, 0, 255))
 				end
