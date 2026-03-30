@@ -186,19 +186,6 @@ local function shouldParry(theirHRP)
 	return (look.X * ox + look.Y * oy + look.Z * oz) / dist >= DIR_THRESHOLD
 end
 
-local function doParry(player, theirHRP)
-	local now = tick()
-	if now - recentParry < 0.5 then return end
-	if not shouldParry(theirHRP) then return end
-	recentParry = now
-	burstHorizontalDensity()
-	if fireParry() then
-		flashLabel.Text = "PARRIED " .. player.Name
-		flashLabel.Visible = true
-		task.delay(1.5, function() flashLabel.Visible = false end)
-	end
-end
-
 ---------- Notify ----------
 
 local gui = Instance.new("ScreenGui")
@@ -218,6 +205,19 @@ flashLabel.TextSize = 14
 flashLabel.Visible = false
 flashLabel.Parent = gui
 Instance.new("UICorner", flashLabel).CornerRadius = UDim.new(0, 6)
+
+local function doParry(player, theirHRP)
+	local now = tick()
+	if now - recentParry < 0.5 then return end
+	if not shouldParry(theirHRP) then return end
+	recentParry = now
+	burstHorizontalDensity()
+	if fireParry() then
+		flashLabel.Text = "PARRIED " .. player.Name
+		flashLabel.Visible = true
+		task.delay(1.5, function() flashLabel.Visible = false end)
+	end
+end
 
 ---------- METHOD 1: AnimationPlayed ----------
 
@@ -405,7 +405,6 @@ local function getOrientation(fromHRP, toHRP)
 end
 
 local function logDistance(text, data)
-	warn("[AutoParry] " .. text)
 	pcall(function()
 		if appendfile then
 			appendfile(LOG_FILE, text .. "\n")
