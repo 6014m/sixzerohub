@@ -240,11 +240,29 @@ end
 
 ---------- METHOD 2: Tool equip ----------
 
+local BANANA_KEYWORDS = {"banana", "peel", "slip", "trip"}
+
+local function isBananaTool(name)
+	local low = name:lower()
+	for _, kw in ipairs(BANANA_KEYWORDS) do
+		if low:find(kw) then return true end
+	end
+	return false
+end
+
 local function watchToolEquip(player, char)
 	local c = char.ChildAdded:Connect(function(child)
-		if child:IsA("Tool") and child.Name == "Push" then
+		if not child:IsA("Tool") then return end
+		if child.Name == "Push" then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
 			if hrp then doParry(player, hrp) end
+		elseif isBananaTool(child.Name) then
+			-- Preemptive full density — banana peel incoming
+			cacheLocal()
+			burstFullDensity()
+			flashLabel.Text = "BANANA — FD"
+			flashLabel.Visible = true
+			task.delay(1.5, function() flashLabel.Visible = false end)
 		end
 	end)
 	table.insert(connections, c)
@@ -259,6 +277,12 @@ local function watchBackpack(player)
 				local char = player.Character
 				local hrp = char and char:FindFirstChild("HumanoidRootPart")
 				if hrp then doParry(player, hrp) end
+			elseif child:IsA("Tool") and isBananaTool(child.Name) then
+				cacheLocal()
+				burstFullDensity()
+				flashLabel.Text = "BANANA — FD"
+				flashLabel.Visible = true
+				task.delay(1.5, function() flashLabel.Visible = false end)
 			end
 		end)
 		table.insert(connections, c)
