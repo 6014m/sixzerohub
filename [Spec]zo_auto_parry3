@@ -163,8 +163,26 @@ end
 
 local function isFacingMe(theirRoot)
 	if not myRoot or not theirRoot then return false end
-	local dot = (myRoot.Position - theirRoot.Position):Dot(theirRoot.CFrame.LookVector)
-	return dot > 0
+	local toMe = (myRoot.Position - theirRoot.Position)
+	local myDot = toMe.Unit:Dot(theirRoot.CFrame.LookVector)
+	if myDot <= 0 then return false end -- not facing me at all
+
+	-- Check if they're facing someone else MORE than me within the same range
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= lp and p.Character then
+			local otherRoot = p.Character:FindFirstChild("HumanoidRootPart")
+			if otherRoot and otherRoot ~= theirRoot then
+				local toOther = (otherRoot.Position - theirRoot.Position)
+				if toOther.Magnitude <= RANGE then
+					local otherDot = toOther.Unit:Dot(theirRoot.CFrame.LookVector)
+					if otherDot > myDot then
+						return false -- they're aiming at someone else more than me
+					end
+				end
+			end
+		end
+	end
+	return true
 end
 
 ---------- Track active animations per player ----------
