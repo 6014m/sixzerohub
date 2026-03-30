@@ -191,6 +191,26 @@ local function pressE()
 	end)
 end
 
+---------- Threat Priority ----------
+
+-- Lower threat score = more dangerous (closer relative to weapon range)
+local currentThreat = nil -- { name, score, time }
+
+local function getThreatScore(hrp, weapon)
+	if not myHRP or not hrp then return math.huge end
+	local dx = myHRP.Position.X - hrp.Position.X
+	local dz = myHRP.Position.Z - hrp.Position.Z
+	local dist = math.sqrt(dx * dx + dz * dz)
+	local r = (weapon and WEAPON_RANGE[weapon]) or RANGE
+	return dist / r -- 0.5 = halfway into range, 1.0 = edge of range
+end
+
+local function isHigherThreat(newScore)
+	if not currentThreat then return true end
+	if tick() - currentThreat.time > 1.5 then return true end -- old threat expired
+	return newScore < currentThreat.score
+end
+
 ---------- GLINT Detection ----------
 
 local holdingBlock = false
@@ -201,13 +221,23 @@ local function onGlint(player)
 	local char = player.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if not myHRP or not hrp then return end
-	-- Use known weapon range for this player
 	local pWeapon = playerWeapons[player.Name]
 	local wpnName = pWeapon and pWeapon.weapon
 	local r = (wpnName and WEAPON_RANGE[wpnName]) or RANGE
 	local dx = myHRP.Position.X - hrp.Position.X
 	local dz = myHRP.Position.Z - hrp.Position.Z
 	if dx * dx + dz * dz > r * r then return end
+
+	-- Check threat priority — only react to the most dangerous player
+	local score = getThreatScore(hrp, wpnName)
+	if not isHigherThreat(score) then return end
+	currentThreat = { name = player.Name, score = score, time = tick() }
+
+	-- If already holding block for someone else, release first
+	if holdingBlock and glintSource ~= player.Name then
+		rightClickUp()
+		holdingBlock = false
+	end
 
 	-- If we're mid-swing, feint first
 	if mySwinging and tick() - mySwingTime < 0.8 then
@@ -380,6 +410,10 @@ local function onEnemyAnimation(player, animInfo, track)
 	local pName = player.Name
 
 	if animInfo.type == ATTACK then
+		-- Check threat priority
+		local score = getThreatScore(hrp, animInfo.weapon)
+		if not isHigherThreat(score) then return end
+		currentThreat = { name = pName, score = score, time = now }
 		-- Don't block instantly — wait for feint window to pass
 		pendingAttacks[pName] = { time = now, info = animInfo, cancelled = false }
 
@@ -439,6 +473,7 @@ local function onEnemyAnimation(player, animInfo, track)
 			pending.cancelled = true
 		end
 		pendingAttacks[pName] = nil
+		if currentThreat and currentThreat.name == pName then currentThreat = nil end
 
 	elseif animInfo.type == EQUIP then
 		-- They just pulled out their weapon — high threat, attack imminent
