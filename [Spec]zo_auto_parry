@@ -425,21 +425,13 @@ local rsConn = RunService.RenderStepped:Connect(function()
 end)
 table.insert(connections, rsConn)
 
----------- BLOCK BROKEN BY KICK — terrain part watcher ----------
+---------- BLOCK BROKEN BY KICK — terrain part watcher (info only) ----------
 
 local terrain = workspace:FindFirstChild("Terrain")
 if terrain then
 	local kickConn = terrain.ChildAdded:Connect(function(child)
 		if child.Name == "BLOCK BROKEN BY KICK" and child:IsA("BasePart") then
-			-- Find nearest enemy to the part and execute
-			cacheLocal()
-			if not myHRP then return end
-			local partPos = child.Position
-			local dist = (myHRP.Position - partPos).Magnitude
-			if dist <= RANGE then
-				pressE()
-				flash("KICK BREAK — EXECUTE", Color3.fromRGB(255, 50, 255))
-			end
+			flash("KICK LANDED", Color3.fromRGB(255, 170, 0), 0.6)
 		end
 	end)
 	table.insert(connections, kickConn)
