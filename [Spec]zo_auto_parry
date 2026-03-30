@@ -18,6 +18,7 @@ local BLOCK = 2
 local FEINT = 3
 local IDLE = 4
 local EQUIP = 5
+local STAGGER = 6
 
 local animDB = {}
 
@@ -65,6 +66,9 @@ registerWeapon("Scythe", {
 	Attack1 = 14349499924, Attack2 = 14349501923, Attack3 = 14349504049, Attack4 = 14349506078,
 	Block = 6708116223, Feint = 13521669139, Idle = 14349489152, Equip = 8574242501,
 })
+
+-- Stagger (guard broken) — universal, not per-weapon
+animDB["15612208633"] = { type = STAGGER, weapon = "Any", move = "Stagger" }
 
 -- Track which weapon each player has equipped
 local playerWeapons = {} -- [playerName] = { weapon, equipTime }
@@ -148,6 +152,13 @@ local function pressF()
 	VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game)
 	task.delay(0.15, function()
 		VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+	end)
+end
+
+local function pressE()
+	VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+	task.delay(0.15, function()
+		VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 	end)
 end
 
@@ -287,12 +298,19 @@ local function onEnemyAnimation(player, animInfo, track)
 		end)
 
 	elseif animInfo.type == BLOCK then
-		-- They're blocking — guard break with F
+		-- They're blocking — delay kick so they can't parry it
 		if now - lastGuardBreakTime > GUARDBREAK_CD then
 			lastGuardBreakTime = now
-			pressF()
-			flash("GUARD BREAK " .. pName, Color3.fromRGB(255, 100, 100))
+			task.delay(0.3, function()
+				pressF()
+				flash("GUARD BREAK " .. pName, Color3.fromRGB(255, 100, 100))
+			end)
 		end
+
+	elseif animInfo.type == STAGGER then
+		-- They're staggered from broken guard — execute with E
+		pressE()
+		flash("EXECUTE " .. pName, Color3.fromRGB(255, 50, 255))
 
 	elseif animInfo.type == FEINT then
 		-- They feinted — cancel our pending block and punish
@@ -339,6 +357,9 @@ local function watchEnemy(player, char)
 		local info = animDB[id]
 		if info then
 			onEnemyAnimation(player, info, track)
+		else
+			-- Debug: show unrecognized animation IDs
+			flash(player.Name .. " UNK:" .. id, Color3.fromRGB(180, 180, 180), 0.5)
 		end
 	end)
 	table.insert(connections, c)
@@ -382,7 +403,7 @@ local rsConn = RunService.RenderStepped:Connect(function()
 								local id = track.Animation.AnimationId:match("%d+")
 								if id then
 									local info = animDB[id]
-									if info and (info.type == ATTACK or info.type == FEINT) then
+									if info and (info.type == ATTACK or info.type == FEINT or info.type == STAGGER) then
 										polledAnims[track] = true
 										onEnemyAnimation(p, info, track)
 									end
@@ -403,6 +424,26 @@ local rsConn = RunService.RenderStepped:Connect(function()
 	end
 end)
 table.insert(connections, rsConn)
+
+---------- BLOCK BROKEN BY KICK — terrain part watcher ----------
+
+local terrain = workspace:FindFirstChild("Terrain")
+if terrain then
+	local kickConn = terrain.ChildAdded:Connect(function(child)
+		if child.Name == "BLOCK BROKEN BY KICK" and child:IsA("BasePart") then
+			-- Find nearest enemy to the part and execute
+			cacheLocal()
+			if not myHRP then return end
+			local partPos = child.Position
+			local dist = (myHRP.Position - partPos).Magnitude
+			if dist <= RANGE then
+				pressE()
+				flash("KICK BREAK — EXECUTE", Color3.fromRGB(255, 50, 255))
+			end
+		end
+	end)
+	table.insert(connections, kickConn)
+end
 
 ---------- SIXZEROHUB REGISTRATION ----------
 
