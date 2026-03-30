@@ -101,12 +101,12 @@ local RANGE = 25 -- fallback for unknown weapons
 
 -- Per-weapon attack ranges from combat data (max confirmed hit distance + buffer)
 local WEAPON_RANGE = {
-	Katana = 24,      -- max hit 21.3
-	Kusarigama = 24,  -- max hit 21.4, chain weapon long reach
-	Naginata = 14,    -- max hit 10.7
+	Katana = 12,      -- real hits 2.7-8.6, 21.3 was false positive
+	Kusarigama = 18,  -- chain weapon, hits at 9.4-16.1 look legit
+	Naginata = 14,    -- max hit 10.7, long polearm
 	Scythe = 14,      -- max hit 11.2
-	Odachi = 10,      -- max hit 7.2 (limited data)
-	Kanabo = 10,      -- limited data
+	Odachi = 10,      -- max hit 7.2
+	Kanabo = 8,       -- limited data
 	Kick = 10,        -- max hit 7.9
 	Tanto = 8,        -- short weapon
 	Caestus = 8,      -- fist weapon
