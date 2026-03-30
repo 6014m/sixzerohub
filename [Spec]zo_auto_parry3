@@ -166,21 +166,30 @@ end
 
 ---------- Camera Lock-On ----------
 
-local camera = workspace.CurrentCamera
-local lockTarget = nil
-
 local function lookAt(targetRoot)
-	if not myRoot or not targetRoot or not camera then return end
-	local myPos = myRoot.Position
-	local theirPos = targetRoot.Position
-	-- Horizontal only — keep current Y angle
-	local dir = Vector3.new(theirPos.X - myPos.X, 0, theirPos.Z - myPos.Z)
-	if dir.Magnitude < 0.1 then return end
-	dir = dir.Unit
-	local camPos = camera.CFrame.Position
-	local currentLook = camera.CFrame.LookVector
-	local newLook = Vector3.new(dir.X, currentLook.Y, dir.Z).Unit
-	camera.CFrame = CFrame.lookAt(camPos, camPos + newLook)
+	pcall(function()
+		local cam = workspace.CurrentCamera
+		if not myRoot or not targetRoot or not cam then return end
+		local camCF = cam.CFrame
+		local camPos = camCF.Position
+
+		-- Get horizontal direction to target
+		local toTarget = targetRoot.Position - myRoot.Position
+		local horizDir = Vector3.new(toTarget.X, 0, toTarget.Z)
+		if horizDir.Magnitude < 0.1 then return end
+		horizDir = horizDir.Unit
+
+		-- Keep current pitch (vertical angle), just rotate yaw
+		local currentLook = camCF.LookVector
+		local pitch = math.asin(math.clamp(currentLook.Y, -1, 1))
+		local newLook = Vector3.new(
+			horizDir.X * math.cos(pitch),
+			math.sin(pitch),
+			horizDir.Z * math.cos(pitch)
+		).Unit
+
+		cam.CFrame = CFrame.lookAt(camPos, camPos + newLook)
+	end)
 end
 
 ---------- GUI ----------
@@ -440,7 +449,24 @@ task.spawn(function()
 		if myRoot and hasTool() then
 			local now = tick()
 
-			-- Find nearest threat
+			-- Find 2 closest alive players
+			local nearby = {}
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= lp and p.Character then
+					local r = p.Character:FindFirstChild("HumanoidRootPart")
+					local h = p.Character:FindFirstChildOfClass("Humanoid")
+					if r and h and h.Health > 0 then
+						local d = (myRoot.Position - r.Position).Magnitude
+						if d <= RANGE then
+							nearby[#nearby + 1] = { player = p, root = r, dist = d }
+						end
+					end
+				end
+			end
+			table.sort(nearby, function(a, b) return a.dist < b.dist end)
+			local focusPlayers = {}
+			for i = 1, math.min(2, #nearby) do focusPlayers[nearby[i].player] = true end
+
 			local bestTrack, bestPlayer, bestDist, bestId, bestPct = nil, nil, 999, nil, 0
 
 			for i = #allAnims, 1, -1 do
@@ -448,11 +474,7 @@ task.spawn(function()
 				local track = entry.track
 				local root = entry.root
 
-				if track.IsPlaying and root and root.Parent then
-					-- Skip dead players
-					local hum = root.Parent and root.Parent:FindFirstChildOfClass("Humanoid")
-					if not hum or hum.Health <= 0 then continue end
-
+				if track.IsPlaying and root and root.Parent and focusPlayers[entry.player] then
 					local dist = (myRoot.Position - root.Position).Magnitude
 					if dist <= RANGE then
 						local id = track.Animation and track.Animation.AnimationId:match("%d+")
