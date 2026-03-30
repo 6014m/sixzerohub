@@ -191,11 +191,22 @@ task.spawn(function()
 	while true do
 		local root = myHRP()
 		if root then
+			-- Sort by distance, focus nearest first
+			local nearby = {}
 			for _, player in ipairs(Players:GetPlayers()) do
 				if player ~= lp then
 					local d = distTo(player)
 					if d <= RANGE then
-						local now = tick()
+						nearby[#nearby + 1] = { player = player, dist = d }
+					end
+				end
+			end
+			table.sort(nearby, function(a, b) return a.dist < b.dist end)
+
+			for _, entry in ipairs(nearby) do
+				local player = entry.player
+				local d = entry.dist
+				local now = tick()
 
 						-- Check ATTACK — block
 						local attacking, wpn = isPlayingAnim(player, ATTACK_IDS)
@@ -255,8 +266,6 @@ task.spawn(function()
 							execute()
 							flash("EXECUTE " .. player.Name, Color3.fromRGB(255, 50, 255))
 						end
-					end
-				end
 			end
 		end
 		task.wait(POLL_RATE)
