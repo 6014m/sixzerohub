@@ -161,6 +161,28 @@ local function hasTool()
 	return char and char:FindFirstChildOfClass("Tool")
 end
 
+---------- Track own attacks for feinting ----------
+
+local function hookSelf(char)
+	if not char then return end
+	local hum = char:WaitForChild("Humanoid", 5)
+	if not hum then return end
+	hum.AnimationPlayed:Connect(function(track)
+		if not track.Animation then return end
+		local id = track.Animation.AnimationId:match("%d+")
+		if id and ATTACK_IDS[id] then
+			swinging = true
+			track.Ended:Connect(function() swinging = false end)
+			track.Stopped:Connect(function() swinging = false end)
+		end
+	end)
+end
+
+task.spawn(function()
+	if lp.Character then hookSelf(lp.Character) end
+	lp.CharacterAdded:Connect(function(char) task.wait(0.3); hookSelf(char) end)
+end)
+
 local function isFacingMe(theirRoot)
 	if not myRoot or not theirRoot then return false end
 	local toMe = (myRoot.Position - theirRoot.Position)
@@ -267,11 +289,13 @@ end)
 local blocking = false
 local blockTarget = nil -- player we're blocking against
 local blockConfirmed = false -- NORMAL BLOCK appeared = our block caught a hit
+local swinging = false -- are we mid-attack
 local lastBlock = 0
 local lastKick = 0
 local lastPunish = 0
 local lastDodge = 0
 local lastSwing = 0
+local lastFeint = 0
 local blockedAnims = {} -- [track] = true, don't double-block same attack
 
 ---------- Auto Attack Logic ----------
@@ -453,6 +477,25 @@ task.spawn(function()
 					blocking = false
 					blockTarget = nil
 					flash("Block released", Color3.fromRGB(140, 140, 140))
+				end
+			end
+
+			-- Auto feint: if we're swinging and nearest enemy starts blocking, feint
+			if swinging and tick() - lastFeint > 0.5 then
+				for _, p in ipairs(Players:GetPlayers()) do
+					if p ~= lp then
+						local pChar = p.Character
+						local pRoot = pChar and pChar:FindFirstChild("HumanoidRootPart")
+						if pRoot and myRoot and (myRoot.Position - pRoot.Position).Magnitude <= RANGE then
+							if isPlayerDoingAnim(pRoot, BLOCK_IDS) then
+								lastFeint = tick()
+								blockDown()
+								task.delay(0.15, function() blockUp() end)
+								flash("AUTO FEINT — " .. p.Name .. " blocking", Color3.fromRGB(255, 150, 50))
+								break
+							end
+						end
+					end
 				end
 			end
 
