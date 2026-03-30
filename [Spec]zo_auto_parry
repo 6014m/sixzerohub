@@ -77,6 +77,50 @@ local GUARDBREAK_CD = 0.5
 local SWING_CD = 0.3
 local RANGE = 25
 
+-- Feint window: wait this long after seeing an attack before blocking
+-- If opponent feints during this window, we punish instead of wasting a block
+local FEINT_WINDOW = 0.25 -- baseline (seconds)
+local FEINT_WINDOW_MIN = 0.10
+local FEINT_WINDOW_MAX = 0.50
+local pendingAttacks = {} -- [playerName] = { time, info, cancelled }
+
+---------- Sensitivity Tuning ----------
+
+local HttpService = game:GetService("HttpService")
+local TUNE_FILE = "ZoParry_tuning.json"
+local tuneData = { feintWindow = FEINT_WINDOW, blockedDuringFeint = 0, correctBlocks = 0, correctPunishes = 0 }
+
+pcall(function()
+	if isfile and isfile(TUNE_FILE) then
+		local d = HttpService:JSONDecode(readfile(TUNE_FILE))
+		if type(d) == "table" then
+			tuneData = d
+			FEINT_WINDOW = d.feintWindow or FEINT_WINDOW
+		end
+	end
+end)
+
+local function saveTuning()
+	tuneData.feintWindow = FEINT_WINDOW
+	pcall(function()
+		if writefile then writefile(TUNE_FILE, HttpService:JSONEncode(tuneData)) end
+	end)
+end
+
+local function tuneUp()
+	-- We blocked during a feint — window too short, increase it
+	FEINT_WINDOW = math.min(FEINT_WINDOW + 0.02, FEINT_WINDOW_MAX)
+	tuneData.blockedDuringFeint = (tuneData.blockedDuringFeint or 0) + 1
+	saveTuning()
+end
+
+local function tuneDown()
+	-- We blocked successfully — window might be too long, tighten slightly
+	FEINT_WINDOW = math.max(FEINT_WINDOW - 0.005, FEINT_WINDOW_MIN)
+	tuneData.correctBlocks = (tuneData.correctBlocks or 0) + 1
+	saveTuning()
+end
+
 ---------- Input Emulation ----------
 
 local function rightClick()
@@ -205,42 +249,61 @@ local function onEnemyAnimation(player, animInfo, track)
 	if not inRange(hrp) then return end
 
 	local now = tick()
+	local pName = player.Name
 
 	if animInfo.type == ATTACK then
-		-- They're swinging at us — block/parry
-		if mySwinging and now - mySwingTime < 0.8 then
-			-- We're mid-swing, feint first then block
-			if now - lastFeintTime > FEINT_CD then
-				lastFeintTime = now
-				rightClick() -- feint our swing
-				task.delay(0.1, function()
-					rightClick() -- then block
-				end)
-				flash("FEINT+BLOCK " .. player.Name .. " [" .. animInfo.weapon .. "]", Color3.fromRGB(255, 200, 50))
+		-- Don't block instantly — wait for feint window to pass
+		pendingAttacks[pName] = { time = now, info = animInfo, cancelled = false }
+
+		task.delay(FEINT_WINDOW, function()
+			local pending = pendingAttacks[pName]
+			if not pending or pending.cancelled or pending.time ~= now then return end
+			pendingAttacks[pName] = nil
+
+			-- Feint window passed, they committed — block
+			local blockNow = tick()
+			if mySwinging and blockNow - mySwingTime < 0.8 then
+				if blockNow - lastFeintTime > FEINT_CD then
+					lastFeintTime = blockNow
+					rightClick()
+					task.delay(0.1, function() rightClick() end)
+					flash("FEINT+BLOCK " .. pName .. " [" .. animInfo.weapon .. "]", Color3.fromRGB(255, 200, 50))
+				end
+			else
+				if blockNow - lastParryTime > PARRY_CD then
+					lastParryTime = blockNow
+					rightClick()
+					tuneDown()
+					flash(string.format("BLOCK %s [%s %s] (%.0fms)", pName, animInfo.weapon, animInfo.move, FEINT_WINDOW * 1000), Color3.fromRGB(87, 242, 135))
+				end
 			end
-		else
-			-- Just block
-			if now - lastParryTime > PARRY_CD then
-				lastParryTime = now
-				rightClick()
-				flash("BLOCK " .. player.Name .. " [" .. animInfo.weapon .. " " .. animInfo.move .. "]", Color3.fromRGB(87, 242, 135))
-			end
-		end
+		end)
 
 	elseif animInfo.type == BLOCK then
 		-- They're blocking — guard break with F
 		if now - lastGuardBreakTime > GUARDBREAK_CD then
 			lastGuardBreakTime = now
 			pressF()
-			flash("GUARD BREAK " .. player.Name, Color3.fromRGB(255, 100, 100))
+			flash("GUARD BREAK " .. pName, Color3.fromRGB(255, 100, 100))
 		end
 
 	elseif animInfo.type == FEINT then
-		-- They feinted — punish with a swing
+		-- They feinted — cancel our pending block and punish
+		local pending = pendingAttacks[pName]
+		if pending and not pending.cancelled then
+			pending.cancelled = true
+			tuneData.correctPunishes = (tuneData.correctPunishes or 0) + 1
+			saveTuning()
+		elseif not pending then
+			-- We already blocked before seeing the feint — window too short
+			tuneUp()
+		end
+		pendingAttacks[pName] = nil
+
 		if now - lastSwingTime > SWING_CD then
 			lastSwingTime = now
 			leftClick()
-			flash("PUNISH FEINT " .. player.Name, Color3.fromRGB(0, 170, 255))
+			flash(string.format("PUNISH FEINT %s (win:%.0fms)", pName, FEINT_WINDOW * 1000), Color3.fromRGB(0, 170, 255))
 		end
 	end
 end
