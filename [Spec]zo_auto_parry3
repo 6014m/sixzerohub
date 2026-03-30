@@ -16,7 +16,7 @@ local connections = {}
 local RANGE = 16
 local BLOCK_PERCENT = 30    -- block when attack animation reaches this % (after feint window)
 local BLOCK_PERCENT_MAX = 50 -- stop checking after this %
-local BLOCK_HOLD = 0.4
+local BLOCK_HOLD = 0.2
 local POLL_RATE = 0.02 -- ~50hz
 
 ---------- Scan animations from ReplicatedStorage ----------
@@ -332,12 +332,6 @@ local function hookPlayer(player)
 				lookAt(hrp)
 				blockDown()
 				flash("GLINT BLOCK " .. player.Name, Color3.fromRGB(0, 255, 150))
-				-- Safety release 2s
-				task.delay(2, function()
-					if blocking and blockTarget == player then
-						blockUp(); blocking = false; blockTarget = nil
-					end
-				end)
 			end
 		end
 	end)
@@ -545,15 +539,6 @@ task.spawn(function()
 				blockDown()
 				flash(string.format("BLOCK %s [%s] %.0f%% %.0fs",
 					bestPlayer.Name, ATTACK_IDS[bestId], bestPct, bestDist), Color3.fromRGB(87, 242, 135))
-
-				-- Safety release after 2s max
-				task.delay(2, function()
-					if blocking and blockTarget == bestPlayer then
-						blockUp()
-						blocking = false
-						blockTarget = nil
-					end
-				end)
 			end
 
 			-- Release block after hold time
