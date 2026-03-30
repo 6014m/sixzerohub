@@ -439,9 +439,6 @@ task.spawn(function()
 		if myRoot and hasTool() then
 			local now = tick()
 
-			-- Skip everything if stunned from perfect block
-			if now - lastPerfectBlocked < STUN_DURATION then task.wait(POLL_RATE); continue end
-
 			-- Find nearest threat
 			local bestTrack, bestPlayer, bestDist, bestId, bestPct = nil, nil, 999, nil, 0
 
