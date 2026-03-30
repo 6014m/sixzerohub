@@ -678,7 +678,7 @@ end)
 for _, v in ipairs(workspace:GetDescendants()) do checkHandle(v) end
 
 -- Proximity loop: repel all unanchored parts away + keep FD active while any within 10 studs
-local REPEL_RANGE = 30
+local REPEL_RANGE = 15
 local REPEL_FORCE = 200
 
 task.spawn(function()
@@ -696,10 +696,9 @@ task.spawn(function()
 							near = near or dist <= 10
 							pcall(function()
 								local dir = dist > 0.1 and (diff / dist) or Vector3.new(0, 0, 1)
-								local strength = REPEL_FORCE * (1 - dist / REPEL_RANGE)
 								part.CFrame = part.CFrame + dir * 2
-								part.AssemblyLinearVelocity = dir * strength
-								part.Velocity = dir * strength
+								part.AssemblyLinearVelocity = dir * REPEL_FORCE
+								part.Velocity = dir * REPEL_FORCE
 							end)
 						end
 					end
