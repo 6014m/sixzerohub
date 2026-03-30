@@ -429,16 +429,14 @@ task.spawn(function()
 							end
 						end
 
-						-- Block detection — kick (but not right after our attack got blocked)
-						if id and BLOCK_IDS[id] and now - lastKick > 1 and now - lastHitBlock > 1.5 then
+						-- Block detection — kick
+						if id and BLOCK_IDS[id] and now - lastKick > 1 and not swinging then
 							if isFacingMe(root) then
 								lastKick = now
 								local targetPlayer = entry.player
-								task.delay(0.7, function()
-									-- Before kicking, check they didn't counter-attack
-									local stillBlocking = isPlayingAnim(targetPlayer, BLOCK_IDS)
+								task.delay(0.5, function()
 									local r2 = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-									if stillBlocking and r2 and myRoot and (myRoot.Position - r2.Position).Magnitude <= RANGE then
+									if r2 and myRoot and (myRoot.Position - r2.Position).Magnitude <= RANGE then
 										kick()
 										flash("KICK " .. targetPlayer.Name, Color3.fromRGB(255, 100, 100))
 									end
