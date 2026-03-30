@@ -91,7 +91,20 @@ local PARRY_CD = 0.3
 local FEINT_CD = 0.3
 local GUARDBREAK_CD = 0.3
 local SWING_CD = 0.3
-local RANGE = 25
+local RANGE = 25 -- fallback for unknown weapons
+
+-- Per-weapon attack ranges from combat data (max confirmed hit distance + buffer)
+local WEAPON_RANGE = {
+	Scythe = 14,      -- max hit 11.2, +buffer
+	Katana = 16,      -- max hit 13.5, +buffer
+	Odachi = 10,      -- max hit 7.2, +buffer
+	Kanabo = 8,       -- limited data, max hit 2.9, generous buffer
+	Kick = 10,        -- max hit 8.5, +buffer
+	Tanto = 8,        -- no data yet, short weapon
+	Naginata = 16,    -- no close data yet, long weapon assumed similar to katana
+	Kusarigama = 16,  -- no data yet, chain weapon assumed mid-long
+	Caestus = 8,      -- no data yet, fist weapon assumed short
+}
 
 -- Track who's currently blocking
 local enemyBlocking = {} -- [playerName] = true
@@ -188,9 +201,13 @@ local function onGlint(player)
 	local char = player.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if not myHRP or not hrp then return end
+	-- Use known weapon range for this player
+	local pWeapon = playerWeapons[player.Name]
+	local wpnName = pWeapon and pWeapon.weapon
+	local r = (wpnName and WEAPON_RANGE[wpnName]) or RANGE
 	local dx = myHRP.Position.X - hrp.Position.X
 	local dz = myHRP.Position.Z - hrp.Position.Z
-	if dx * dx + dz * dz > RANGE * RANGE then return end
+	if dx * dx + dz * dz > r * r then return end
 
 	-- If we're mid-swing, feint first
 	if mySwinging and tick() - mySwingTime < 0.8 then
@@ -344,11 +361,12 @@ lp.CharacterAdded:Connect(function(char) task.wait(0.3); task.spawn(watchSelf, c
 
 ---------- Distance Check ----------
 
-local function inRange(theirHRP)
+local function inRange(theirHRP, weapon)
 	if not myHRP or not theirHRP then return false end
 	local dx = myHRP.Position.X - theirHRP.Position.X
 	local dz = myHRP.Position.Z - theirHRP.Position.Z
-	return dx * dx + dz * dz <= RANGE * RANGE
+	local r = (weapon and WEAPON_RANGE[weapon]) or RANGE
+	return dx * dx + dz * dz <= r * r
 end
 
 ---------- Core Response ----------
@@ -356,7 +374,7 @@ end
 local function onEnemyAnimation(player, animInfo, track)
 	local char = player.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if not inRange(hrp) then return end
+	if not inRange(hrp, animInfo.weapon) then return end
 
 	local now = tick()
 	local pName = player.Name
