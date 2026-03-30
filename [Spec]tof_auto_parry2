@@ -337,8 +337,8 @@ local function watchPlayer(player)
 	table.insert(connections, c)
 end
 
-for _, p in ipairs(Players:GetPlayers()) do watchPlayer(p) end
-Players.PlayerAdded:Connect(watchPlayer)
+for _, p in ipairs(Players:GetPlayers()) do task.spawn(watchPlayer, p) end
+Players.PlayerAdded:Connect(function(p) task.spawn(watchPlayer, p) end)
 
 ---------- METHOD 4: RenderStepped ----------
 
@@ -555,13 +555,13 @@ local function watchPushEffects(player, char)
 	table.insert(connections, c6)
 end
 
--- Hook all players (including self)
+-- Hook all players (including self) — task.spawn to avoid yielding main thread
 for _, p in ipairs(Players:GetPlayers()) do
-	if p.Character then watchPushEffects(p, p.Character) end
+	if p.Character then task.spawn(watchPushEffects, p, p.Character) end
 	p.CharacterAdded:Connect(function(char) task.wait(0.5); watchPushEffects(p, char) end)
 end
 Players.PlayerAdded:Connect(function(p)
-	if p.Character then watchPushEffects(p, p.Character) end
+	if p.Character then task.spawn(watchPushEffects, p, p.Character) end
 	p.CharacterAdded:Connect(function(char) task.wait(0.5); watchPushEffects(p, char) end)
 end)
 
