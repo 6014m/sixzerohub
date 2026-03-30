@@ -36,6 +36,7 @@ local COLORS = {
 local MAX_ENTRIES = 200
 local entries = {}
 local entryCount = 0
+local catchAll = false -- when true, logs ALL instances not just known effects
 
 ---------- GUI ----------
 
@@ -102,6 +103,30 @@ pauseBtn.Font = Enum.Font.GothamBold
 pauseBtn.AutoButtonColor = false
 pauseBtn.Parent = header
 Instance.new("UICorner", pauseBtn).CornerRadius = UDim.new(0, 4)
+
+local allBtn = Instance.new("TextButton")
+allBtn.Size = UDim2.new(0, 30, 0, 22)
+allBtn.Position = UDim2.new(1, -108, 0, 6)
+allBtn.BackgroundColor3 = COLORS.row
+allBtn.BorderSizePixel = 0
+allBtn.Text = "FX"
+allBtn.TextColor3 = COLORS.accent
+allBtn.TextSize = 9
+allBtn.Font = Enum.Font.GothamBold
+allBtn.AutoButtonColor = false
+allBtn.Parent = header
+Instance.new("UICorner", allBtn).CornerRadius = UDim.new(0, 4)
+
+allBtn.MouseButton1Click:Connect(function()
+	catchAll = not catchAll
+	if catchAll then
+		allBtn.Text = "ALL"
+		allBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+	else
+		allBtn.Text = "FX"
+		allBtn.TextColor3 = COLORS.accent
+	end
+end)
 
 local clearBtn = Instance.new("TextButton")
 clearBtn.Size = UDim2.new(0, 16, 0, 22)
@@ -333,7 +358,7 @@ end
 
 local function startMonitoring()
 	local conn = game.DescendantAdded:Connect(function(desc)
-		if isEffect(desc) then
+		if catchAll or isEffect(desc) then
 			addEntry(desc)
 		end
 	end)
