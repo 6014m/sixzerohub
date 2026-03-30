@@ -300,8 +300,8 @@ local function onGlint(player)
 		flash("GLINT BLOCK — " .. player.Name, Color3.fromRGB(87, 242, 135))
 	end
 
-	-- Safety release after 1s in case we miss the feint/stop
-	task.delay(1, function()
+	-- Safety release after 2s in case we miss the feint/stop
+	task.delay(2, function()
 		if holdingBlock and glintSource == player.Name then
 			rightClickUp()
 			holdingBlock = false
@@ -381,7 +381,7 @@ end
 ---------- Hub Settings: Input Tests ----------
 
 if _G.SixZeroHubRegisterSettings then
-	_G.SixZeroHubRegisterSettings("[Spec]zo_auto_parry", {
+	_G.SixZeroHubRegisterSettings("[Spec]zo_auto_parry2", {
 		{ name = "test_block_05", label = "Test Block (0.5s)", type = "button", buttonText = "Block", onClick = function()
 			rightClickDown()
 			flash("TEST: Block DOWN", Color3.fromRGB(87, 242, 135), 0.5)
@@ -713,7 +713,7 @@ local function cleanup()
 end
 
 if _G.SixZeroHubRegister then
-	_G.SixZeroHubRegister("Auto Parry", "[Spec]zo_auto_parry", cleanup, "spec")
+	_G.SixZeroHubRegister("Auto Parry", "[Spec]zo_auto_parry2", cleanup, "spec")
 end
 
 end) -- end task.spawn wrapper
