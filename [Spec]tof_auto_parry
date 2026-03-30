@@ -52,7 +52,7 @@ rebuildPlayerCache()
 Players.PlayerAdded:Connect(rebuildPlayerCache)
 Players.PlayerRemoving:Connect(rebuildPlayerCache)
 
----------- Horizontal Density Burst ----------
+---------- Density Bursts ----------
 
 local hdActive = false
 
@@ -93,6 +93,43 @@ local function burstHorizontalDensity()
 		pcall(function() linVel:Destroy() end)
 		pcall(function() att:Destroy() end)
 		hdActive = false
+	end)
+end
+
+local fdActive = false
+
+local function burstFullDensity()
+	if fdActive or not myHRP or not myHum then return end
+	fdActive = true
+
+	local att = Instance.new("Attachment")
+	att.Name = "FDAttach"
+	att.Parent = myHRP
+
+	local linVel = Instance.new("LinearVelocity")
+	linVel.Name = "FDForce"
+	linVel.Attachment0 = att
+	linVel.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+	linVel.RelativeTo = Enum.ActuatorRelativeTo.World
+	linVel.ForceLimitMode = Enum.ForceLimitMode.Magnitude
+	linVel.MaxForce = math.huge
+	linVel.VectorVelocity = Vector3.zero
+	linVel.Parent = myHRP
+
+	local fdConn
+	fdConn = RunService.Heartbeat:Connect(function()
+		if not myHRP or not myHum or not myHRP.Parent then return end
+		local moveDir = myHum.MoveDirection
+		local ws = myHum.WalkSpeed
+		linVel.VectorVelocity = Vector3.new(moveDir.X * ws, 0, moveDir.Z * ws)
+		myHRP.AssemblyLinearVelocity = Vector3.new(moveDir.X * ws, myHRP.AssemblyLinearVelocity.Y, moveDir.Z * ws)
+	end)
+
+	task.delay(1, function()
+		fdConn:Disconnect()
+		pcall(function() linVel:Destroy() end)
+		pcall(function() att:Destroy() end)
+		fdActive = false
 	end)
 end
 
@@ -520,11 +557,11 @@ local function blockHandle(handle)
 		handle.CanCollide = false
 	end)
 
-	-- If handle is on me, burst HD immediately
+	-- If handle is on me, full density lock
 	cacheLocal()
 	if myChar and handle:IsDescendantOf(myChar) then
-		burstHorizontalDensity()
-		flashLabel.Text = "HANDLE ON ME — HD"
+		burstFullDensity()
+		flashLabel.Text = "HANDLE ON ME — FD"
 		flashLabel.Visible = true
 		task.delay(1.5, function() flashLabel.Visible = false end)
 	end
