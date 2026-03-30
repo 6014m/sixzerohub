@@ -126,7 +126,7 @@ local function backDash()
 			keyDown(0x52, Enum.KeyCode.R)
 			task.delay(0.15, function() keyUp(0x52, Enum.KeyCode.R) end)
 		end)
-		task.delay(0.5, function() keyUp(0x53, Enum.KeyCode.S) end)
+		task.delay(1, function() keyUp(0x53, Enum.KeyCode.S) end)
 	end)
 end
 
