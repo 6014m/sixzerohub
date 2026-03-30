@@ -559,6 +559,10 @@ local function watchPlayer(player, char)
 					addRow(string.format("KICK %s→%s | %.0fms after block | %.1f studs",
 						pName, nearest, delay * 1000, bestDist), Color3.fromRGB(255, 170, 0))
 				end
+				-- Check if the kick actually dealt damage
+				snapshotHealth()
+				local kickInfo = { weapon = "Kick", move = "Kick" }
+				task.delay(0.3, function() checkDamage(player, kickerHRP, kickInfo) end)
 			end
 			eventType = "KICK"
 		elseif info.type == 6 then
