@@ -120,12 +120,14 @@ local function keyUp(vk, enumKey)
 end
 local function backDash()
 	blockUp()
-	keyDown(0x53, Enum.KeyCode.S)
-	task.delay(0.05, function()
-		keyDown(0x52, Enum.KeyCode.R)
-		task.delay(0.15, function() keyUp(0x52, Enum.KeyCode.R) end)
+	task.delay(0.1, function()
+		keyDown(0x53, Enum.KeyCode.S)
+		task.delay(0.15, function()
+			keyDown(0x52, Enum.KeyCode.R)
+			task.delay(0.15, function() keyUp(0x52, Enum.KeyCode.R) end)
+		end)
+		task.delay(0.5, function() keyUp(0x53, Enum.KeyCode.S) end)
 	end)
-	task.delay(0.4, function() keyUp(0x53, Enum.KeyCode.S) end)
 end
 
 ---------- GUI ----------
