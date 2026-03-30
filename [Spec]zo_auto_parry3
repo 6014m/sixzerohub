@@ -293,9 +293,10 @@ local function canSwingSafely()
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= lp then
 			local char = p.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
 			local root = char and char:FindFirstChild("HumanoidRootPart")
-			if root and (myRoot.Position - root.Position).Magnitude <= SWING_RANGE then
-				-- Someone's in swing range
+			if root and hum and hum.Health > 0 and (myRoot.Position - root.Position).Magnitude <= SWING_RANGE then
+				-- Someone alive is in swing range
 				hasTarget = true
 
 				-- Don't swing if they're blocking — they'll parry us
@@ -331,6 +332,10 @@ task.spawn(function()
 				local root = entry.root
 
 				if track.IsPlaying and root and root.Parent then
+					-- Skip dead players
+					local hum = root.Parent and root.Parent:FindFirstChildOfClass("Humanoid")
+					if not hum or hum.Health <= 0 then continue end
+
 					local dist = (myRoot.Position - root.Position).Magnitude
 					if dist <= RANGE then
 						local id = track.Animation and track.Animation.AnimationId:match("%d+")
