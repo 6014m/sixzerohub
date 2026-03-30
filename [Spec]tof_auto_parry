@@ -8,7 +8,8 @@ local playerGui = lp:WaitForChild("PlayerGui")
 
 local RANGE = 20
 local RANGE_APPROACHING = 30
-local CLOSE_RANGE = 5
+local CLOSE_RANGE = 10
+local DIR_THRESHOLD = -0.5
 local PUSH_ANIM_ID = "rbxassetid://134933487900882"
 
 local connections = {}
@@ -182,7 +183,7 @@ local function shouldParry(theirHRP)
 
 	local look = theirHRP.CFrame.LookVector
 	local dist = math.sqrt(distSq)
-	return (look.X * ox + look.Y * oy + look.Z * oz) / dist >= 0
+	return (look.X * ox + look.Y * oy + look.Z * oz) / dist >= DIR_THRESHOLD
 end
 
 local function doParry(player, theirHRP)
