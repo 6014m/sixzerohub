@@ -357,11 +357,59 @@ end
 for _, p in ipairs(Players:GetPlayers()) do task.spawn(watchPlayer, p) end
 Players.PlayerAdded:Connect(function(p) task.spawn(watchPlayer, p) end)
 
+---------- RenderStepped Polling — catches animations between event firings ----------
+
+local polledAnims = {} -- [trackInstance] = true, prevent double-processing
+
+local rsConn = RunService.RenderStepped:Connect(function()
+	if not myHRP then cacheLocal(); return end
+	local myPos = myHRP.Position
+
+	for i = 1, #playerCache do
+		local p = playerCache[i]
+		local char = p.Character
+		if char then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local dx = myPos.X - hrp.Position.X
+				local dz = myPos.Z - hrp.Position.Z
+				if dx * dx + dz * dz <= RANGE * RANGE then
+					local hum = char:FindFirstChildOfClass("Humanoid")
+					local animator = hum and hum:FindFirstChildOfClass("Animator")
+					if animator then
+						for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+							if not polledAnims[track] and track.Animation then
+								local id = track.Animation.AnimationId:match("%d+")
+								if id then
+									local info = animDB[id]
+									if info and (info.type == ATTACK or info.type == FEINT) then
+										polledAnims[track] = true
+										onEnemyAnimation(p, info, track)
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	-- Clean up stopped tracks
+	for track in pairs(polledAnims) do
+		if not track.IsPlaying then
+			polledAnims[track] = nil
+		end
+	end
+end)
+table.insert(connections, rsConn)
+
 ---------- SIXZEROHUB REGISTRATION ----------
 
 local function cleanup()
 	for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
 	connections = {}
+	polledAnims = {}
 	pcall(function() gui:Destroy() end)
 end
 
