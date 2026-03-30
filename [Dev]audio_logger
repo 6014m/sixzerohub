@@ -1,0 +1,19 @@
+-- Audio Logger — logs all playing sounds to F9 (no duplicates)
+
+local seen = {}
+
+local function logSound(sound)
+	if not sound:IsA("Sound") then return end
+	local function onPlay()
+		local id = sound.SoundId
+		if id == "" or seen[id] then return end
+		seen[id] = true
+		local path = sound:GetFullName()
+		warn("[AudioLog] " .. id .. " | " .. path)
+	end
+	if sound.IsPlaying then onPlay() end
+	sound.Played:Connect(onPlay)
+end
+
+for _, v in ipairs(game:GetDescendants()) do logSound(v) end
+game.DescendantAdded:Connect(logSound)
