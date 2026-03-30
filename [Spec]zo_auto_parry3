@@ -242,7 +242,58 @@ local lastBlock = 0
 local lastKick = 0
 local lastPunish = 0
 local lastDodge = 0
+local lastSwing = 0
 local blockedAnims = {} -- [track] = true, don't double-block same attack
+
+---------- Auto Attack Logic ----------
+-- Attack when safe: nobody nearby is blocking (they'd parry us),
+-- nobody is mid-attack (we should be blocking not swinging),
+-- and we're not currently blocking
+
+local SWING_CD = 0.5
+local SWING_RANGE = 12 -- only swing when close enough to actually hit
+
+local function isPlayerDoingAnim(root, idTable)
+	for _, entry in ipairs(allAnims) do
+		if entry.root == root and entry.track.IsPlaying and entry.track.Animation then
+			local id = entry.track.Animation.AnimationId:match("%d+")
+			if id and idTable[id] then return true end
+		end
+	end
+	return false
+end
+
+local function canSwingSafely()
+	if blocking then return false end
+	if not myRoot then return false end
+	local now = tick()
+	if now - lastBlock < 0.3 then return false end -- just blocked, wait
+	if now - lastSwing < SWING_CD then return false end
+
+	-- Check all nearby players
+	local hasTarget = false
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= lp then
+			local char = p.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if root and (myRoot.Position - root.Position).Magnitude <= SWING_RANGE then
+				-- Someone's in swing range
+				hasTarget = true
+
+				-- Don't swing if they're blocking — they'll parry us
+				if isPlayerDoingAnim(root, BLOCK_IDS) then return false end
+
+				-- Don't swing if they're mid-attack — we should be blocking
+				if isPlayerDoingAnim(root, ATTACK_IDS) then return false end
+
+				-- Don't swing if they're mid-kick — dodge instead
+				if isPlayerDoingAnim(root, KICK_IDS) then return false end
+			end
+		end
+	end
+
+	return hasTarget -- only swing if someone is actually in range
+end
 
 ---------- Main Poll Loop ----------
 
@@ -337,6 +388,13 @@ task.spawn(function()
 						blocking = false
 					end
 				end)
+			end
+
+			-- Auto attack when safe
+			if canSwingSafely() then
+				lastSwing = tick()
+				swing()
+				flash("ATTACK", Color3.fromRGB(255, 200, 50))
 			end
 		end
 		task.wait(POLL_RATE)
