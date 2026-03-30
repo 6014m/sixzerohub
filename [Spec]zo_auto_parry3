@@ -319,6 +319,7 @@ local lastPunish = 0
 local lastDodge = 0
 local lastSwing = 0
 local lastFeint = 0
+local lastHitBlock = 0 -- when our attack hit their block (NORMAL BLOCK while we're swinging)
 local blockedAnims = {} -- [track] = true, don't double-block same attack
 
 ---------- Auto Attack Logic ----------
@@ -423,14 +424,16 @@ task.spawn(function()
 							end
 						end
 
-						-- Block detection — kick
-						if id and BLOCK_IDS[id] and now - lastKick > 1 then
+						-- Block detection — kick (but not right after our attack got blocked)
+						if id and BLOCK_IDS[id] and now - lastKick > 1 and now - lastHitBlock > 1.5 then
 							if isFacingMe(root) then
 								lastKick = now
 								local targetPlayer = entry.player
 								task.delay(0.7, function()
+									-- Before kicking, check they didn't counter-attack
+									local stillBlocking = isPlayingAnim(targetPlayer, BLOCK_IDS)
 									local r2 = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-									if r2 and myRoot and (myRoot.Position - r2.Position).Magnitude <= RANGE then
+									if stillBlocking and r2 and myRoot and (myRoot.Position - r2.Position).Magnitude <= RANGE then
 										kick()
 										flash("KICK " .. targetPlayer.Name, Color3.fromRGB(255, 100, 100))
 									end
@@ -554,6 +557,10 @@ if terrain then
 			if blocking then
 				blockConfirmed = true
 				flash("BLOCK CONFIRMED", Color3.fromRGB(87, 242, 135))
+			elseif swinging then
+				-- Our attack hit their block — expect counter, don't kick
+				lastHitBlock = tick()
+				flash("HIT THEIR BLOCK — WAIT", Color3.fromRGB(255, 200, 100))
 			end
 		elseif child.Name == "PERFECT BLOCK" then
 			-- Someone hit a perfect block — check if the part is near me (I got perfect blocked)
