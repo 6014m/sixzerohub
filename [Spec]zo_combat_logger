@@ -73,7 +73,57 @@ animDB["6907975812"] = { type = KICK, weapon = "Any", move = "Kick" }
 animDB["15612208633"] = { type = 6, weapon = "Any", move = "Stagger" }
 
 local DATA_FILE = "ZoCombat_data.json"
+local DISCOVER_FILE = "ZoCombat_discovered.json"
 local data = { events = {}, perWeapon = {}, kickData = {}, hits = {} }
+
+-- Discovered animations from context clues
+local discovered = {} -- [animId] = { type = "BLOCK"/"ATTACK", confidence = N, firstSeen = time }
+
+pcall(function()
+	if isfile and isfile(DISCOVER_FILE) then
+		local d = HttpService:JSONDecode(readfile(DISCOVER_FILE))
+		if type(d) == "table" then discovered = d end
+	end
+end)
+
+local function saveDiscovered()
+	pcall(function()
+		if writefile then writefile(DISCOVER_FILE, HttpService:JSONEncode(discovered)) end
+	end)
+end
+
+-- Track recent unknown anims per player: [playerName] = { {id=, time=}, ... }
+local recentUnknown = {}
+
+local function trackUnknown(playerName, animId)
+	if not recentUnknown[playerName] then recentUnknown[playerName] = {} end
+	local list = recentUnknown[playerName]
+	list[#list + 1] = { id = animId, time = tick() }
+	-- Prune old entries (> 3s)
+	local fresh = {}
+	local now = tick()
+	for _, e in ipairs(list) do
+		if now - e.time < 3 then fresh[#fresh + 1] = e end
+	end
+	recentUnknown[playerName] = fresh
+end
+
+local function discoverAnim(animId, animType)
+	if animDB[animId] then return end -- already known
+	if not discovered[animId] then
+		discovered[animId] = { type = animType, confidence = 1, firstSeen = os.clock() }
+	else
+		discovered[animId].confidence = discovered[animId].confidence + 1
+		if discovered[animId].type ~= animType and discovered[animId].confidence <= 1 then
+			-- Conflicting info with low confidence, override
+			discovered[animId].type = animType
+		end
+	end
+	saveDiscovered()
+	addRow(string.format("DISCOVERED %s: %s (confidence %d)",
+		animType, animId, discovered[animId].confidence),
+		Color3.fromRGB(255, 0, 255))
+end
 
 -- Clear old data on load (fresh start)
 pcall(function()
@@ -447,13 +497,22 @@ if terrain then
 			-- Find which blocker is nearest to the part
 			local partPos = child.Position
 			local nearest, bestDist = nil, math.huge
-			for bName, bTime in pairs(blockStarts) do
-				local bPlayer = Players:FindFirstChild(bName)
-				local bChar = bPlayer and bPlayer.Character
-				local bHRP = bChar and bChar:FindFirstChild("HumanoidRootPart")
-				if bHRP then
-					local d = (bHRP.Position - partPos).Magnitude
-					if d < bestDist then bestDist = d; nearest = bName end
+			for _, p in ipairs(Players:GetPlayers()) do
+				local pChar = p.Character
+				local pHRP = pChar and pChar:FindFirstChild("HumanoidRootPart")
+				if pHRP then
+					local d = (pHRP.Position - partPos).Magnitude
+					if d < bestDist then bestDist = d; nearest = p.Name end
+				end
+			end
+
+			-- Auto-discover: whoever got kicked had unknown anims = those are BLOCK anims
+			if nearest and recentUnknown[nearest] then
+				local now = tick()
+				for _, entry in ipairs(recentUnknown[nearest]) do
+					if now - entry.time < 2 then
+						discoverAnim(entry.id, "BLOCK")
+					end
 				end
 			end
 
@@ -493,7 +552,11 @@ local function watchPlayer(player, char)
 		local id = track.Animation.AnimationId:match("%d+")
 		if not id then return end
 		local info = animDB[id]
-		if not info then return end
+		if not info then
+			-- Track unknown animation for auto-discovery
+			trackUnknown(player.Name, id)
+			return
+		end
 
 		local pName = player.Name
 		local eventType
@@ -578,12 +641,42 @@ local function watchPlayer(player, char)
 	table.insert(connections, c)
 end
 
+local function watchDeath(player, char)
+	local hum = char:WaitForChild("Humanoid", 5)
+	if not hum then return end
+	local c = hum.Died:Connect(function()
+		-- Someone died — check nearby players for recent unknown anims → ATTACK
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+		local now = tick()
+		for pName, unknowns in pairs(recentUnknown) do
+			if pName ~= player.Name then
+				local pPlayer = Players:FindFirstChild(pName)
+				local pChar = pPlayer and pPlayer.Character
+				local pHRP = pChar and pChar:FindFirstChild("HumanoidRootPart")
+				if pHRP and (pHRP.Position - hrp.Position).Magnitude < 20 then
+					for _, entry in ipairs(unknowns) do
+						if now - entry.time < 2 then
+							discoverAnim(entry.id, "ATTACK")
+						end
+					end
+				end
+			end
+		end
+	end)
+	table.insert(connections, c)
+end
+
 local function hookPlayer(player)
-	-- Watch ALL players including self (need to see our own kicks + everyone's blocks)
-	if player.Character then task.spawn(watchPlayer, player, player.Character) end
+	-- Watch ALL players including self
+	if player.Character then
+		task.spawn(watchPlayer, player, player.Character)
+		task.spawn(watchDeath, player, player.Character)
+	end
 	local c = player.CharacterAdded:Connect(function(char)
 		task.wait(0.3)
 		task.spawn(watchPlayer, player, char)
+		task.spawn(watchDeath, player, char)
 	end)
 	table.insert(connections, c)
 end
