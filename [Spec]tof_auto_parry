@@ -613,8 +613,12 @@ end
 
 local function checkHandle(obj)
 	if obj.Name == "Handle" and obj:IsA("BasePart") then
-		local tool = obj.Parent
-		if tool and tool:IsA("Tool") and tool.Parent and tool.Parent:IsA("Backpack") then return end
+		-- Skip handles inside tools (every equipped/backpack tool has a Handle)
+		if obj.Parent and obj.Parent:IsA("Tool") then return end
+		-- Skip handles inside any player character
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p.Character and obj:IsDescendantOf(p.Character) then return end
+		end
 		trackedHandles[obj] = true
 		-- Yeet it
 		pcall(function()
