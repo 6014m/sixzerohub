@@ -452,7 +452,8 @@ settingsGearBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------- VR ON-SCREEN KEYBOARD ----------
-
+-- wrapped in IIFE to avoid Wave main-chunk parse limit
+(function()
 local kbBtn = Instance.new("TextButton")
 kbBtn.Name = "VRKeyboard"
 kbBtn.Size = UDim2.new(0, 32, 0, 26)
@@ -643,6 +644,7 @@ kbRefreshVR()
 pcall(function()
     UserInputService:GetPropertyChangedSignal("VREnabled"):Connect(kbRefreshVR)
 end)
+end)()
 
 ---------- ACTIVE SCRIPTS SYSTEM ----------
 -- (loadedScripts moved above settings gear handler)
