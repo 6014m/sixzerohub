@@ -2346,6 +2346,87 @@ addcmd("unfly", {"nofly", "novfly", "unvehiclefly", "novehiclefly", "unvfly"}, "
     notify("Fly", "Disabled")
 end)
 
+-- VR Fly system (point hand + hold trigger to fly that direction, like VR games)
+local vrFlyBody = nil
+local vrFlyActive = false
+local vrFlyConns = {}
+
+local function vrFlyCleanup()
+    vrFlyActive = false
+    for _, c in ipairs(vrFlyConns) do pcall(function() c:Disconnect() end) end
+    table.clear(vrFlyConns)
+    if vrFlyBody then pcall(function() vrFlyBody:Destroy() end); vrFlyBody = nil end
+    local hum = myHumanoid()
+    if hum then hum.PlatformStand = false end
+end
+
+addcmd("vrfly", {"vrf", "vrflight"}, "VR fly: hold L/R trigger and point hand to fly that direction", function(args)
+    flySpeed = parseNumber(args[1], flySpeed or 50)
+    if vrFlyActive then
+        vrFlyCleanup()
+        notify("VR Fly", "Disabled")
+        return
+    end
+
+    local VRService = game:GetService("VRService")
+    if not UserInputService.VREnabled then
+        notify("VR Fly", "VR not detected — enable VR mode first")
+        return
+    end
+
+    vrFlyActive = true
+    notify("VR Fly", "Enabled (speed " .. flySpeed .. ") — hold L/R trigger, point hand")
+
+    local triggerHeld = false
+    local activeHand = Enum.UserCFrame.RightHand
+
+    table.insert(vrFlyConns, connect(UserInputService.InputBegan, function(input)
+        if input.KeyCode == Enum.KeyCode.ButtonR2 then
+            triggerHeld = true; activeHand = Enum.UserCFrame.RightHand
+        elseif input.KeyCode == Enum.KeyCode.ButtonL2 then
+            triggerHeld = true; activeHand = Enum.UserCFrame.LeftHand
+        end
+    end))
+
+    table.insert(vrFlyConns, connect(UserInputService.InputEnded, function(input)
+        if input.KeyCode == Enum.KeyCode.ButtonR2 or input.KeyCode == Enum.KeyCode.ButtonL2 then
+            triggerHeld = false
+        end
+    end))
+
+    task.spawn(function()
+        while vrFlyActive do
+            local root = myRoot()
+            local hum = myHumanoid()
+            if not root or not hum then task.wait(0.1); continue end
+
+            if not vrFlyBody or not vrFlyBody.Parent then
+                vrFlyBody = Instance.new("BodyVelocity")
+                vrFlyBody.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                vrFlyBody.Velocity = Vector3.zero
+                vrFlyBody.P = 9000
+                vrFlyBody.Parent = root
+            end
+
+            if triggerHeld then
+                local cam = workspace.CurrentCamera
+                local handCF = cam.CFrame * VRService:GetUserCFrame(activeHand)
+                vrFlyBody.Velocity = handCF.LookVector * flySpeed
+            else
+                vrFlyBody.Velocity = Vector3.zero
+            end
+
+            hum.PlatformStand = true
+            RunService.Heartbeat:Wait()
+        end
+    end)
+end)
+
+addcmd("unvrfly", {"novrfly", "unvrf"}, "Disable VR fly", function(args)
+    vrFlyCleanup()
+    notify("VR Fly", "Disabled")
+end)
+
 addcmd("teleportwalk", {"tpwalk"}, "Teleport in walk direction", function(args)
     local dist = parseNumber(args[1], 5)
     local on = toggleLoop("tpwalk", 0, function()
