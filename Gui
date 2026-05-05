@@ -569,27 +569,74 @@ end)
         currentBox = nil
     end)
 
-    pcall(function()
-        UserInputService.TextBoxFocused:Connect(function(textBox)
-            if not UserInputService.VREnabled then return end
-            if textBox == nil then return end
-            -- skip our own keyboard's TextBoxes if any (none right now, future-proof)
-            if textBox:IsDescendantOf(kbPanel) then return end
-            hideToken = hideToken + 1
-            currentBox = textBox
+    -- Connect text-focus listeners. Roblox's own VR VirtualKeyboard.lua uses the
+    -- exact same UserInputService.TextBoxFocused signal, so the path is correct.
+    -- Also expose a manual toggle in case the user's TextBox doesn't fire the
+    -- event (custom input UIs do exist) and a diag notify when it DOES fire.
+    local function showKb(box)
+        hideToken = hideToken + 1
+        currentBox = box
+        kbPanel.Visible = true
+    end
+
+    local conn1 = UserInputService.TextBoxFocused:Connect(function(textBox)
+        if not textBox or textBox:IsDescendantOf(kbPanel) then return end
+        if _G.SixZeroHubNotify then _G.SixZeroHubNotify("VR Keyboard", "TextBox focused — showing", "dismiss") end
+        showKb(textBox)
+    end)
+    local conn2 = UserInputService.TextBoxFocusReleased:Connect(function()
+        hideToken = hideToken + 1
+        local thisToken = hideToken
+        task.delay(0.25, function()
+            if thisToken == hideToken then
+                kbPanel.Visible = false
+                currentBox = nil
+            end
+        end)
+    end)
+
+    -- Manual fallback: tiny toggle button next to the cog. Always shows in VR
+    -- so the user has a way in even if the auto-show signal isn't firing.
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Name = "VRKeyboardToggle"
+    toggleBtn.Size = UDim2.new(0, 32, 0, 26)
+    toggleBtn.Position = UDim2.new(1, -150, 0, 5)
+    toggleBtn.BackgroundColor3 = COLORS.hover
+    toggleBtn.BackgroundTransparency = 0.5
+    toggleBtn.BorderSizePixel = 0
+    toggleBtn.AutoButtonColor = false
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextSize = 14
+    toggleBtn.Text = "\xE2\x8C\xA8"
+    toggleBtn.TextColor3 = COLORS.text
+    toggleBtn.Visible = false
+    toggleBtn.Parent = toggleGui
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
+    toggleBtn.MouseEnter:Connect(function()
+        TweenService:Create(toggleBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.2}):Play()
+    end)
+    toggleBtn.MouseLeave:Connect(function()
+        TweenService:Create(toggleBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
+    end)
+    toggleBtn.MouseButton1Click:Connect(function()
+        if kbPanel.Visible then
+            kbPanel.Visible = false
+            currentBox = nil
+        else
             kbPanel.Visible = true
-        end)
-        UserInputService.TextBoxFocusReleased:Connect(function()
-            hideToken = hideToken + 1
-            local thisToken = hideToken
-            task.delay(0.25, function()
-                -- only hide if no other focus event superseded this release
-                if thisToken == hideToken then
-                    kbPanel.Visible = false
-                    currentBox = nil
-                end
-            end)
-        end)
+            -- if a TextBox currently has focus, type into it; otherwise the user
+            -- needs to click the TextBox first
+            local focused = UserInputService:GetFocusedTextBox()
+            if focused then currentBox = focused end
+        end
+    end)
+
+    local function refreshVR()
+        toggleBtn.Visible = UserInputService.VREnabled
+    end
+    pcall(refreshVR)
+    pcall(function()
+        UserInputService:GetPropertyChangedSignal("VREnabled"):Connect(refreshVR)
     end)
 end)()
 
