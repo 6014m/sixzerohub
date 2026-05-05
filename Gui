@@ -451,6 +451,148 @@ settingsGearBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+---------- VR ON-SCREEN KEYBOARD ----------
+-- Auto-shows when any TextBox gets focused while in VR. Keys re-capture focus
+-- after each click so the TextBox stays the active typing target.
+-- Wrapped in IIFE (leading ; required after prior `end)`) so locals + bytecode
+-- live in a child function, not the main chunk.
+
+;(function()
+    local kbPanel = Instance.new("Frame")
+    kbPanel.Name = "VRKeyboard"
+    kbPanel.Size = UDim2.new(0, 540, 0, 232)
+    kbPanel.Position = UDim2.new(0.5, -270, 1, -252)
+    kbPanel.BackgroundColor3 = COLORS.darker
+    kbPanel.BorderSizePixel = 0
+    kbPanel.Visible = false
+    kbPanel.Parent = toggleGui
+    Instance.new("UICorner", kbPanel).CornerRadius = UDim.new(0, 8)
+
+    local kbStroke = Instance.new("UIStroke", kbPanel)
+    kbStroke.Color = COLORS.accent
+    kbStroke.Thickness = 1
+    kbStroke.Transparency = 0.5
+
+    local kbLayout = Instance.new("UIListLayout", kbPanel)
+    kbLayout.FillDirection = Enum.FillDirection.Vertical
+    kbLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    kbLayout.Padding = UDim.new(0, 4)
+    kbLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    kbLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+
+    Instance.new("UIPadding", kbPanel).PaddingTop = UDim.new(0, 8)
+
+    local KB_ROWS = { "1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm,./" }
+    local KB_SHIFTED = {
+        ["1"]="!",["2"]="@",["3"]="#",["4"]="$",["5"]="%",
+        ["6"]="^",["7"]="&",["8"]="*",["9"]="(",["0"]=")",
+        [","]="<",["."]=">",["/"]="?",
+    }
+
+    local currentBox = nil
+    local capsOn = false
+    local kbButtons = {}
+    local hideToken = 0
+
+    local function appendType(text)
+        if not currentBox then return end
+        currentBox.Text = currentBox.Text .. text
+        pcall(function() currentBox:CaptureFocus() end)
+    end
+
+    local function makeRow(layoutOrder)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(0, 530, 0, 36)
+        row.BackgroundTransparency = 1
+        row.BorderSizePixel = 0
+        row.LayoutOrder = layoutOrder
+        row.Parent = kbPanel
+        local rl = Instance.new("UIListLayout", row)
+        rl.FillDirection = Enum.FillDirection.Horizontal
+        rl.SortOrder = Enum.SortOrder.LayoutOrder
+        rl.Padding = UDim.new(0, 4)
+        rl.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        return row
+    end
+
+    local function makeKey(parent, label, w, layoutOrder, onClick)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(0, w, 0, 36)
+        b.BackgroundColor3 = COLORS.hover
+        b.BorderSizePixel = 0
+        b.Text = label
+        b.TextColor3 = COLORS.text
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 14
+        b.AutoButtonColor = true
+        b.LayoutOrder = layoutOrder
+        b.Parent = parent
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        b.MouseButton1Click:Connect(onClick)
+        return b
+    end
+
+    for r, row in ipairs(KB_ROWS) do
+        local rowFrame = makeRow(r)
+        for i = 1, #row do
+            local ch = row:sub(i, i)
+            local btn = makeKey(rowFrame, ch, 48, i, function()
+                local out = ch
+                if capsOn then out = KB_SHIFTED[ch] or ch:upper() end
+                appendType(out)
+            end)
+            kbButtons[#kbButtons + 1] = { btn = btn, ch = ch }
+        end
+    end
+
+    local bottomRow = makeRow(5)
+    local shiftBtn
+    shiftBtn = makeKey(bottomRow, "Shift", 80, 1, function()
+        capsOn = not capsOn
+        shiftBtn.BackgroundColor3 = capsOn and COLORS.accent or COLORS.hover
+        for _, k in ipairs(kbButtons) do
+            k.btn.Text = capsOn and (KB_SHIFTED[k.ch] or k.ch:upper()) or k.ch
+        end
+    end)
+    makeKey(bottomRow, "Space", 200, 2, function() appendType(" ") end)
+    makeKey(bottomRow, "\xE2\x8C\xAB", 70, 3, function()
+        if not currentBox then return end
+        currentBox.Text = currentBox.Text:sub(1, -2)
+        pcall(function() currentBox:CaptureFocus() end)
+    end)
+    makeKey(bottomRow, "Enter", 90, 4, function()
+        if not currentBox then return end
+        pcall(function() currentBox:ReleaseFocus(true) end)
+    end)
+    makeKey(bottomRow, "X", 50, 5, function()
+        kbPanel.Visible = false
+        currentBox = nil
+    end)
+
+    pcall(function()
+        UserInputService.TextBoxFocused:Connect(function(textBox)
+            if not UserInputService.VREnabled then return end
+            if textBox == nil then return end
+            -- skip our own keyboard's TextBoxes if any (none right now, future-proof)
+            if textBox:IsDescendantOf(kbPanel) then return end
+            hideToken = hideToken + 1
+            currentBox = textBox
+            kbPanel.Visible = true
+        end)
+        UserInputService.TextBoxFocusReleased:Connect(function()
+            hideToken = hideToken + 1
+            local thisToken = hideToken
+            task.delay(0.25, function()
+                -- only hide if no other focus event superseded this release
+                if thisToken == hideToken then
+                    kbPanel.Visible = false
+                    currentBox = nil
+                end
+            end)
+        end)
+    end)
+end)()
+
 ---------- ACTIVE SCRIPTS SYSTEM ----------
 -- (loadedScripts moved above settings gear handler)
 local activeScripts = {}
