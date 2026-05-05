@@ -457,6 +457,9 @@ local function execCmd(cmdStr, speaker, store)
     end)
 end
 
+-- expose for external callers (e.g. SixZeroHub VR keyboard)
+genv[CZ_KEY].execCmd = execCmd
+
 --================================================================
 -- UTILITY FUNCTIONS
 --================================================================
@@ -2346,59 +2349,116 @@ addcmd("unfly", {"nofly", "novfly", "unvehiclefly", "novehiclefly", "unvfly"}, "
     notify("Fly", "Disabled")
 end)
 
--- VR Fly system (point hand + hold trigger to fly that direction, like VR games)
+-- VR Fly tool: equippable wand, hold trigger to fly in hand direction
+local VRFLY_MESH_ID = "rbxassetid://435840330"
+local VRFLY_TEXTURE_ID = "rbxassetid://435840335"
+
+local vrFlyTool = nil
 local vrFlyBody = nil
 local vrFlyActive = false
+local vrFlyEquipped = false
+local vrFlyHandle = nil
+local vrFlyTriggerHeld = false
 local vrFlyConns = {}
 
 local function vrFlyCleanup()
     vrFlyActive = false
+    vrFlyEquipped = false
+    vrFlyHandle = nil
+    vrFlyTriggerHeld = false
     for _, c in ipairs(vrFlyConns) do pcall(function() c:Disconnect() end) end
     table.clear(vrFlyConns)
     if vrFlyBody then pcall(function() vrFlyBody:Destroy() end); vrFlyBody = nil end
+    if vrFlyTool then pcall(function() vrFlyTool:Destroy() end); vrFlyTool = nil end
     local hum = myHumanoid()
     if hum then hum.PlatformStand = false end
 end
 
-addcmd("vrfly", {"vrf", "vrflight"}, "VR fly: hold L/R trigger and point hand to fly that direction", function(args)
+local function vrFlySpawnTool()
+    if vrFlyTool and vrFlyTool.Parent then return vrFlyTool end
+    local backpack = player:FindFirstChildOfClass("Backpack")
+    if not backpack then return nil end
+
+    local tool = Instance.new("Tool")
+    tool.Name = "VR Fly"
+    tool.RequiresHandle = true
+    tool.CanBeDropped = false
+    tool.ToolTip = "Hold trigger to fly in hand direction"
+
+    local handle = Instance.new("Part")
+    handle.Name = "Handle"
+    handle.Size = Vector3.new(1, 1, 4)
+    handle.Massless = true
+    handle.CanCollide = false
+    handle.Parent = tool
+
+    local mesh = Instance.new("SpecialMesh")
+    mesh.MeshType = Enum.MeshType.FileMesh
+    mesh.MeshId = VRFLY_MESH_ID
+    mesh.TextureId = VRFLY_TEXTURE_ID
+    mesh.Parent = handle
+
+    table.insert(vrFlyConns, tool.Equipped:Connect(function()
+        vrFlyEquipped = true
+        vrFlyHandle = tool:FindFirstChild("Handle")
+    end))
+    table.insert(vrFlyConns, tool.Unequipped:Connect(function()
+        vrFlyEquipped = false
+        if vrFlyBody then pcall(function() vrFlyBody:Destroy() end); vrFlyBody = nil end
+        local hum = myHumanoid()
+        if hum then hum.PlatformStand = false end
+    end))
+
+    tool.Parent = backpack
+    vrFlyTool = tool
+    return tool
+end
+
+addcmd("vrfly", {"vrf", "vrflight"}, "Spawn VR fly wand. Equip + hold L/R trigger to fly in hand direction.", function(args)
     flySpeed = parseNumber(args[1], flySpeed or 50)
     if vrFlyActive then
         vrFlyCleanup()
-        notify("VR Fly", "Disabled")
-        return
-    end
-
-    local VRService = game:GetService("VRService")
-    if not UserInputService.VREnabled then
-        notify("VR Fly", "VR not detected — enable VR mode first")
+        notify("VR Fly", "Tool removed")
         return
     end
 
     vrFlyActive = true
-    notify("VR Fly", "Enabled (speed " .. flySpeed .. ") — hold L/R trigger, point hand")
-
-    local triggerHeld = false
-    local activeHand = Enum.UserCFrame.RightHand
+    vrFlySpawnTool()
 
     table.insert(vrFlyConns, connect(UserInputService.InputBegan, function(input)
-        if input.KeyCode == Enum.KeyCode.ButtonR2 then
-            triggerHeld = true; activeHand = Enum.UserCFrame.RightHand
-        elseif input.KeyCode == Enum.KeyCode.ButtonL2 then
-            triggerHeld = true; activeHand = Enum.UserCFrame.LeftHand
+        if input.KeyCode == Enum.KeyCode.ButtonR2 or input.KeyCode == Enum.KeyCode.ButtonL2 then
+            vrFlyTriggerHeld = true
+        end
+    end))
+    table.insert(vrFlyConns, connect(UserInputService.InputEnded, function(input)
+        if input.KeyCode == Enum.KeyCode.ButtonR2 or input.KeyCode == Enum.KeyCode.ButtonL2 then
+            vrFlyTriggerHeld = false
         end
     end))
 
-    table.insert(vrFlyConns, connect(UserInputService.InputEnded, function(input)
-        if input.KeyCode == Enum.KeyCode.ButtonR2 or input.KeyCode == Enum.KeyCode.ButtonL2 then
-            triggerHeld = false
-        end
+    table.insert(vrFlyConns, connect(player.CharacterAdded, function()
+        task.wait(1)
+        if not vrFlyActive then return end
+        vrFlyEquipped = false
+        vrFlyHandle = nil
+        vrFlyTool = nil
+        vrFlySpawnTool()
     end))
+
+    notify("VR Fly", "Tool added — equip + hold trigger (speed " .. flySpeed .. ")")
 
     task.spawn(function()
         while vrFlyActive do
             local root = myRoot()
             local hum = myHumanoid()
-            if not root or not hum then task.wait(0.1); continue end
+            if not root or not hum then RunService.Heartbeat:Wait(); continue end
+
+            if not vrFlyEquipped or not vrFlyHandle or not vrFlyHandle.Parent then
+                if vrFlyBody then pcall(function() vrFlyBody:Destroy() end); vrFlyBody = nil end
+                hum.PlatformStand = false
+                RunService.Heartbeat:Wait()
+                continue
+            end
 
             if not vrFlyBody or not vrFlyBody.Parent then
                 vrFlyBody = Instance.new("BodyVelocity")
@@ -2408,10 +2468,8 @@ addcmd("vrfly", {"vrf", "vrflight"}, "VR fly: hold L/R trigger and point hand to
                 vrFlyBody.Parent = root
             end
 
-            if triggerHeld then
-                local cam = workspace.CurrentCamera
-                local handCF = cam.CFrame * VRService:GetUserCFrame(activeHand)
-                vrFlyBody.Velocity = handCF.LookVector * flySpeed
+            if vrFlyTriggerHeld then
+                vrFlyBody.Velocity = vrFlyHandle.CFrame.LookVector * flySpeed
             else
                 vrFlyBody.Velocity = Vector3.zero
             end
@@ -2422,9 +2480,9 @@ addcmd("vrfly", {"vrf", "vrflight"}, "VR fly: hold L/R trigger and point hand to
     end)
 end)
 
-addcmd("unvrfly", {"novrfly", "unvrf"}, "Disable VR fly", function(args)
+addcmd("unvrfly", {"novrfly", "unvrf"}, "Remove VR fly tool", function(args)
     vrFlyCleanup()
-    notify("VR Fly", "Disabled")
+    notify("VR Fly", "Tool removed")
 end)
 
 addcmd("teleportwalk", {"tpwalk"}, "Teleport in walk direction", function(args)

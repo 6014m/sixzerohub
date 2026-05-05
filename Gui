@@ -451,6 +451,199 @@ settingsGearBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+---------- VR ON-SCREEN KEYBOARD ----------
+
+local kbBtn = Instance.new("TextButton")
+kbBtn.Name = "VRKeyboard"
+kbBtn.Size = UDim2.new(0, 32, 0, 26)
+kbBtn.Position = UDim2.new(1, -150, 0, 5)
+kbBtn.BackgroundColor3 = COLORS.hover
+kbBtn.BackgroundTransparency = 0.5
+kbBtn.BorderSizePixel = 0
+kbBtn.AutoButtonColor = false
+kbBtn.Font = Enum.Font.GothamBold
+kbBtn.TextSize = 14
+kbBtn.Text = "\xE2\x8C\xA8"
+kbBtn.TextColor3 = COLORS.text
+kbBtn.Visible = false
+kbBtn.Parent = toggleGui
+Instance.new("UICorner", kbBtn).CornerRadius = UDim.new(0, 6)
+
+local kbBtnTooltip = Instance.new("TextLabel")
+kbBtnTooltip.Size = UDim2.new(0, 70, 0, 22)
+kbBtnTooltip.Position = UDim2.new(0.5, -35, 1, 4)
+kbBtnTooltip.BackgroundColor3 = COLORS.darker
+kbBtnTooltip.BorderSizePixel = 0
+kbBtnTooltip.Text = "Keyboard"
+kbBtnTooltip.TextColor3 = COLORS.text
+kbBtnTooltip.TextSize = 12
+kbBtnTooltip.Font = Enum.Font.GothamBold
+kbBtnTooltip.Visible = false
+kbBtnTooltip.Parent = kbBtn
+Instance.new("UICorner", kbBtnTooltip).CornerRadius = UDim.new(0, 4)
+
+kbBtn.MouseEnter:Connect(function()
+    kbBtnTooltip.Visible = true
+    TweenService:Create(kbBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.2}):Play()
+end)
+kbBtn.MouseLeave:Connect(function()
+    kbBtnTooltip.Visible = false
+    TweenService:Create(kbBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
+end)
+
+local kbPanel = Instance.new("Frame")
+kbPanel.Name = "VRKeyboardPanel"
+kbPanel.Size = UDim2.new(0, 540, 0, 232)
+kbPanel.Position = UDim2.new(0.5, -270, 1, -252)
+kbPanel.BackgroundColor3 = COLORS.darker
+kbPanel.BorderSizePixel = 0
+kbPanel.Visible = false
+kbPanel.Parent = toggleGui
+Instance.new("UICorner", kbPanel).CornerRadius = UDim.new(0, 8)
+
+local kbStroke = Instance.new("UIStroke", kbPanel)
+kbStroke.Color = COLORS.accent
+kbStroke.Thickness = 1
+kbStroke.Transparency = 0.5
+
+local kbInput = Instance.new("TextBox")
+kbInput.Size = UDim2.new(1, -68, 0, 32)
+kbInput.Position = UDim2.new(0, 8, 0, 8)
+kbInput.BackgroundColor3 = COLORS.hover
+kbInput.BorderSizePixel = 0
+kbInput.Text = ""
+kbInput.PlaceholderText = "Tap keys (use ; prefix for commands)"
+kbInput.PlaceholderColor3 = COLORS.textMuted
+kbInput.TextColor3 = COLORS.text
+kbInput.Font = Enum.Font.Gotham
+kbInput.TextSize = 14
+kbInput.ClearTextOnFocus = false
+kbInput.TextXAlignment = Enum.TextXAlignment.Left
+kbInput.TextEditable = false
+kbInput.Parent = kbPanel
+Instance.new("UICorner", kbInput).CornerRadius = UDim.new(0, 4)
+
+local kbCloseBtn = Instance.new("TextButton")
+kbCloseBtn.Size = UDim2.new(0, 52, 0, 32)
+kbCloseBtn.Position = UDim2.new(1, -60, 0, 8)
+kbCloseBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+kbCloseBtn.BorderSizePixel = 0
+kbCloseBtn.Text = "X"
+kbCloseBtn.TextColor3 = COLORS.text
+kbCloseBtn.Font = Enum.Font.GothamBold
+kbCloseBtn.TextSize = 14
+kbCloseBtn.AutoButtonColor = true
+kbCloseBtn.Parent = kbPanel
+Instance.new("UICorner", kbCloseBtn).CornerRadius = UDim.new(0, 4)
+
+local kbRows = { "1234567890", "qwertyuiop", "asdfghjkl;", "zxcvbnm,./" }
+local kbShifted = {
+    ["1"]="!",["2"]="@",["3"]="#",["4"]="$",["5"]="%",
+    ["6"]="^",["7"]="&",["8"]="*",["9"]="(",["0"]=")",
+    [","]="<",["."]=">",["/"]="?",[";"]=":",
+}
+local kbCaps = false
+local kbKeys = {}
+
+local function kbMakeKey(label, x, y, w, h, onClick)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, w, 0, h)
+    b.Position = UDim2.new(0, x, 0, y)
+    b.BackgroundColor3 = COLORS.hover
+    b.BorderSizePixel = 0
+    b.Text = label
+    b.TextColor3 = COLORS.text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 14
+    b.AutoButtonColor = true
+    b.Parent = kbPanel
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+    b.MouseButton1Click:Connect(onClick)
+    return b
+end
+
+local kbStartY = 50
+local kbRowH = 36
+local kbRowGap = 6
+local kbKeyW = 48
+local kbKeyGap = 4
+for r, row in ipairs(kbRows) do
+    for i = 1, #row do
+        local ch = row:sub(i, i)
+        local x = 8 + (i - 1) * (kbKeyW + kbKeyGap)
+        local y = kbStartY + (r - 1) * (kbRowH + kbRowGap)
+        local btn = kbMakeKey(ch, x, y, kbKeyW, kbRowH, function()
+            local out = ch
+            if kbCaps then out = kbShifted[ch] or ch:upper() end
+            kbInput.Text = kbInput.Text .. out
+        end)
+        kbKeys[#kbKeys + 1] = { btn = btn, ch = ch }
+    end
+end
+
+local kbBottomY = kbStartY + 4 * (kbRowH + kbRowGap)
+local kbShiftBtn
+kbShiftBtn = kbMakeKey("Shift", 8, kbBottomY, 80, kbRowH, function()
+    kbCaps = not kbCaps
+    kbShiftBtn.BackgroundColor3 = kbCaps and COLORS.accent or COLORS.hover
+    for _, k in ipairs(kbKeys) do
+        k.btn.Text = kbCaps and (kbShifted[k.ch] or k.ch:upper()) or k.ch
+    end
+end)
+kbMakeKey("Space", 92, kbBottomY, 240, kbRowH, function()
+    kbInput.Text = kbInput.Text .. " "
+end)
+kbMakeKey("\xE2\x8C\xAB", 336, kbBottomY, 80, kbRowH, function()
+    kbInput.Text = kbInput.Text:sub(1, -2)
+end)
+
+local function kbSendChat(msg)
+    pcall(function()
+        local TextChatService = game:GetService("TextChatService")
+        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+            local ch = TextChatService:FindFirstChild("TextChannels")
+            local gen = ch and ch:FindFirstChild("RBXGeneral")
+            if gen then gen:SendAsync(msg); return end
+        end
+        local rep = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+        local say = rep and rep:FindFirstChild("SayMessageRequest")
+        if say then say:FireServer(msg, "All") end
+    end)
+end
+
+kbMakeKey("Enter", 420, kbBottomY, 112, kbRowH, function()
+    local text = kbInput.Text
+    if text == "" then return end
+    kbInput.Text = ""
+    if text:sub(1, 1) == ";" then
+        local cz = (getgenv and getgenv() or _G)["COMMAND_ZERO_INSTANCE"]
+        if cz and cz.execCmd then
+            pcall(cz.execCmd, text:sub(2), player, true)
+        else
+            kbSendChat(text)
+        end
+    else
+        kbSendChat(text)
+    end
+end)
+
+kbBtn.MouseButton1Click:Connect(function()
+    kbPanel.Visible = not kbPanel.Visible
+end)
+kbCloseBtn.MouseButton1Click:Connect(function()
+    kbPanel.Visible = false
+end)
+
+local function kbRefreshVR()
+    local inVR = UserInputService.VREnabled
+    kbBtn.Visible = inVR
+    if not inVR then kbPanel.Visible = false end
+end
+kbRefreshVR()
+pcall(function()
+    UserInputService:GetPropertyChangedSignal("VREnabled"):Connect(kbRefreshVR)
+end)
+
 ---------- ACTIVE SCRIPTS SYSTEM ----------
 -- (loadedScripts moved above settings gear handler)
 local activeScripts = {}
