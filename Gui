@@ -451,6 +451,46 @@ settingsGearBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+---------- VR KEYBOARD BUTTON ----------
+-- Opens Roblox's chat bar focus, which triggers the system VR keyboard.
+-- Type ;cmd to run a Command Zero command (CZ chat hook catches it).
+
+local kbBtn = Instance.new("TextButton")
+kbBtn.Name = "VRKeyboard"
+kbBtn.Size = UDim2.new(0, 32, 0, 26)
+kbBtn.Position = UDim2.new(1, -150, 0, 5)
+kbBtn.BackgroundColor3 = COLORS.hover
+kbBtn.BackgroundTransparency = 0.5
+kbBtn.BorderSizePixel = 0
+kbBtn.AutoButtonColor = false
+kbBtn.Font = Enum.Font.GothamBold
+kbBtn.TextSize = 14
+kbBtn.Text = "\xE2\x8C\xA8"
+kbBtn.TextColor3 = COLORS.text
+kbBtn.Visible = false
+kbBtn.Parent = toggleGui
+Instance.new("UICorner", kbBtn).CornerRadius = UDim.new(0, 6)
+
+kbBtn.MouseEnter:Connect(function()
+    TweenService:Create(kbBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.2}):Play()
+end)
+kbBtn.MouseLeave:Connect(function()
+    TweenService:Create(kbBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
+end)
+kbBtn.MouseButton1Click:Connect(function()
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("ChatBarFocus", true)
+    end)
+end)
+
+local function kbRefreshVR()
+    kbBtn.Visible = UserInputService.VREnabled
+end
+kbRefreshVR()
+pcall(function()
+    UserInputService:GetPropertyChangedSignal("VREnabled"):Connect(kbRefreshVR)
+end)
+
 ---------- ACTIVE SCRIPTS SYSTEM ----------
 -- (loadedScripts moved above settings gear handler)
 local activeScripts = {}
