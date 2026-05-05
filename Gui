@@ -452,16 +452,19 @@ settingsGearBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------- VR ON-SCREEN KEYBOARD ----------
--- Auto-shows when any TextBox gets focused while in VR. Keys re-capture focus
--- after each click so the TextBox stays the active typing target.
+-- Toggleable via a button next to the cog (VR-only). Clicking a key writes
+-- directly to the captured TextBox's .Text property — no focus needed, so
+-- the user's chat doesn't unselect/close from typing. A preview line at the
+-- top of the panel shows the buffer so the user can see what they're typing
+-- even after their game's chat closes its input box.
 -- Wrapped in IIFE (leading ; required after prior `end)`) so locals + bytecode
 -- live in a child function, not the main chunk.
 
 ;(function()
     local kbPanel = Instance.new("Frame")
     kbPanel.Name = "VRKeyboard"
-    kbPanel.Size = UDim2.new(0, 540, 0, 232)
-    kbPanel.Position = UDim2.new(0.5, -270, 1, -252)
+    kbPanel.Size = UDim2.new(0, 540, 0, 270)
+    kbPanel.Position = UDim2.new(0.5, -270, 1, -290)
     kbPanel.BackgroundColor3 = COLORS.darker
     kbPanel.BorderSizePixel = 0
     kbPanel.Visible = false
@@ -482,6 +485,23 @@ end)
 
     Instance.new("UIPadding", kbPanel).PaddingTop = UDim.new(0, 8)
 
+    -- Preview line at the top of the panel
+    local kbPreview = Instance.new("TextLabel")
+    kbPreview.Size = UDim2.new(0, 530, 0, 30)
+    kbPreview.BackgroundColor3 = COLORS.hover
+    kbPreview.BorderSizePixel = 0
+    kbPreview.TextColor3 = COLORS.text
+    kbPreview.Font = Enum.Font.Gotham
+    kbPreview.TextSize = 16
+    kbPreview.TextXAlignment = Enum.TextXAlignment.Left
+    kbPreview.Text = ""
+    kbPreview.LayoutOrder = 0
+    kbPreview.Parent = kbPanel
+    Instance.new("UICorner", kbPreview).CornerRadius = UDim.new(0, 4)
+    local kbPreviewPad = Instance.new("UIPadding", kbPreview)
+    kbPreviewPad.PaddingLeft = UDim.new(0, 8)
+    kbPreviewPad.PaddingRight = UDim.new(0, 8)
+
     local KB_ROWS = { "1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm,./" }
     local KB_SHIFTED = {
         ["1"]="!",["2"]="@",["3"]="#",["4"]="$",["5"]="%",
@@ -490,14 +510,25 @@ end)
     }
 
     local currentBox = nil
+    local lastFocusedBox = nil
+    local kbBuffer = ""
     local capsOn = false
     local kbButtons = {}
-    local hideToken = 0
+
+    local function refreshPreview()
+        kbPreview.Text = kbBuffer == "" and "Type..." or kbBuffer
+    end
+
+    local function writeToBox()
+        if currentBox then
+            pcall(function() currentBox.Text = kbBuffer end)
+        end
+    end
 
     local function appendType(text)
-        if not currentBox then return end
-        currentBox.Text = currentBox.Text .. text
-        pcall(function() currentBox:CaptureFocus() end)
+        kbBuffer = kbBuffer .. text
+        refreshPreview()
+        writeToBox()
     end
 
     local function makeRow(layoutOrder)
@@ -556,22 +587,39 @@ end)
     end)
     makeKey(bottomRow, "Space", 200, 2, function() appendType(" ") end)
     makeKey(bottomRow, "\xE2\x8C\xAB", 70, 3, function()
-        if not currentBox then return end
-        currentBox.Text = currentBox.Text:sub(1, -2)
-        pcall(function() currentBox:CaptureFocus() end)
+        kbBuffer = kbBuffer:sub(1, -2)
+        refreshPreview()
+        writeToBox()
     end)
     makeKey(bottomRow, "Enter", 90, 4, function()
-        if not currentBox then return end
-        pcall(function() currentBox:ReleaseFocus(true) end)
+        if currentBox then
+            pcall(function() currentBox.Text = kbBuffer end)
+            -- Try to "submit" — re-focusing then releasing with enterPressed=true
+            -- fires the TextBox's FocusLost(true) handler, which is what chat uses
+            -- to send a message.
+            pcall(function() currentBox:CaptureFocus() end)
+            pcall(function() currentBox:ReleaseFocus(true) end)
+        end
+        kbBuffer = ""
+        refreshPreview()
     end)
     makeKey(bottomRow, "X", 50, 5, function()
         kbPanel.Visible = false
-        currentBox = nil
+        kbBuffer = ""
+        refreshPreview()
     end)
 
-    -- Toggle button next to the cog. VR-only. Click to open/close keyboard;
-    -- when opening, picks up whatever TextBox currently has focus (if any) so
-    -- typing goes into that box.
+    -- Track the most recently focused TextBox so when the user opens our
+    -- keyboard, we can type into the box they were just typing in (even
+    -- though clicking our toggle button stole focus from it).
+    pcall(function()
+        UserInputService.TextBoxFocused:Connect(function(textBox)
+            if not textBox or textBox:IsDescendantOf(kbPanel) then return end
+            lastFocusedBox = textBox
+        end)
+    end)
+
+    -- Toggle button next to the cog. VR-only. Click to open/close keyboard.
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Name = "VRKeyboardToggle"
     toggleBtn.Size = UDim2.new(0, 32, 0, 26)
@@ -596,13 +644,17 @@ end)
     toggleBtn.MouseButton1Click:Connect(function()
         if kbPanel.Visible then
             kbPanel.Visible = false
-            currentBox = nil
+            kbBuffer = ""
+            refreshPreview()
         else
-            kbPanel.Visible = true
-            -- if a TextBox currently has focus, type into it; otherwise the user
-            -- needs to click the TextBox first
+            -- Pick up whatever TextBox the user was last typing in. Prefer the
+            -- currently-focused one, fall back to the last-focused one we tracked
+            -- (the toggle click itself usually stole focus from it).
             local focused = UserInputService:GetFocusedTextBox()
-            if focused then currentBox = focused end
+            currentBox = focused or lastFocusedBox
+            kbBuffer = (currentBox and currentBox.Text) or ""
+            refreshPreview()
+            kbPanel.Visible = true
         end
     end)
 
