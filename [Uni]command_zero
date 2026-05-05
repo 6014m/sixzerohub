@@ -2352,8 +2352,11 @@ end)
 -- VR Fly tool: equippable wand, hold trigger to fly in hand direction.
 -- Auto-equips on spawn so user immediately has it. When trigger is NOT held,
 -- physics is normal (walk/fall) — only flies while trigger is actively held.
-local VRFLY_MESH_ID = "rbxassetid://435840330"
-local VRFLY_TEXTURE_ID = "rbxassetid://435840335"
+-- Mesh + texture from Roblox's classic Witch Wand gear (asset 37347098, catalog
+-- repo: Roblox/Catalog/Items/Gear/37347098.rbxmx). Sized for a Roblox character's
+-- hand by default, so scale 1 looks right.
+local VRFLY_MESH_ID = "rbxassetid://36322720"
+local VRFLY_TEXTURE_ID = "rbxassetid://36325146"
 
 local vrFlyTool = nil
 local vrFlyBody = nil
@@ -2388,7 +2391,7 @@ local function vrFlySpawnTool()
 
     local handle = Instance.new("Part")
     handle.Name = "Handle"
-    handle.Size = Vector3.new(0.4, 0.4, 4)
+    handle.Size = Vector3.new(1, 1.2, 3)  -- matches the source gear's Handle
     handle.Massless = true
     handle.CanCollide = false
     handle.Transparency = 0
@@ -2398,7 +2401,6 @@ local function vrFlySpawnTool()
     mesh.MeshType = Enum.MeshType.FileMesh
     mesh.MeshId = VRFLY_MESH_ID
     mesh.TextureId = VRFLY_TEXTURE_ID
-    mesh.Scale = Vector3.new(0.01, 0.01, 0.01)
     mesh.Parent = handle
 
     table.insert(vrFlyConns, tool.Equipped:Connect(function(mouse)
