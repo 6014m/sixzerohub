@@ -2370,8 +2370,6 @@ local function vrFlyCleanup()
     table.clear(vrFlyConns)
     if vrFlyBody then pcall(function() vrFlyBody:Destroy() end); vrFlyBody = nil end
     if vrFlyTool then pcall(function() vrFlyTool:Destroy() end); vrFlyTool = nil end
-    local hum = myHumanoid()
-    if hum then hum.PlatformStand = false end
 end
 
 local function vrFlySpawnTool()
@@ -2419,8 +2417,6 @@ local function vrFlySpawnTool()
         vrFlyEquipped = false
         vrFlyTriggerHeld = false
         if vrFlyBody then pcall(function() vrFlyBody:Destroy() end); vrFlyBody = nil end
-        local hum = myHumanoid()
-        if hum then hum.PlatformStand = false end
     end))
 
     tool.Parent = backpack
@@ -2487,18 +2483,16 @@ addcmd("vrfly", {"vrf", "vrflight"}, "Spawn VR fly wand (auto-equips). Hold trig
             if not root or not hum then RunService.Heartbeat:Wait(); continue end
 
             if vrFlyEquipped then
-                -- equipped: always hovering. PlatformStand off-ground, BodyVelocity holds us.
+                -- equipped: BodyVelocity holds us against gravity. NO PlatformStand —
+                -- in VR that breaks head/body tracking and causes the camera to lurch.
                 if not vrFlyBody or not vrFlyBody.Parent then
                     vrFlyBody = Instance.new("BodyVelocity")
                     vrFlyBody.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                     vrFlyBody.P = 9000
                     vrFlyBody.Parent = root
                 end
-                hum.PlatformStand = true
 
                 if vrFlyTriggerHeld then
-                    -- Direction priority: visible wand handle, then VR right-hand controller,
-                    -- then camera. Falling back avoids "no movement" if the game strips Handle.
                     local dir
                     local handle = vrFlyTool and vrFlyTool:FindFirstChild("Handle")
                     if handle then
@@ -2511,15 +2505,11 @@ addcmd("vrfly", {"vrf", "vrflight"}, "Spawn VR fly wand (auto-equips). Hold trig
                         dir = workspace.CurrentCamera.CFrame.LookVector
                     end
                     vrFlyBody.Velocity = dir * flySpeed
-                    pcall(function() root.AssemblyLinearVelocity = dir * flySpeed end)
                 else
-                    -- equipped but not pulling trigger: hover in place
                     vrFlyBody.Velocity = Vector3.zero
                 end
             else
-                -- not equipped: normal physics — walk/fall as usual
                 if vrFlyBody then pcall(function() vrFlyBody:Destroy() end); vrFlyBody = nil end
-                hum.PlatformStand = false
             end
 
             RunService.Heartbeat:Wait()
