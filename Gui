@@ -569,30 +569,20 @@ end)
         currentBox = nil
     end)
 
-    -- Connect text-focus listeners. Roblox's own VR VirtualKeyboard.lua uses the
-    -- exact same UserInputService.TextBoxFocused signal, so the path is correct.
-    -- Also expose a manual toggle in case the user's TextBox doesn't fire the
-    -- event (custom input UIs do exist) and a diag notify when it DOES fire.
-    local function showKb(box)
-        hideToken = hideToken + 1
-        currentBox = box
-        kbPanel.Visible = true
-    end
-
-    local conn1 = UserInputService.TextBoxFocused:Connect(function(textBox)
+    -- Auto-show on TextBox focus. Same signal Roblox's own VR keyboard uses.
+    -- We don't auto-hide on TextBoxFocusReleased — that fires every time the
+    -- user clicks one of our keys (the TextBox loses focus to the button), and
+    -- TextBox:CaptureFocus() doesn't reliably re-fire TextBoxFocused, so the
+    -- hide timer never gets cancelled and the keyboard vanishes after one
+    -- character. Hide only via the X button instead.
+    UserInputService.TextBoxFocused:Connect(function(textBox)
         if not textBox or textBox:IsDescendantOf(kbPanel) then return end
-        if _G.SixZeroHubNotify then _G.SixZeroHubNotify("VR Keyboard", "TextBox focused — showing", "dismiss") end
-        showKb(textBox)
+        currentBox = textBox
+        kbPanel.Visible = true
     end)
-    local conn2 = UserInputService.TextBoxFocusReleased:Connect(function()
-        hideToken = hideToken + 1
-        local thisToken = hideToken
-        task.delay(0.25, function()
-            if thisToken == hideToken then
-                kbPanel.Visible = false
-                currentBox = nil
-            end
-        end)
+    UserInputService.TextBoxFocusReleased:Connect(function(textBox)
+        -- keep the panel visible; only update currentBox when a different box
+        -- gets focused (handled in the Focused listener above).
     end)
 
     -- Manual fallback: tiny toggle button next to the cog. Always shows in VR
