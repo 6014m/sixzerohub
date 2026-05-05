@@ -2400,6 +2400,7 @@ local function vrFlySpawnTool()
     mesh.MeshType = Enum.MeshType.FileMesh
     mesh.MeshId = VRFLY_MESH_ID
     mesh.TextureId = VRFLY_TEXTURE_ID
+    mesh.Scale = Vector3.new(0.3, 0.3, 0.3)
     mesh.Parent = handle
 
     table.insert(vrFlyConns, tool.Equipped:Connect(function(mouse)
@@ -2485,34 +2486,38 @@ addcmd("vrfly", {"vrf", "vrflight"}, "Spawn VR fly wand (auto-equips). Hold trig
             local hum = myHumanoid()
             if not root or not hum then RunService.Heartbeat:Wait(); continue end
 
-            local flying = vrFlyEquipped and vrFlyTriggerHeld
-
-            if flying then
+            if vrFlyEquipped then
+                -- equipped: always hovering. PlatformStand off-ground, BodyVelocity holds us.
                 if not vrFlyBody or not vrFlyBody.Parent then
                     vrFlyBody = Instance.new("BodyVelocity")
                     vrFlyBody.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                     vrFlyBody.P = 9000
                     vrFlyBody.Parent = root
                 end
-                -- Direction priority: visible wand handle, then VR right-hand controller,
-                -- then camera. Wand mesh is what the user sees; falling back avoids
-                -- "no movement" if the game strips the Handle.
-                local dir
-                local handle = vrFlyTool and vrFlyTool:FindFirstChild("Handle")
-                if handle then
-                    dir = handle.CFrame.LookVector
-                elseif UserInputService.VREnabled then
-                    local cam = workspace.CurrentCamera
-                    local handCF = cam.CFrame * VRService:GetUserCFrame(Enum.UserCFrame.RightHand)
-                    dir = handCF.LookVector
-                else
-                    dir = workspace.CurrentCamera.CFrame.LookVector
-                end
-                vrFlyBody.Velocity = dir * flySpeed
-                pcall(function() root.AssemblyLinearVelocity = dir * flySpeed end)
                 hum.PlatformStand = true
+
+                if vrFlyTriggerHeld then
+                    -- Direction priority: visible wand handle, then VR right-hand controller,
+                    -- then camera. Falling back avoids "no movement" if the game strips Handle.
+                    local dir
+                    local handle = vrFlyTool and vrFlyTool:FindFirstChild("Handle")
+                    if handle then
+                        dir = handle.CFrame.LookVector
+                    elseif UserInputService.VREnabled then
+                        local cam = workspace.CurrentCamera
+                        local handCF = cam.CFrame * VRService:GetUserCFrame(Enum.UserCFrame.RightHand)
+                        dir = handCF.LookVector
+                    else
+                        dir = workspace.CurrentCamera.CFrame.LookVector
+                    end
+                    vrFlyBody.Velocity = dir * flySpeed
+                    pcall(function() root.AssemblyLinearVelocity = dir * flySpeed end)
+                else
+                    -- equipped but not pulling trigger: hover in place
+                    vrFlyBody.Velocity = Vector3.zero
+                end
             else
-                -- not actively flying: normal physics — walk/fall as usual
+                -- not equipped: normal physics — walk/fall as usual
                 if vrFlyBody then pcall(function() vrFlyBody:Destroy() end); vrFlyBody = nil end
                 hum.PlatformStand = false
             end
