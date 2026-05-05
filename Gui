@@ -512,21 +512,40 @@ end)
     local kbBuffer = ""
     local capsOn = false
     local kbButtons = {}
+    local currentBox = nil       -- the TextBox we're typing into right now
+    local lastFocusedBox = nil   -- last TextBox the user focused (tracked even when keyboard closed)
 
     local function refreshPreview()
-        kbPreview.Text = kbBuffer == "" and "Type a chat message..." or kbBuffer
+        kbPreview.Text = kbBuffer == "" and "Type..." or kbBuffer
+    end
+
+    -- Write the buffer into the captured TextBox so it stays in sync visually.
+    -- Setting .Text works without focus; the user sees text accumulate in their
+    -- TextBox even though our keyboard click stole focus.
+    local function writeToBox()
+        if currentBox and currentBox.Parent then
+            pcall(function() currentBox.Text = kbBuffer end)
+        end
     end
 
     local function appendType(text)
         kbBuffer = kbBuffer .. text
         refreshPreview()
+        writeToBox()
     end
 
-    -- Send via chat directly. Bypasses TextBox focus entirely so the user's
-    -- chat doesn't have to stay open. Handles both new TextChatService and
-    -- legacy chat. Pattern from public exploit scripts.
-    local function sendChat(msg)
+    -- Fallbacks for when no TextBox was captured (or captured one is gone):
+    -- ;cmd routes to Command Zero via genv exposure; everything else goes
+    -- through TextChatService/legacy chat.
+    local function fallbackSubmit(msg)
         if msg == "" then return end
+        if msg:sub(1, 1) == ";" then
+            local cz = (getgenv and getgenv() or _G)["COMMAND_ZERO_INSTANCE"]
+            if cz and cz.execCmd then
+                pcall(cz.execCmd, msg:sub(2), player, true)
+                return
+            end
+        end
         pcall(function()
             local TCS = game:GetService("TextChatService")
             if TCS.ChatVersion == Enum.ChatVersion.TextChatService then
@@ -598,16 +617,42 @@ end)
     makeKey(bottomRow, "\xE2\x8C\xAB", 70, 3, function()
         kbBuffer = kbBuffer:sub(1, -2)
         refreshPreview()
+        writeToBox()
     end)
     makeKey(bottomRow, "Enter", 90, 4, function()
-        sendChat(kbBuffer)
+        local msg = kbBuffer
+        local submitted = false
+        if currentBox and currentBox.Parent then
+            -- Same path Roblox uses when you press Enter physically:
+            -- set Text, capture focus, release with enterPressed=true. The
+            -- TextBox's FocusLost(true) handler runs — that's what chats and
+            -- Command Zero's command bar both use to submit.
+            pcall(function() currentBox.Text = msg end)
+            pcall(function() currentBox:CaptureFocus() end)
+            pcall(function() currentBox:ReleaseFocus(true) end)
+            submitted = true
+        end
+        if not submitted then
+            fallbackSubmit(msg)
+        end
         kbBuffer = ""
         refreshPreview()
     end)
     makeKey(bottomRow, "X", 50, 5, function()
         kbPanel.Visible = false
         kbBuffer = ""
+        currentBox = nil
         refreshPreview()
+    end)
+
+    -- Background: track the most recently focused TextBox so we still know
+    -- which one the user was typing in even after our toggle button stole
+    -- focus from it.
+    pcall(function()
+        UserInputService.TextBoxFocused:Connect(function(textBox)
+            if not textBox or textBox:IsDescendantOf(kbPanel) then return end
+            lastFocusedBox = textBox
+        end)
     end)
 
     -- Toggle button next to the cog. VR-only. Click to open/close keyboard.
@@ -633,10 +678,24 @@ end)
         TweenService:Create(toggleBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
     end)
     toggleBtn.MouseButton1Click:Connect(function()
-        kbPanel.Visible = not kbPanel.Visible
-        if not kbPanel.Visible then
+        if kbPanel.Visible then
+            kbPanel.Visible = false
             kbBuffer = ""
+            currentBox = nil
             refreshPreview()
+        else
+            -- Capture whatever TextBox the user was last typing into. Prefer
+            -- one that's currently focused; fall back to lastFocusedBox (the
+            -- toggle click usually steals focus from it).
+            local focused = UserInputService:GetFocusedTextBox()
+            currentBox = (focused and not focused:IsDescendantOf(kbPanel)) and focused or lastFocusedBox
+            if currentBox and currentBox.Parent then
+                kbBuffer = currentBox.Text or ""
+            else
+                kbBuffer = ""
+            end
+            refreshPreview()
+            kbPanel.Visible = true
         end
     end)
 
