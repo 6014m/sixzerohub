@@ -509,26 +509,35 @@ end)
         [","]="<",["."]=">",["/"]="?",
     }
 
-    local currentBox = nil
-    local lastFocusedBox = nil
     local kbBuffer = ""
     local capsOn = false
     local kbButtons = {}
 
     local function refreshPreview()
-        kbPreview.Text = kbBuffer == "" and "Type..." or kbBuffer
-    end
-
-    local function writeToBox()
-        if currentBox then
-            pcall(function() currentBox.Text = kbBuffer end)
-        end
+        kbPreview.Text = kbBuffer == "" and "Type a chat message..." or kbBuffer
     end
 
     local function appendType(text)
         kbBuffer = kbBuffer .. text
         refreshPreview()
-        writeToBox()
+    end
+
+    -- Send via chat directly. Bypasses TextBox focus entirely so the user's
+    -- chat doesn't have to stay open. Handles both new TextChatService and
+    -- legacy chat. Pattern from public exploit scripts.
+    local function sendChat(msg)
+        if msg == "" then return end
+        pcall(function()
+            local TCS = game:GetService("TextChatService")
+            if TCS.ChatVersion == Enum.ChatVersion.TextChatService then
+                local ch = TCS:FindFirstChild("TextChannels")
+                local gen = ch and ch:FindFirstChild("RBXGeneral")
+                if gen then gen:SendAsync(msg); return end
+            end
+            local rep = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+            local say = rep and rep:FindFirstChild("SayMessageRequest")
+            if say then say:FireServer(msg, "All") end
+        end)
     end
 
     local function makeRow(layoutOrder)
@@ -589,17 +598,9 @@ end)
     makeKey(bottomRow, "\xE2\x8C\xAB", 70, 3, function()
         kbBuffer = kbBuffer:sub(1, -2)
         refreshPreview()
-        writeToBox()
     end)
     makeKey(bottomRow, "Enter", 90, 4, function()
-        if currentBox then
-            pcall(function() currentBox.Text = kbBuffer end)
-            -- Try to "submit" — re-focusing then releasing with enterPressed=true
-            -- fires the TextBox's FocusLost(true) handler, which is what chat uses
-            -- to send a message.
-            pcall(function() currentBox:CaptureFocus() end)
-            pcall(function() currentBox:ReleaseFocus(true) end)
-        end
+        sendChat(kbBuffer)
         kbBuffer = ""
         refreshPreview()
     end)
@@ -607,16 +608,6 @@ end)
         kbPanel.Visible = false
         kbBuffer = ""
         refreshPreview()
-    end)
-
-    -- Track the most recently focused TextBox so when the user opens our
-    -- keyboard, we can type into the box they were just typing in (even
-    -- though clicking our toggle button stole focus from it).
-    pcall(function()
-        UserInputService.TextBoxFocused:Connect(function(textBox)
-            if not textBox or textBox:IsDescendantOf(kbPanel) then return end
-            lastFocusedBox = textBox
-        end)
     end)
 
     -- Toggle button next to the cog. VR-only. Click to open/close keyboard.
@@ -642,19 +633,10 @@ end)
         TweenService:Create(toggleBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
     end)
     toggleBtn.MouseButton1Click:Connect(function()
-        if kbPanel.Visible then
-            kbPanel.Visible = false
+        kbPanel.Visible = not kbPanel.Visible
+        if not kbPanel.Visible then
             kbBuffer = ""
             refreshPreview()
-        else
-            -- Pick up whatever TextBox the user was last typing in. Prefer the
-            -- currently-focused one, fall back to the last-focused one we tracked
-            -- (the toggle click itself usually stole focus from it).
-            local focused = UserInputService:GetFocusedTextBox()
-            currentBox = focused or lastFocusedBox
-            kbBuffer = (currentBox and currentBox.Text) or ""
-            refreshPreview()
-            kbPanel.Visible = true
         end
     end)
 
