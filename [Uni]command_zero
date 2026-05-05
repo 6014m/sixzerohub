@@ -2398,7 +2398,7 @@ local function vrFlySpawnTool()
     mesh.MeshType = Enum.MeshType.FileMesh
     mesh.MeshId = VRFLY_MESH_ID
     mesh.TextureId = VRFLY_TEXTURE_ID
-    mesh.Scale = Vector3.new(0.3, 0.3, 0.3)
+    mesh.Scale = Vector3.new(0.05, 0.05, 0.05)
     mesh.Parent = handle
 
     table.insert(vrFlyConns, tool.Equipped:Connect(function(mouse)
