@@ -2349,7 +2349,9 @@ addcmd("unfly", {"nofly", "novfly", "unvehiclefly", "novehiclefly", "unvfly"}, "
     notify("Fly", "Disabled")
 end)
 
--- VR Fly tool: equippable wand, hold trigger to fly in hand direction
+-- VR Fly tool: equippable wand, hold trigger to fly in hand direction.
+-- Auto-equips on spawn so user immediately has it. When trigger is NOT held,
+-- physics is normal (walk/fall) — only flies while trigger is actively held.
 local VRFLY_MESH_ID = "rbxassetid://435840330"
 local VRFLY_TEXTURE_ID = "rbxassetid://435840335"
 
@@ -2357,14 +2359,12 @@ local vrFlyTool = nil
 local vrFlyBody = nil
 local vrFlyActive = false
 local vrFlyEquipped = false
-local vrFlyHandle = nil
 local vrFlyTriggerHeld = false
 local vrFlyConns = {}
 
 local function vrFlyCleanup()
     vrFlyActive = false
     vrFlyEquipped = false
-    vrFlyHandle = nil
     vrFlyTriggerHeld = false
     for _, c in ipairs(vrFlyConns) do pcall(function() c:Disconnect() end) end
     table.clear(vrFlyConns)
@@ -2381,15 +2381,19 @@ local function vrFlySpawnTool()
 
     local tool = Instance.new("Tool")
     tool.Name = "VR Fly"
-    tool.RequiresHandle = true
+    -- RequiresHandle=false matches public exploit fly tools (HideoYa, GenFlyTool):
+    -- the tool equips even if a game wipes the Handle, and we still create one
+    -- for the visual mesh.
+    tool.RequiresHandle = false
     tool.CanBeDropped = false
-    tool.ToolTip = "Hold trigger to fly in hand direction"
+    tool.ToolTip = "Hold trigger to fly"
 
     local handle = Instance.new("Part")
     handle.Name = "Handle"
-    handle.Size = Vector3.new(1, 1, 4)
+    handle.Size = Vector3.new(0.4, 0.4, 4)
     handle.Massless = true
     handle.CanCollide = false
+    handle.Transparency = 0
     handle.Parent = tool
 
     local mesh = Instance.new("SpecialMesh")
@@ -2398,12 +2402,21 @@ local function vrFlySpawnTool()
     mesh.TextureId = VRFLY_TEXTURE_ID
     mesh.Parent = handle
 
-    table.insert(vrFlyConns, tool.Equipped:Connect(function()
+    table.insert(vrFlyConns, tool.Equipped:Connect(function(mouse)
         vrFlyEquipped = true
-        vrFlyHandle = tool:FindFirstChild("Handle")
+        if mouse then
+            -- Mouse.Button1 maps to VR trigger when a Tool is equipped.
+            table.insert(vrFlyConns, mouse.Button1Down:Connect(function()
+                vrFlyTriggerHeld = true
+            end))
+            table.insert(vrFlyConns, mouse.Button1Up:Connect(function()
+                vrFlyTriggerHeld = false
+            end))
+        end
     end))
     table.insert(vrFlyConns, tool.Unequipped:Connect(function()
         vrFlyEquipped = false
+        vrFlyTriggerHeld = false
         if vrFlyBody then pcall(function() vrFlyBody:Destroy() end); vrFlyBody = nil end
         local hum = myHumanoid()
         if hum then hum.PlatformStand = false end
@@ -2411,10 +2424,20 @@ local function vrFlySpawnTool()
 
     tool.Parent = backpack
     vrFlyTool = tool
+
+    -- auto-equip after a short wait so the user immediately has the tool
+    task.spawn(function()
+        task.wait(0.3)
+        local hum = myHumanoid()
+        if hum and tool.Parent == backpack then
+            pcall(function() hum:EquipTool(tool) end)
+        end
+    end)
+
     return tool
 end
 
-addcmd("vrfly", {"vrf", "vrflight"}, "Spawn VR fly wand. Equip + hold L/R trigger to fly in hand direction.", function(args)
+addcmd("vrfly", {"vrf", "vrflight"}, "Spawn VR fly wand (auto-equips). Hold trigger to fly in hand direction.", function(args)
     flySpeed = parseNumber(args[1], flySpeed or 50)
     if vrFlyActive then
         vrFlyCleanup()
@@ -2423,9 +2446,17 @@ addcmd("vrfly", {"vrf", "vrflight"}, "Spawn VR fly wand. Equip + hold L/R trigge
     end
 
     vrFlyActive = true
+
+    -- ensure Backpack core GUI is on so the player can see/manage the tool
+    pcall(function()
+        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
+    end)
+
     vrFlySpawnTool()
 
+    -- Backup gamepad trigger detection (Mouse.Button1 hooks are primary, set on equip)
     table.insert(vrFlyConns, connect(UserInputService.InputBegan, function(input)
+        if not vrFlyEquipped then return end
         if input.KeyCode == Enum.KeyCode.ButtonR2 or input.KeyCode == Enum.KeyCode.ButtonL2 then
             vrFlyTriggerHeld = true
         end
@@ -2440,41 +2471,52 @@ addcmd("vrfly", {"vrf", "vrflight"}, "Spawn VR fly wand. Equip + hold L/R trigge
         task.wait(1)
         if not vrFlyActive then return end
         vrFlyEquipped = false
-        vrFlyHandle = nil
+        vrFlyTriggerHeld = false
         vrFlyTool = nil
         vrFlySpawnTool()
     end))
 
-    notify("VR Fly", "Tool added — equip + hold trigger (speed " .. flySpeed .. ")")
+    notify("VR Fly", "Wand auto-equipped — hold trigger to fly (speed " .. flySpeed .. ")")
 
     task.spawn(function()
+        local VRService = game:GetService("VRService")
         while vrFlyActive do
             local root = myRoot()
             local hum = myHumanoid()
             if not root or not hum then RunService.Heartbeat:Wait(); continue end
 
-            if not vrFlyEquipped or not vrFlyHandle or not vrFlyHandle.Parent then
+            local flying = vrFlyEquipped and vrFlyTriggerHeld
+
+            if flying then
+                if not vrFlyBody or not vrFlyBody.Parent then
+                    vrFlyBody = Instance.new("BodyVelocity")
+                    vrFlyBody.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    vrFlyBody.P = 9000
+                    vrFlyBody.Parent = root
+                end
+                -- Direction priority: visible wand handle, then VR right-hand controller,
+                -- then camera. Wand mesh is what the user sees; falling back avoids
+                -- "no movement" if the game strips the Handle.
+                local dir
+                local handle = vrFlyTool and vrFlyTool:FindFirstChild("Handle")
+                if handle then
+                    dir = handle.CFrame.LookVector
+                elseif UserInputService.VREnabled then
+                    local cam = workspace.CurrentCamera
+                    local handCF = cam.CFrame * VRService:GetUserCFrame(Enum.UserCFrame.RightHand)
+                    dir = handCF.LookVector
+                else
+                    dir = workspace.CurrentCamera.CFrame.LookVector
+                end
+                vrFlyBody.Velocity = dir * flySpeed
+                pcall(function() root.AssemblyLinearVelocity = dir * flySpeed end)
+                hum.PlatformStand = true
+            else
+                -- not actively flying: normal physics — walk/fall as usual
                 if vrFlyBody then pcall(function() vrFlyBody:Destroy() end); vrFlyBody = nil end
                 hum.PlatformStand = false
-                RunService.Heartbeat:Wait()
-                continue
             end
 
-            if not vrFlyBody or not vrFlyBody.Parent then
-                vrFlyBody = Instance.new("BodyVelocity")
-                vrFlyBody.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                vrFlyBody.Velocity = Vector3.zero
-                vrFlyBody.P = 9000
-                vrFlyBody.Parent = root
-            end
-
-            if vrFlyTriggerHeld then
-                vrFlyBody.Velocity = vrFlyHandle.CFrame.LookVector * flySpeed
-            else
-                vrFlyBody.Velocity = Vector3.zero
-            end
-
-            hum.PlatformStand = true
             RunService.Heartbeat:Wait()
         end
     end)
