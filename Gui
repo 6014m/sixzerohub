@@ -569,24 +569,9 @@ end)
         currentBox = nil
     end)
 
-    -- Auto-show on TextBox focus. Same signal Roblox's own VR keyboard uses.
-    -- We don't auto-hide on TextBoxFocusReleased — that fires every time the
-    -- user clicks one of our keys (the TextBox loses focus to the button), and
-    -- TextBox:CaptureFocus() doesn't reliably re-fire TextBoxFocused, so the
-    -- hide timer never gets cancelled and the keyboard vanishes after one
-    -- character. Hide only via the X button instead.
-    UserInputService.TextBoxFocused:Connect(function(textBox)
-        if not textBox or textBox:IsDescendantOf(kbPanel) then return end
-        currentBox = textBox
-        kbPanel.Visible = true
-    end)
-    UserInputService.TextBoxFocusReleased:Connect(function(textBox)
-        -- keep the panel visible; only update currentBox when a different box
-        -- gets focused (handled in the Focused listener above).
-    end)
-
-    -- Manual fallback: tiny toggle button next to the cog. Always shows in VR
-    -- so the user has a way in even if the auto-show signal isn't firing.
+    -- Toggle button next to the cog. VR-only. Click to open/close keyboard;
+    -- when opening, picks up whatever TextBox currently has focus (if any) so
+    -- typing goes into that box.
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Name = "VRKeyboardToggle"
     toggleBtn.Size = UDim2.new(0, 32, 0, 26)
