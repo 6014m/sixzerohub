@@ -452,19 +452,26 @@ settingsGearBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------- VR ON-SCREEN KEYBOARD ----------
--- Toggleable via a button next to the cog (VR-only). Clicking a key writes
--- directly to the captured TextBox's .Text property — no focus needed, so
--- the user's chat doesn't unselect/close from typing. A preview line at the
--- top of the panel shows the buffer so the user can see what they're typing
--- even after their game's chat closes its input box.
+-- Toggleable via a button next to the cog (VR-only). Types into whichever
+-- TextBox the user has (or had) focused — Command Zero's CmdBar, chat input,
+-- any TextBox in any game. No preview/proxy box; the text appears in the
+-- user's actual TextBox.
+--
+-- How it stays correct: a background TextBoxFocused listener tracks the last
+-- focused TextBox even after our toggle/key clicks steal focus. Each keystroke
+-- writes directly to that TextBox's .Text and re-CaptureFocus's it so the
+-- text shows up in their input. Enter triggers ReleaseFocus(enterPressed=true)
+-- — same path as physically pressing Enter, which is what CmdBar/chat use to
+-- submit.
+--
 -- Wrapped in IIFE (leading ; required after prior `end)`) so locals + bytecode
 -- live in a child function, not the main chunk.
 
 ;(function()
     local kbPanel = Instance.new("Frame")
     kbPanel.Name = "VRKeyboard"
-    kbPanel.Size = UDim2.new(0, 540, 0, 270)
-    kbPanel.Position = UDim2.new(0.5, -270, 1, -290)
+    kbPanel.Size = UDim2.new(0, 540, 0, 232)
+    kbPanel.Position = UDim2.new(0.5, -270, 1, -252)
     kbPanel.BackgroundColor3 = COLORS.darker
     kbPanel.BorderSizePixel = 0
     kbPanel.Visible = false
@@ -485,23 +492,6 @@ end)
 
     Instance.new("UIPadding", kbPanel).PaddingTop = UDim.new(0, 8)
 
-    -- Preview line at the top of the panel
-    local kbPreview = Instance.new("TextLabel")
-    kbPreview.Size = UDim2.new(0, 530, 0, 30)
-    kbPreview.BackgroundColor3 = COLORS.hover
-    kbPreview.BorderSizePixel = 0
-    kbPreview.TextColor3 = COLORS.text
-    kbPreview.Font = Enum.Font.Gotham
-    kbPreview.TextSize = 16
-    kbPreview.TextXAlignment = Enum.TextXAlignment.Left
-    kbPreview.Text = ""
-    kbPreview.LayoutOrder = 0
-    kbPreview.Parent = kbPanel
-    Instance.new("UICorner", kbPreview).CornerRadius = UDim.new(0, 4)
-    local kbPreviewPad = Instance.new("UIPadding", kbPreview)
-    kbPreviewPad.PaddingLeft = UDim.new(0, 8)
-    kbPreviewPad.PaddingRight = UDim.new(0, 8)
-
     local KB_ROWS = { "1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm,./" }
     local KB_SHIFTED = {
         ["1"]="!",["2"]="@",["3"]="#",["4"]="$",["5"]="%",
@@ -509,34 +499,31 @@ end)
         [","]="<",["."]=">",["/"]="?",
     }
 
-    local kbBuffer = ""
     local capsOn = false
     local kbButtons = {}
-    local currentBox = nil       -- the TextBox we're typing into right now
-    local lastFocusedBox = nil   -- last TextBox the user focused (tracked even when keyboard closed)
+    local lastFocusedBox = nil  -- tracked in background even when our keyboard is closed
 
-    local function refreshPreview()
-        kbPreview.Text = kbBuffer == "" and "Type..." or kbBuffer
-    end
-
-    -- Write the buffer into the captured TextBox so it stays in sync visually.
-    -- Setting .Text works without focus; the user sees text accumulate in their
-    -- TextBox even though our keyboard click stole focus.
-    local function writeToBox()
-        if currentBox and currentBox.Parent then
-            pcall(function() currentBox.Text = kbBuffer end)
-        end
+    -- Pick whichever TextBox the user is/was typing into. Prefer a currently
+    -- focused one (covers the rare case where focus survived our click);
+    -- otherwise fall back to the most recently tracked one.
+    local function targetBox()
+        local focused = UserInputService:GetFocusedTextBox()
+        if focused and not focused:IsDescendantOf(kbPanel) then return focused end
+        if lastFocusedBox and lastFocusedBox.Parent then return lastFocusedBox end
+        return nil
     end
 
     local function appendType(text)
-        kbBuffer = kbBuffer .. text
-        refreshPreview()
-        writeToBox()
+        local box = targetBox()
+        if box then
+            pcall(function() box.Text = (box.Text or "") .. text end)
+            -- re-grab focus so the cursor stays in their TextBox and our next
+            -- targetBox() call still finds it via GetFocusedTextBox().
+            pcall(function() box:CaptureFocus() end)
+        end
     end
 
-    -- Fallbacks for when no TextBox was captured (or captured one is gone):
-    -- ;cmd routes to Command Zero via genv exposure; everything else goes
-    -- through TextChatService/legacy chat.
+    -- Fallback for Enter when no TextBox is around: ;cmd -> CZ, else chat.
     local function fallbackSubmit(msg)
         if msg == "" then return end
         if msg:sub(1, 1) == ";" then
@@ -615,34 +602,25 @@ end)
     end)
     makeKey(bottomRow, "Space", 200, 2, function() appendType(" ") end)
     makeKey(bottomRow, "\xE2\x8C\xAB", 70, 3, function()
-        kbBuffer = kbBuffer:sub(1, -2)
-        refreshPreview()
-        writeToBox()
+        local box = targetBox()
+        if box then
+            pcall(function() box.Text = (box.Text or ""):sub(1, -2) end)
+            pcall(function() box:CaptureFocus() end)
+        end
     end)
     makeKey(bottomRow, "Enter", 90, 4, function()
-        local msg = kbBuffer
-        local submitted = false
-        if currentBox and currentBox.Parent then
-            -- Same path Roblox uses when you press Enter physically:
-            -- set Text, capture focus, release with enterPressed=true. The
-            -- TextBox's FocusLost(true) handler runs — that's what chats and
-            -- Command Zero's command bar both use to submit.
-            pcall(function() currentBox.Text = msg end)
-            pcall(function() currentBox:CaptureFocus() end)
-            pcall(function() currentBox:ReleaseFocus(true) end)
-            submitted = true
+        local box = targetBox()
+        if box then
+            -- canonical submit: capture focus then release with enterPressed=true.
+            -- Fires TextBox.FocusLost(true) — what CmdBar / chat use to submit.
+            pcall(function() box:CaptureFocus() end)
+            pcall(function() box:ReleaseFocus(true) end)
+        else
+            fallbackSubmit("")
         end
-        if not submitted then
-            fallbackSubmit(msg)
-        end
-        kbBuffer = ""
-        refreshPreview()
     end)
     makeKey(bottomRow, "X", 50, 5, function()
         kbPanel.Visible = false
-        kbBuffer = ""
-        currentBox = nil
-        refreshPreview()
     end)
 
     -- Background: track the most recently focused TextBox so we still know
@@ -678,25 +656,7 @@ end)
         TweenService:Create(toggleBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
     end)
     toggleBtn.MouseButton1Click:Connect(function()
-        if kbPanel.Visible then
-            kbPanel.Visible = false
-            kbBuffer = ""
-            currentBox = nil
-            refreshPreview()
-        else
-            -- Capture whatever TextBox the user was last typing into. Prefer
-            -- one that's currently focused; fall back to lastFocusedBox (the
-            -- toggle click usually steals focus from it).
-            local focused = UserInputService:GetFocusedTextBox()
-            currentBox = (focused and not focused:IsDescendantOf(kbPanel)) and focused or lastFocusedBox
-            if currentBox and currentBox.Parent then
-                kbBuffer = currentBox.Text or ""
-            else
-                kbBuffer = ""
-            end
-            refreshPreview()
-            kbPanel.Visible = true
-        end
+        kbPanel.Visible = not kbPanel.Visible
     end)
 
     local function refreshVR()
