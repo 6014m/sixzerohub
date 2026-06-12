@@ -627,7 +627,7 @@ end)
     -- which one the user was typing in even after our toggle button stole
     -- focus from it.
     pcall(function()
-        UserInputService.TextBoxFocused:Connect(function(textBox)
+        hubConnections[#hubConnections + 1] = UserInputService.TextBoxFocused:Connect(function(textBox)
             if not textBox or textBox:IsDescendantOf(kbPanel) then return end
             lastFocusedBox = textBox
         end)
@@ -664,7 +664,7 @@ end)
     end
     pcall(refreshVR)
     pcall(function()
-        UserInputService:GetPropertyChangedSignal("VREnabled"):Connect(refreshVR)
+        hubConnections[#hubConnections + 1] = UserInputService:GetPropertyChangedSignal("VREnabled"):Connect(refreshVR)
     end)
 end)()
 
@@ -837,7 +837,7 @@ local function buildSettingsPanel()
             isDragging = false
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
+    hubConnections[#hubConnections + 1] = UserInputService.InputChanged:Connect(function(input)
         if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             settingsPanel.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
@@ -964,12 +964,12 @@ showSettingsPanel = function(fileKey)
                     dragging = true
                 end
             end)
-            UserInputService.InputEnded:Connect(function(input)
+            hubConnections[#hubConnections + 1] = UserInputService.InputEnded:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     dragging = false
                 end
             end)
-            UserInputService.InputChanged:Connect(function(input)
+            hubConnections[#hubConnections + 1] = UserInputService.InputChanged:Connect(function(input)
                 if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
                     local relX = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
                     local raw = min + (max - min) * relX
@@ -1085,7 +1085,7 @@ local function makeDraggable(header, frame)
             isDragging = false
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
+    hubConnections[#hubConnections + 1] = UserInputService.InputChanged:Connect(function(input)
         if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             frame.Position = UDim2.new(
@@ -3430,7 +3430,8 @@ task.defer(function()
     findAndWatchLockOnGuis()
 end)
 
-playerGui.ChildAdded:Connect(function(child)
+hubConnections[#hubConnections + 1] = playerGui.ChildAdded:Connect(function(child)
+    if not genv[SCRIPT_KEY] then return end   -- hub unloaded: stop offsetting new GUIs
     if child:IsA("ScreenGui") and child ~= screenGui and child ~= toggleGui and guiVisible then
         task.wait(0.1)
         -- chat GUIs get moved via moveChat, all others get offset
@@ -3782,7 +3783,7 @@ end)
 
 ---------- TELEPORT RE-QUEUE ----------
 
-player.OnTeleport:Connect(function(state)
+hubConnections[#hubConnections + 1] = player.OnTeleport:Connect(function(state)
     if state == Enum.TeleportState.Started and queueteleport then
         pcall(function()
             queueteleport([[
@@ -3795,3 +3796,123 @@ player.OnTeleport:Connect(function(state)
         end)
     end
 end)
+
+---------- UNLOAD / DELETE HUB ----------
+
+-- Wrapped in an IIFE so every local below (unloadHub, the button, its tooltip, the
+-- confirm latch) lives in THIS function's scope, not the main chunk. This file
+-- already sits at Luau's ~200-local-per-function ceiling, so adding main-chunk
+-- locals here would push it over and break the whole hub. The entry point is
+-- published via _G.SixZeroHubUnload instead.
+;(function()
+
+-- Full "un-execute": restore the game's own GUIs we shifted, deactivate every
+-- launched sub-script, disconnect our global-service listeners, destroy all three
+-- ScreenGuis (which also ends the update-checker / new-script loops, since they
+-- spin on `screenGui.Parent`), and clear our globals + the teleport latch. Leaves
+-- the game as if the hub never ran. Re-run the loadstring to bring it back.
+--
+-- Caveat: a teleport payload already handed to the executor's queue_on_teleport
+-- can't be un-queued, so a teleport right after unloading may still reload a fresh
+-- hub. Disconnecting OnTeleport (tracked above) stops it re-queuing for the future.
+local function unloadHub()
+    if not genv[SCRIPT_KEY] then return end   -- already unloaded (table is cleared below)
+
+    -- 1. put the game's own GUIs back where they were
+    pcall(function() moveChat(false) end)
+    pcall(function() shiftGameGuis(false) end)
+    pcall(function() unshiftAllLockOnChildren() end)
+
+    -- 2. deactivate everything the hub launched (runs each script's cleanup)
+    for fileKey, data in pairs(activeScripts) do
+        if data and data.cleanup then pcall(data.cleanup) end
+        activeScripts[fileKey] = nil
+        loadedScripts[fileKey] = nil
+    end
+
+    -- 3. disconnect global-service listeners (GUI-parented ones die with Destroy)
+    for _, conn in ipairs(hubConnections) do pcall(function() conn:Disconnect() end) end
+
+    -- 4. destroy all three ScreenGuis (also stops the while-Parent background loops)
+    pcall(function() screenGui:Destroy() end)
+    pcall(function() toggleGui:Destroy() end)
+    pcall(function() notifGui:Destroy() end)
+
+    -- 5. clear globals + teleport latch so nothing references / resurrects the hub
+    _G.SixZeroHubRegister = nil
+    _G.SixZeroHubRegisterSettings = nil
+    _G.SixZeroHubSettings = nil
+    _G.SixZeroHubVisible = nil
+    _G.SixZeroHubNotify = nil
+    _G.SixZeroHubUnload = nil
+    genv[SCRIPT_KEY] = nil
+    genv.SIXZEROHUB_TP_QUEUED = nil
+
+    -- native Roblox toast survives our just-destroyed GUI -- the one signal left
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Six Zero Hub", Text = "Unloaded.", Duration = 3,
+        })
+    end)
+end
+_G.SixZeroHubUnload = unloadHub
+
+-- delete button: top bar, just left of the settings gear. Confirms via the hub's
+-- own yes/no notification card, then unloads.
+local deleteBtn = Instance.new("TextButton")
+deleteBtn.Name = "DeleteHub"
+deleteBtn.Size = UDim2.new(0, 32, 0, 26)
+deleteBtn.Position = UDim2.new(1, -150, 0, 5)
+deleteBtn.BackgroundColor3 = COLORS.hover
+deleteBtn.BackgroundTransparency = 0.5
+deleteBtn.BorderSizePixel = 0
+deleteBtn.AutoButtonColor = false
+deleteBtn.Font = Enum.Font.GothamBold
+deleteBtn.TextSize = 14
+deleteBtn.Text = "\xF0\x9F\x97\x91"
+deleteBtn.TextColor3 = COLORS.text
+deleteBtn.Parent = toggleGui
+Instance.new("UICorner", deleteBtn).CornerRadius = UDim.new(0, 6)
+
+local deleteTooltip = Instance.new("TextLabel")
+deleteTooltip.Size = UDim2.new(0, 70, 0, 22)
+deleteTooltip.Position = UDim2.new(0.5, -35, 1, 4)
+deleteTooltip.AnchorPoint = Vector2.new(0, 0)
+deleteTooltip.BackgroundColor3 = COLORS.darker
+deleteTooltip.BorderSizePixel = 0
+deleteTooltip.Text = "Unload"
+deleteTooltip.TextColor3 = COLORS.text
+deleteTooltip.TextSize = 12
+deleteTooltip.Font = Enum.Font.GothamBold
+deleteTooltip.Visible = false
+deleteTooltip.Parent = deleteBtn
+Instance.new("UICorner", deleteTooltip).CornerRadius = UDim.new(0, 4)
+
+deleteBtn.MouseEnter:Connect(function()
+    deleteTooltip.Visible = true
+    TweenService:Create(deleteBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.2, BackgroundColor3 = Color3.fromRGB(237, 66, 69)}):Play()
+end)
+deleteBtn.MouseLeave:Connect(function()
+    deleteTooltip.Visible = false
+    TweenService:Create(deleteBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.5, BackgroundColor3 = COLORS.hover}):Play()
+end)
+
+local deleteBusy = false
+deleteBtn.MouseButton1Click:Connect(function()
+    if deleteBusy then return end
+    deleteBusy = true
+    task.spawn(function()
+        local answer = showNotification(
+            "Unload Six Zero Hub?",
+            "This removes the hub entirely (un-execute). Re-run the loadstring to bring it back.",
+            "yesno"
+        )
+        if answer == "yes" then
+            unloadHub()
+        else
+            deleteBusy = false
+        end
+    end)
+end)
+
+end)()
