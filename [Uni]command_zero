@@ -4888,7 +4888,11 @@ connect(UserInputService.InputBegan, function(input, gpe)
     if input.KeyCode == Enum.KeyCode.B then
         if emoteWheelOpen then
             destroyEmoteWheel()
-        else
+        elseif findFakeRig() then
+            -- Only open via B when actually reanimated. Pressing B during normal
+            -- play must NOT fire the "need to be reanimated first" toast -- B is a
+            -- common gameplay key, so this was spamming the toast constantly. The
+            -- toast feedback is kept for the explicit ;emotewheel command path.
             createEmoteWheel()
         end
     end
