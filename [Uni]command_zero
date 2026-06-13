@@ -88,6 +88,7 @@ local function saveSettings()
                 aliases = customAliases,
                 binds = binds,
                 events = eventCommands,
+                guiKey = (genv.czGuiKey and genv.czGuiKey.Name) or "RightControl",
             }))
         end
     end)
@@ -102,11 +103,17 @@ local function loadSettings()
             if data.aliases then customAliases = data.aliases end
             if data.binds then binds = data.binds end
             if data.events then eventCommands = data.events end
+            if data.guiKey then pcall(function() genv.czGuiKey = Enum.KeyCode[data.guiKey] end) end
         end
     end)
 end
 
 loadSettings()
+
+-- GUI show/hide toggle key (rebindable in the Settings tab). Kept on the shared
+-- genv table, NOT a new main-chunk local: this script sits near Luau's ~200-
+-- locals-per-function ceiling and a new top-level local can break compilation.
+genv.czGuiKey = genv.czGuiKey or Enum.KeyCode.RightControl
 
 --================================================================
 -- CHAT & MESSAGING
@@ -1081,7 +1088,7 @@ local suppressText = ""
 
 connect(UserInputService.InputBegan, function(input, gpe)
     if gpe then return end
-    if input.KeyCode == Enum.KeyCode.RightControl then
+    if input.KeyCode == (genv.czGuiKey or Enum.KeyCode.RightControl) then
         guiOpen = not guiOpen
         main.Visible = guiOpen
     elseif input.KeyCode == Enum.KeyCode.Semicolon and prefix == ";" then
@@ -1914,7 +1921,8 @@ do
         local infoLbl = Instance.new("TextLabel")
         infoLbl.Size = UDim2.new(1, -8, 0, 50)
         infoLbl.BackgroundTransparency = 1
-        infoLbl.Text = "Command Zero v1.0\n" .. #cmds .. " commands loaded\nToggle: Right Ctrl | Chat: " .. prefix .. "command"
+        infoLbl.Text = "Command Zero v1.0\n" .. #cmds .. " commands loaded\nToggle: " .. (tostring(genv.czGuiKey or Enum.KeyCode.RightControl):gsub("Enum.KeyCode.", "")) .. " | Chat: " .. prefix .. "command"
+        infoLbl.LayoutOrder = 10
         infoLbl.TextColor3 = THEME.muted
         infoLbl.TextSize = 11
         infoLbl.Font = Enum.Font.Gotham
@@ -1923,6 +1931,68 @@ do
         infoLbl.Parent = page
     end
 end
+
+--================================================================
+-- GUI TOGGLE KEY CHANGER (Settings tab). IIFE so its locals live in their own
+-- function register budget, not the near-full main chunk.
+--================================================================
+;(function()
+    local page = tabPages and tabPages["Settings"]
+    if not page then return end
+
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -4, 0, 30)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder = 1
+    row.Parent = page
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.5, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = "  GUI Toggle Key"
+    label.TextColor3 = THEME.text
+    label.TextSize = 13
+    label.Font = Enum.Font.Gotham
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = row
+
+    local keyBtn = Instance.new("TextButton")
+    keyBtn.Size = UDim2.new(0, 120, 0, 24)
+    keyBtn.Position = UDim2.new(1, -128, 0, 3)
+    keyBtn.BackgroundColor3 = THEME.input
+    keyBtn.BorderSizePixel = 0
+    keyBtn.TextColor3 = THEME.text
+    keyBtn.TextSize = 12
+    keyBtn.Font = Enum.Font.GothamBold
+    keyBtn.AutoButtonColor = true
+    keyBtn.Parent = row
+    Instance.new("UICorner", keyBtn).CornerRadius = UDim.new(0, 4)
+
+    local function curName()
+        return (tostring(genv.czGuiKey or Enum.KeyCode.RightControl):gsub("Enum.KeyCode.", ""))
+    end
+    keyBtn.Text = curName()
+
+    local listening = false
+    keyBtn.MouseButton1Click:Connect(function()
+        listening = not listening
+        keyBtn.Text = listening and "Press a key... (Esc cancels)" or curName()
+    end)
+
+    connect(UserInputService.InputBegan, function(input, gpe)
+        if not listening then return end
+        if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+        local kc = input.KeyCode
+        if kc == Enum.KeyCode.Unknown then return end
+        listening = false
+        if kc ~= Enum.KeyCode.Escape then        -- Escape cancels, keeps current key
+            genv.czGuiKey = kc
+            saveSettings()
+            pcall(notify, "Command Zero", "GUI toggle key -> " .. curName())
+        end
+        keyBtn.Text = curName()
+    end)
+end)()
 
 --================================================================
 -- POPULATE SERVER TAB
