@@ -1,0 +1,241 @@
+-- [Spec] Evil Plate Game - Potato Pass (Hot Potato Auto-Return)
+-- Evil Plate's hot-potato round hands you a Tool named "HotPotatoBomb"; the
+-- holder when the timer hits 0 dies. On receiving the bomb this auto-passes it
+-- back to whoever gave it to you: an explicit giver reference on the bomb if
+-- one exists, else the nearest player at the instant of receipt (= whoever just
+-- touched you to pass it). It equips the bomb and, after a short delay (clears
+-- receive-immunity), fakes the Handle's .Touched back at the giver via
+-- firetouchinterest -- the same touch-faking trick handle-kill uses.
+--
+-- If the bomb does NOT leave you after "returned ...", the game passes via a
+-- RemoteEvent instead of a physical touch. The one-time dump printed on each
+-- receive reports whether the Handle has a TouchInterest (firetouchinterest
+-- viable) vs none (pass is likely a RemoteEvent) so you can tell which it is.
+-- Detection is name-scoped to "HotPotatoBomb", so it stays idle in Evil Plate's
+-- other modes (the Tool only exists during the hot-potato round).
+
+local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LP         = Players.LocalPlayer
+
+local connections = {}
+local active      = true
+
+local CFG = {
+    toolName    = "hotpotatobomb",  -- lowercased substring of the Tool name to match
+    returnDelay = 0.7,              -- s before passing back (immunity buffer + not-instant)
+}
+local pending = nil   -- { tool=, giver=, at= }
+
+local function track(c) connections[#connections + 1] = c; return c end
+
+-- ---- helpers ----
+
+local function rootOf(char)
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+        or char:FindFirstChild("Torso")
+        or char:FindFirstChild("UpperTorso")
+        or char:FindFirstChildWhichIsA("BasePart")
+end
+local function myRoot() return rootOf(LP.Character) end
+
+local function getHandle(tool)
+    local h = tool:FindFirstChild("Handle")
+    if h and h:IsA("BasePart") then return h end
+    for _, d in ipairs(tool:GetDescendants()) do
+        if d:IsA("BasePart") then return d end
+    end
+    return nil
+end
+
+local function nameMatches(name)
+    return type(name) == "string" and name:lower():find(CFG.toolName, 1, true) ~= nil
+end
+
+-- nearest living other players (closest = most likely just touched us to pass it)
+local function rankByDistance()
+    local mr, list = myRoot(), {}
+    if not mr then return list end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character then
+            local r   = rootOf(p.Character)
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if r and (not hum or hum.Health > 0) then
+                list[#list + 1] = { player = p, dist = (r.Position - mr.Position).Magnitude }
+            end
+        end
+    end
+    table.sort(list, function(a, b) return a.dist < b.dist end)
+    return list
+end
+
+-- explicit giver reference stored on the bomb (attribute or value object), if any
+local GIVER_KEYS = { "last", "prev", "from", "giver", "owner", "holder", "thrower", "sender" }
+local function keyHit(s)
+    s = s:lower()
+    for _, w in ipairs(GIVER_KEYS) do if s:find(w, 1, true) then return true end end
+    return false
+end
+local function giverFromTool(tool)
+    local ok, attrs = pcall(function() return tool:GetAttributes() end)
+    if ok and attrs then
+        for k, v in pairs(attrs) do
+            if keyHit(tostring(k)) then
+                if type(v) == "string" then local p = Players:FindFirstChild(v); if p then return p end
+                elseif type(v) == "number" then local p = Players:GetPlayerByUserId(v); if p then return p end end
+            end
+        end
+    end
+    for _, d in ipairs(tool:GetDescendants()) do
+        if keyHit(d.Name) then
+            if d:IsA("ObjectValue") and d.Value then
+                local pl = (d.Value:IsA("Player") and d.Value) or Players:GetPlayerFromCharacter(d.Value)
+                if pl then return pl end
+            elseif d:IsA("StringValue") then
+                local p = Players:FindFirstChild(d.Value); if p then return p end
+            elseif d:IsA("IntValue") or d:IsA("NumberValue") then
+                local p = Players:GetPlayerByUserId(d.Value); if p then return p end
+            end
+        end
+    end
+    return nil
+end
+
+-- one-time structure dump per receive -- console only, live-verify aid
+local function dumpTool(tool)
+    print("[EvilPlate Potato] ===== HotPotatoBomb dump =====")
+    print(("[EvilPlate Potato] Name=%s Class=%s Path=%s"):format(tool.Name, tool.ClassName, tool:GetFullName()))
+    local h = getHandle(tool)
+    if h then
+        local ti = h:FindFirstChild("TouchInterest")
+        print(("[EvilPlate Potato] Handle=%s TouchInterest=%s"):format(
+            h.Name, ti and "YES (firetouchinterest viable)" or "none (pass may be a RemoteEvent)"))
+    else
+        print("[EvilPlate Potato] NO Handle/BasePart (RequiresHandle=false? pass likely a RemoteEvent)")
+    end
+end
+
+local function equip(tool)
+    local char = LP.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if hum and tool.Parent ~= char then pcall(function() hum:EquipTool(tool) end) end
+end
+
+-- fake Touched: try handle->giver and ourRoot->giver (no-op where no TouchInterest)
+local function attemptReturn(tool, giver)
+    if type(firetouchinterest) ~= "function" then
+        warn("[EvilPlate Potato] firetouchinterest unavailable in this executor"); return false
+    end
+    local theirRoot = rootOf(giver.Character)
+    if not theirRoot then return false end
+    local sources, fired = {}, false
+    local h = getHandle(tool); if h then sources[#sources + 1] = h end
+    local mr = myRoot();        if mr then sources[#sources + 1] = mr end
+    for _, s in ipairs(sources) do
+        pcall(function()
+            firetouchinterest(s, theirRoot, 0)  -- begin
+            firetouchinterest(s, theirRoot, 1)  -- end
+            fired = true
+        end)
+    end
+    return fired
+end
+
+-- the instant a HotPotatoBomb appears on us
+local function onReceive(tool)
+    if not active then return end
+    if pending and pending.tool == tool then return end
+    dumpTool(tool)
+
+    local giver = giverFromTool(tool)
+    local ranking = rankByDistance()
+    if not giver and ranking[1] then giver = ranking[1].player end
+
+    -- mark pending BEFORE equipping: equip reparents the Tool (Backpack->Character),
+    -- which fires Character.ChildAdded and re-enters onReceive; the pending guard at
+    -- the top dedupes that re-entry so we don't process the same bomb twice.
+    pending = { tool = tool, giver = giver, at = os.clock() }
+    equip(tool)  -- Handle must be in workspace for the Touched to register
+    print("[EvilPlate Potato] received -> returning to " .. (giver and giver.Name or "?"))
+end
+
+local function scan(c)
+    if not c then return end
+    for _, d in ipairs(c:GetChildren()) do
+        if d:IsA("Tool") and nameMatches(d.Name) then onReceive(d) end
+    end
+end
+
+local function bindContainer(c)
+    if not c then return end
+    track(c.ChildAdded:Connect(function(d)
+        if d:IsA("Tool") and nameMatches(d.Name) then onReceive(d) end
+    end))
+end
+
+local function bindCharacter(char)
+    if not char then return end
+    bindContainer(char)
+    task.defer(scan, char)
+end
+
+-- drain pending returns from Heartbeat -- NEVER task.wait inside the receive
+-- signal callback on Wave (the coroutine may not resume); queue + drain here.
+local function onHeartbeat()
+    if not active or not pending then return end
+    if (os.clock() - pending.at) < CFG.returnDelay then return end
+    local job = pending; pending = nil
+
+    local char = LP.Character
+    local bp   = LP:FindFirstChildOfClass("Backpack")
+    local have = job.tool and (job.tool.Parent == char or job.tool.Parent == bp)
+    if not have then print("[EvilPlate Potato] no longer holding bomb (already passed?)"); return end
+    if not (job.giver and job.giver.Character) then print("[EvilPlate Potato] giver gone, cannot return"); return end
+
+    if attemptReturn(job.tool, job.giver) then
+        print("[EvilPlate Potato] returned to " .. job.giver.Name .. " (if it didn't move, pass = RemoteEvent)")
+    else
+        warn("[EvilPlate Potato] return failed")
+    end
+end
+
+-- ---- wiring (backpack + character, rebound on respawn / backpack rebuild) ----
+bindContainer(LP:FindFirstChildOfClass("Backpack"))
+track(LP.ChildAdded:Connect(function(c) if c:IsA("Backpack") then bindContainer(c) end end))
+bindCharacter(LP.Character)
+track(LP.CharacterAdded:Connect(bindCharacter))
+track(RunService.Heartbeat:Connect(onHeartbeat))
+
+---------- SIXZEROHUB REGISTRATION ----------
+
+local function cleanup()
+    active  = false
+    pending = nil
+    for _, c in ipairs(connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    connections = {}
+end
+
+if _G.SixZeroHubRegister then
+    _G.SixZeroHubRegister("Potato Pass", "[Spec]evil_plate_potato", cleanup, "spec")
+end
+
+if _G.SixZeroHubRegisterSettings then
+    task.delay(1, function()
+        _G.SixZeroHubRegisterSettings("[Spec]evil_plate_potato", {
+            _title = "Potato Pass",
+            {
+                name = "returnDelay",
+                label = "Return Delay (s)",
+                type = "slider",
+                default = 0.7,
+                min = 0,
+                max = 2,
+                step = 0.05,
+                onChange = function(val) CFG.returnDelay = val end,
+            },
+        })
+    end)
+end
