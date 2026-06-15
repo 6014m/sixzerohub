@@ -89,6 +89,7 @@ local function saveSettings()
                 binds = binds,
                 events = eventCommands,
                 guiKey = (genv.czGuiKey and genv.czGuiKey.Name) or "RightControl",
+                iconPos = genv.czIconPos,
             }))
         end
     end)
@@ -104,6 +105,7 @@ local function loadSettings()
             if data.binds then binds = data.binds end
             if data.events then eventCommands = data.events end
             if data.guiKey then pcall(function() genv.czGuiKey = Enum.KeyCode[data.guiKey] end) end
+            if data.iconPos then genv.czIconPos = data.iconPos end
         end
     end)
 end
@@ -1077,10 +1079,44 @@ toggleStroke.Color = THEME.accent
 toggleStroke.Thickness = 1.5
 toggleStroke.Transparency = 0.3
 
-toggleBtn.MouseButton1Click:Connect(function()
-    guiOpen = not guiOpen
-    main.Visible = guiOpen
-end)
+-- Click the CZ icon to toggle the GUI; DRAG it to reposition (saved per game). IIFE
+-- so its drag locals don't add to the near-full main-chunk register budget.
+;(function()
+    if genv.czIconPos then
+        local p = genv.czIconPos
+        pcall(function() toggleBtn.Position = UDim2.new(p[1], p[2], p[3], p[4]) end)
+    end
+    local dragging, moved, startPos, dragStart = false, false, nil, nil
+    connect(toggleBtn.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; moved = false; dragStart = input.Position; startPos = toggleBtn.Position
+        end
+    end)
+    connect(UserInputService.InputChanged, function(input)
+        if not dragging then return end
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            local d = input.Position - dragStart
+            if not moved and (d.X * d.X + d.Y * d.Y) > 36 then moved = true end
+            if moved then
+                toggleBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end
+    end)
+    connect(UserInputService.InputEnded, function(input)
+        if not dragging then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            if not moved then
+                guiOpen = not guiOpen
+                main.Visible = guiOpen
+            else
+                local p = toggleBtn.Position
+                genv.czIconPos = { p.X.Scale, p.X.Offset, p.Y.Scale, p.Y.Offset }
+                saveSettings()
+            end
+        end
+    end)
+end)()
 
 -- Keybind to toggle GUI (Right Ctrl) or focus command bar (prefix key)
 local suppressNextChar = false
@@ -1092,16 +1128,61 @@ connect(UserInputService.InputBegan, function(input, gpe)
         guiOpen = not guiOpen
         main.Visible = guiOpen
     elseif input.KeyCode == Enum.KeyCode.Semicolon and prefix == ";" then
-        -- pressing ; opens GUI and focuses command bar
-        if not cmdBar:IsFocused() then
-            guiOpen = true
-            main.Visible = true
-            suppressText = cmdBar.Text
-            suppressNextChar = true
-            cmdBar:CaptureFocus()
-        end
+        -- pressing the command key opens JUST a command line, not the whole GUI
+        if genv.czShowCmdLine then genv.czShowCmdLine() end
     end
 end)
+
+-- Standalone command line: the command key (prefix) opens JUST this input, not the
+-- whole GUI. Runs via execCmd then hides. IIFE to keep its locals off the main chunk.
+;(function()
+    local frame = Instance.new("Frame")
+    frame.Name = "CZCommandLine"
+    frame.AnchorPoint = Vector2.new(0.5, 1)
+    frame.Position = UDim2.new(0.5, 0, 1, -60)
+    frame.Size = UDim2.new(0, 460, 0, 34)
+    frame.BackgroundColor3 = THEME.input
+    frame.BorderSizePixel = 0
+    frame.Visible = false
+    frame.Parent = gui
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Color = THEME.accent; stroke.Thickness = 1.5; stroke.Transparency = 0.4
+
+    local mark = Instance.new("TextLabel")
+    mark.Size = UDim2.new(0, 18, 1, 0); mark.Position = UDim2.new(0, 10, 0, 0)
+    mark.BackgroundTransparency = 1; mark.Text = ">"
+    mark.TextColor3 = THEME.accent; mark.TextSize = 16; mark.Font = Enum.Font.GothamBold
+    mark.Parent = frame
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, -38, 1, 0); box.Position = UDim2.new(0, 30, 0, 0)
+    box.BackgroundTransparency = 1; box.Text = ""
+    box.PlaceholderText = "Type a command..."; box.PlaceholderColor3 = THEME.muted
+    box.TextColor3 = THEME.text; box.TextSize = 14; box.Font = Enum.Font.Gotham
+    box.TextXAlignment = Enum.TextXAlignment.Left; box.ClearTextOnFocus = false
+    box.Parent = frame
+
+    local stripNext = false
+    box:GetPropertyChangedSignal("Text"):Connect(function()
+        if stripNext then
+            stripNext = false
+            if box.Text == prefix or box.Text == ";" then box.Text = "" end   -- drop the prefix char
+        end
+    end)
+    box.FocusLost:Connect(function(enterPressed)
+        if enterPressed and box.Text ~= "" then execCmd(box.Text, player, true) end
+        box.Text = ""
+        frame.Visible = false
+    end)
+
+    genv.czShowCmdLine = function()
+        frame.Visible = true
+        stripNext = true
+        box.Text = ""
+        box:CaptureFocus()
+    end
+end)()
 
 -- suppress the semicolon character that gets typed when focusing
 local suppressConn = cmdBar:GetPropertyChangedSignal("Text"):Connect(function()
@@ -1921,7 +2002,7 @@ do
         local infoLbl = Instance.new("TextLabel")
         infoLbl.Size = UDim2.new(1, -8, 0, 50)
         infoLbl.BackgroundTransparency = 1
-        infoLbl.Text = "Command Zero v1.0\n" .. #cmds .. " commands loaded\nToggle: " .. (tostring(genv.czGuiKey or Enum.KeyCode.RightControl):gsub("Enum.KeyCode.", "")) .. " | Chat: " .. prefix .. "command"
+        infoLbl.Text = "Command Zero v1.0\n" .. #cmds .. " commands loaded\nToggle: " .. ((genv.czGuiKey == Enum.KeyCode.Unknown) and "None" or (tostring(genv.czGuiKey or Enum.KeyCode.RightControl):gsub("Enum.KeyCode.", ""))) .. " | Chat: " .. prefix .. "command"
         infoLbl.LayoutOrder = 10
         infoLbl.TextColor3 = THEME.muted
         infoLbl.TextSize = 11
@@ -1969,14 +2050,16 @@ end
     Instance.new("UICorner", keyBtn).CornerRadius = UDim.new(0, 4)
 
     local function curName()
-        return (tostring(genv.czGuiKey or Enum.KeyCode.RightControl):gsub("Enum.KeyCode.", ""))
+        local k = genv.czGuiKey or Enum.KeyCode.RightControl
+        if k == Enum.KeyCode.Unknown then return "None" end   -- unbound
+        return (tostring(k):gsub("Enum.KeyCode.", ""))
     end
     keyBtn.Text = curName()
 
     local listening = false
     keyBtn.MouseButton1Click:Connect(function()
         listening = not listening
-        keyBtn.Text = listening and "Press a key... (Esc cancels)" or curName()
+        keyBtn.Text = listening and "Press a key... (Backspace = unbind, Esc cancels)" or curName()
     end)
 
     connect(UserInputService.InputBegan, function(input, gpe)
@@ -1985,7 +2068,11 @@ end
         local kc = input.KeyCode
         if kc == Enum.KeyCode.Unknown then return end
         listening = false
-        if kc ~= Enum.KeyCode.Escape then        -- Escape cancels, keeps current key
+        if kc == Enum.KeyCode.Backspace or kc == Enum.KeyCode.Delete then
+            genv.czGuiKey = Enum.KeyCode.Unknown      -- unbind: no key opens the GUI (use the icon)
+            saveSettings()
+            pcall(notify, "Command Zero", "GUI toggle key unbound -- use the CZ icon")
+        elseif kc ~= Enum.KeyCode.Escape then         -- Escape cancels, keeps current key
             genv.czGuiKey = kc
             saveSettings()
             pcall(notify, "Command Zero", "GUI toggle key -> " .. curName())
