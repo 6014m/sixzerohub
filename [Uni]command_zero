@@ -8559,6 +8559,49 @@ addcmd("voicevolume", {"vcvol", "vcvolume", "voicevol"}, "Set a player's voice c
     end
 end)
 
+addcmd("vcrange", {"voicerange", "hearrange", "vchear"}, "Set how far away (studs) you can hear players' voice chat. Usage: vcrange [studs] (e.g. vcrange 50). vcrange off resets.", function(args)
+    -- Roblox proximity voice audibility is the emitter's distance-attenuation curve
+    -- (distance studs -> gain 0..1). We stretch it so everyone stays at full gain out to
+    -- your chosen range, then cuts to silent just past it. Applied to every AudioEmitter
+    -- now, plus a persistent hook so players who join/respawn get the same range.
+    local arg = tostring(args[1] or ""):lower()
+    local function curveFor(r)
+        return { [0] = 1, [r] = 1, [r + math.max(r * 0.02, 0.5)] = 0 }
+    end
+    if arg == "off" or arg == "reset" or arg == "default" then
+        genv.czVcRange = nil
+        pcall(function()
+            for _, v in ipairs(game:GetDescendants()) do
+                if v:IsA("AudioEmitter") then v:SetDistanceAttenuation({ [0] = 1, [10] = 1, [80] = 0 }) end
+            end
+        end)
+        notify("VCRange", "Voice range reset to default")
+        return
+    end
+    local r = tonumber(arg)
+    if not r then notify("VCRange", "Usage: vcrange [studs]  e.g. vcrange 50"); return end
+    r = math.clamp(r, 1, 1000000)
+    genv.czVcRange = r
+    local count = 0
+    for _, v in ipairs(game:GetDescendants()) do
+        if v:IsA("AudioEmitter") then
+            pcall(function() v:SetDistanceAttenuation(curveFor(r)) end)
+            count = count + 1
+        end
+    end
+    -- one persistent connection keeps future emitters (respawns / joiners) in range
+    if not genv.czVcRangeConn then
+        genv.czVcRangeConn = connect(workspace.DescendantAdded, function(d)
+            if genv.czVcRange and d:IsA("AudioEmitter") then
+                task.defer(function()
+                    pcall(function() d:SetDistanceAttenuation({ [0] = 1, [genv.czVcRange] = 1, [genv.czVcRange + math.max(genv.czVcRange * 0.02, 0.5)] = 0 }) end)
+                end)
+            end
+        end)
+    end
+    notify("VCRange", ("Hearing range set to %d studs (%d voices)"):format(r, count))
+end)
+
 addcmd("lay", {"laydown"}, "Lay down animation", function(args)
     sendChat("/e lay")
     local hum = myHumanoid()
