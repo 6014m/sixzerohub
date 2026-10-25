@@ -5332,18 +5332,40 @@ end)
 -- COMMANDS: EXTRA MOVEMENT (CmdX)
 --================================================================
 
-addcmd("bunnyhop", {"bhop"}, "Auto jump while walking", function(args)
-    startLoop("bhop", 0, function()
-        local hum = myHumanoid()
-        if hum and hum.MoveDirection.Magnitude > 0 then
-            hum.Jump = true
+addcmd("bunnyhop", {"bhop"}, "CS-style bhop: hold Space to chain hops, strafe in the air to build speed (bhop [maxspeed] [accel])", function(args)
+    if genv.czBhopConn then genv.czBhopConn:Disconnect() end
+    local maxSpeed = tonumber(args[1]) or 60
+    local accel = tonumber(args[2]) or 45
+    local lastAir = nil -- horizontal velocity from the last airborne frame, restored on landing so friction never eats it
+    genv.czBhopConn = connect(RunService.Heartbeat, function(dt)
+        local hum, root = myHumanoid(), myRoot()
+        if not hum or not root or hum.Health <= 0 then return end
+        local v = root.AssemblyLinearVelocity
+        local h = Vector3.new(v.X, 0, v.Z)
+        if hum.FloorMaterial == Enum.Material.Air then
+            local wish = hum.MoveDirection
+            if wish.Magnitude > 0 then
+                h = h + wish * accel * dt
+                local base = math.max(hum.WalkSpeed, 1)
+                local cap = math.max(maxSpeed, base)
+                if h.Magnitude > cap then h = h.Unit * cap end
+                root.AssemblyLinearVelocity = Vector3.new(h.X, v.Y, h.Z)
+            end
+            lastAir = h
+        elseif UserInputService:IsKeyDown(Enum.KeyCode.Space) and not UserInputService:GetFocusedTextBox() then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            if lastAir and lastAir.Magnitude > hum.WalkSpeed then
+                root.AssemblyLinearVelocity = Vector3.new(lastAir.X, hum.JumpPower, lastAir.Z)
+            end
+        else
+            lastAir = nil
         end
     end)
-    notify("BunnyHop", "Enabled")
+    notify("BunnyHop", "Hold Space + strafe. Cap " .. maxSpeed .. ", accel " .. accel)
 end)
 
 addcmd("unbunnyhop", {"unbhop"}, "Disable bunny hop", function(args)
-    stopLoop("bhop")
+    if genv.czBhopConn then genv.czBhopConn:Disconnect(); genv.czBhopConn = nil end
     notify("BunnyHop", "Disabled")
 end)
 
