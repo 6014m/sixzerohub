@@ -5331,40 +5331,36 @@ end)
 -- COMMANDS: EXTRA MOVEMENT (CmdX)
 --================================================================
 
-addcmd("bunnyhop", {"bhop"}, "CS-style bhop: hold Space to chain hops, strafe in the air to build speed (bhop [maxspeed] [accel])", function(args)
+addcmd("bunnyhop", {"bhop"}, "CS-style bhop: hold Space to chain hops, keep moving in the air to build speed (bhop [maxspeed] [accel])", function(args)
     if genv.czBhopConn then genv.czBhopConn:Disconnect() end
     local maxSpeed = tonumber(args[1]) or 60
-    local accel = tonumber(args[2]) or 45
-    local lastAir = nil -- horizontal velocity from the last airborne frame, restored on landing so friction never eats it
+    local accel = tonumber(args[2]) or 30
+    -- The Humanoid re-clamps air velocity to WalkSpeed every physics step, so momentum has to live in WalkSpeed itself.
+    local base, spd, lastSet, groundedAt = nil, nil, nil, 0
     genv.czBhopConn = connect(RunService.Heartbeat, function(dt)
         local hum, root = myHumanoid(), myRoot()
-        if not hum or not root or hum.Health <= 0 then return end
-        local v = root.AssemblyLinearVelocity
-        local h = Vector3.new(v.X, 0, v.Z)
-        if hum.FloorMaterial == Enum.Material.Air then
-            local wish = hum.MoveDirection
-            if wish.Magnitude > 0 then
-                h = h + wish * accel * dt
-                local base = math.max(hum.WalkSpeed, 1)
-                local cap = math.max(maxSpeed, base)
-                if h.Magnitude > cap then h = h.Unit * cap end
-                root.AssemblyLinearVelocity = Vector3.new(h.X, v.Y, h.Z)
-            end
-            lastAir = h
-        elseif UserInputService:IsKeyDown(Enum.KeyCode.Space) and not UserInputService:GetFocusedTextBox() then
-            hum:ChangeState(Enum.HumanoidStateType.Jumping)
-            if lastAir and lastAir.Magnitude > hum.WalkSpeed then
-                root.AssemblyLinearVelocity = Vector3.new(lastAir.X, hum.JumpPower, lastAir.Z)
-            end
+        if not hum or not root or hum.Health <= 0 then spd = nil; return end
+        if hum.WalkSpeed ~= lastSet then base = hum.WalkSpeed end -- the game changed it (sprint etc): adopt as the new base
+        spd = spd or base
+        local air = hum.FloorMaterial == Enum.Material.Air
+        local hopping = UserInputService:IsKeyDown(Enum.KeyCode.Space) and not UserInputService:GetFocusedTextBox()
+        if air then
+            if hum.MoveDirection.Magnitude > 0 then spd = math.min(spd + accel * dt, math.max(maxSpeed, base)) end
+            groundedAt = 0
         else
-            lastAir = nil
+            groundedAt += dt
+            if hopping then hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            elseif groundedAt > 0.15 then spd = base end -- stood still on the ground: momentum gone
         end
+        lastSet = spd
+        hum.WalkSpeed = spd
     end)
-    notify("BunnyHop", "Hold Space + strafe. Cap " .. maxSpeed .. ", accel " .. accel)
+    notify("BunnyHop", "Hold Space + move. Cap " .. maxSpeed .. ", accel " .. accel)
 end)
 
 addcmd("unbunnyhop", {"unbhop"}, "Disable bunny hop", function(args)
     if genv.czBhopConn then genv.czBhopConn:Disconnect(); genv.czBhopConn = nil end
+    local hum = myHumanoid(); if hum then hum.WalkSpeed = 16 end
     notify("BunnyHop", "Disabled")
 end)
 
