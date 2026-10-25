@@ -1587,7 +1587,7 @@ do
                 Instance.new("UICorner", del).CornerRadius = UDim.new(0, 4)
                 del.MouseButton1Click:Connect(function()
                     for i = #binds, 1, -1 do
-                        if binds[i] == b then toggleOn[b] = nil; table.remove(binds, i) end
+                        if binds[i] == b then table.remove(binds, i) end
                     end
                     refreshBindsTab()
                     saveSettings()
@@ -1620,7 +1620,6 @@ do
 
         clearBtn.MouseButton1Click:Connect(function()
             for i = #binds, 1, -1 do table.remove(binds, i) end
-            for k in pairs(toggleOn) do toggleOn[k] = nil end
             refreshBindsTab()
             saveSettings()
             notify("Keybinds", "All keybinds cleared")
