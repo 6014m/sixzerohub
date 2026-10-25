@@ -5569,6 +5569,20 @@ addcmd("hideiy", {"hidegui"}, "Hide the Command Zero GUI completely", function(a
     notify("GUI", "Hidden — use prefix command 'showgui' to restore")
 end)
 
+addcmd("unload", {"unexecute", "unexec", "killcz"}, "Unload Command Zero completely", function(args)
+    notify("Command Zero", "Unloaded")
+    task.delay(1, function()
+        local inst = genv["COMMAND_ZERO_INSTANCE"]
+        if inst then
+            for _, c in ipairs(inst.Connections or {}) do pcall(function() c:Disconnect() end) end
+            for k in pairs(inst.Loops or {}) do inst.Loops[k] = nil end
+            pcall(function() inst.Gui:Destroy() end)
+        end
+        pcall(function() notifGui:Destroy() end)
+        genv["COMMAND_ZERO_INSTANCE"] = nil
+    end)
+end)
+
 addcmd("showgui", {"unhidegui", "showiy"}, "Show the Command Zero GUI", function(args)
     pcall(function()
         local inst = genv["COMMAND_ZERO_INSTANCE"]
