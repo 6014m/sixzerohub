@@ -3380,6 +3380,88 @@ addcmd("force", {"push", "impulse"}, "Shove yourself: force <up|down|left|right|
     root.AssemblyLinearVelocity = root.AssemblyLinearVelocity + v * strength
 end)
 
+addcmd("blink", {}, "Blink: press the key, a ghost takes your controls for N seconds, then your body teleports to it. blink [key=R] [seconds=2] [speedmult=1.6]", function(args)
+    if genv.czBlink then genv.czBlink.stop() end
+    local keyName = args[1] or "R"
+    local key = Enum.KeyCode[keyName] or Enum.KeyCode[keyName:upper()] or Enum.KeyCode.R
+    local duration = tonumber(args[2]) or 2
+    local speedMult = tonumber(args[3]) or 1.6
+    local st = { conns = {}, busy = false }
+    genv.czBlink = st
+    function st.stop()
+        for _, c in ipairs(st.conns) do c:Disconnect() end
+        if st.ghost then st.ghost:Destroy() end
+        genv.czBlink = nil
+    end
+    local controls = require(player.PlayerScripts:WaitForChild("PlayerModule")):GetControls()
+    local function blink()
+        local char = player.Character
+        local hum, root = myHumanoid(), myRoot()
+        if not (hum and root) or hum.Health <= 0 or st.busy then return end
+        st.busy = true
+        char.Archivable = true
+        local ghost = char:Clone()
+        ghost.Name = "CZBlinkGhost"
+        for _, d in ipairs(ghost:GetDescendants()) do
+            if d:IsA("BaseScript") or d:IsA("Sound") or d:IsA("ForceField") then d:Destroy()
+            elseif d:IsA("BasePart") then if d.Transparency < 1 then d.Transparency = 0.6 end; d.CastShadow = false
+            elseif d:IsA("Decal") then d.Transparency = 0.6
+            elseif d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled = false end
+        end
+        ghost.Parent = workspace
+        st.ghost = ghost
+        local gHum, gRoot = ghost:FindFirstChildOfClass("Humanoid"), ghost:FindFirstChild("HumanoidRootPart")
+        gHum.WalkSpeed = math.max(hum.WalkSpeed, 16) * speedMult
+        gHum.JumpPower, gHum.UseJumpPower, gHum.JumpHeight = hum.JumpPower, hum.UseJumpPower, hum.JumpHeight
+        -- the clone's Animate script doesn't run outside the character: play idle/walk ourselves
+        local anims, current = {}, nil
+        local animate = char:FindFirstChild("Animate")
+        for _, name in ipairs({ "idle", "walk" }) do
+            local a = animate and animate:FindFirstChild(name) and animate[name]:FindFirstChildOfClass("Animation")
+            if a then anims[name] = gHum:LoadAnimation(a) end
+        end
+        -- freeze the real body and let the ghost walk through it
+        root.Anchored = true
+        for _, p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end
+        local cam = workspace.CurrentCamera
+        cam.CameraSubject = gHum
+        local drive = connect(RunService.RenderStepped, function()
+            if not ghost.Parent then return end
+            gHum:Move(controls:GetMoveVector(), true)
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) and not UserInputService:GetFocusedTextBox() then gHum.Jump = true end
+            local want = anims[(gHum.MoveDirection.Magnitude > 0 and gHum.FloorMaterial ~= Enum.Material.Air) and "walk" or "idle"]
+            if want ~= current then if current then current:Stop(0.15) end; current = want; if current then current:Play(0.15) end end
+        end)
+        task.wait(duration)
+        drive:Disconnect()
+        if char.Parent and root.Parent and genv.czBlink == st then
+            root.Anchored = false
+            root.CFrame = gRoot.CFrame
+            root.AssemblyLinearVelocity = gRoot.AssemblyLinearVelocity
+            for _, p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then p.CanCollide = true end end
+            cam.CameraSubject = hum
+        end
+        ghost:Destroy(); st.ghost = nil
+        task.wait(0.5)
+        st.busy = false
+    end
+    st.blink = blink
+    table.insert(st.conns, connect(UserInputService.InputBegan, function(input, gpe)
+        if not gpe and input.KeyCode == key then task.spawn(blink) end
+    end))
+    table.insert(st.conns, connect(player.CharacterAdded, function()
+        if st.ghost then st.ghost:Destroy(); st.ghost = nil end
+        st.busy = false
+    end))
+    notify("Blink", keyName:upper() .. " -> ghost for " .. duration .. "s")
+end)
+
+addcmd("unblink", {"noblink"}, "Disable blink", function(args)
+    if genv.czBlink then genv.czBlink.stop() end
+    local root = myRoot(); if root then root.Anchored = false end
+    notify("Blink", "Disabled")
+end)
+
 addcmd("fling", {"fl"}, "Fling a player (IY method — spin into them to launch)", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
