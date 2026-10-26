@@ -3365,6 +3365,21 @@ addcmd("unspin", {}, "Stop spinning", function(args)
     notify("Spin", "Stopped")
 end)
 
+addcmd("force", {"push", "impulse"}, "Shove yourself: force <up|down|left|right|forward|back> [strength] (camera-relative, default 50)", function(args)
+    local root = myRoot()
+    if not root then return end
+    local dir = (args[1] or ""):lower()
+    local strength = tonumber(args[2]) or 50
+    local cam = workspace.CurrentCamera.CFrame
+    local flat = Vector3.new(cam.LookVector.X, 0, cam.LookVector.Z)
+    local fwd = flat.Magnitude > 0 and flat.Unit or Vector3.zAxis * -1
+    local right = Vector3.new(cam.RightVector.X, 0, cam.RightVector.Z).Unit
+    local dirs = { up = Vector3.yAxis, down = -Vector3.yAxis, left = -right, right = right, forward = fwd, fwd = fwd, front = fwd, back = -fwd, backward = -fwd }
+    local v = dirs[dir]
+    if not v then notify("Force", "Usage: force <up|down|left|right|forward|back> [strength]"); return end
+    root.AssemblyLinearVelocity = root.AssemblyLinearVelocity + v * strength
+end)
+
 addcmd("fling", {"fl"}, "Fling a player (IY method — spin into them to launch)", function(args)
     local targets = getPlayers(args[1])
     if #targets == 0 then return end
