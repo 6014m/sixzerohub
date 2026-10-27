@@ -271,7 +271,7 @@ local function getPlayers(list, speaker)
         elseif token == "random" then
             local plrs = Players:GetPlayers()
             if #plrs > 0 then table.insert(results, plrs[math.random(#plrs)]) end
-        elseif token == "nearest" or token == "closest" then
+        elseif token == "nearest" or token == "closest" or token == "near" then
             local myRoot = speaker.Character and speaker.Character:FindFirstChild("HumanoidRootPart")
             if myRoot then
                 local best, bestDist = nil, math.huge
@@ -2855,13 +2855,17 @@ end)
 -- COMMANDS: VISUAL / ESP
 --================================================================
 
-addcmd("esp", {"playeresp"}, "Toggle player ESP boxes", function(args)
+addcmd("esp", {"playeresp"}, "ESP on players: esp <name|all|others|near>", function(args)
     if #espObjects > 0 then
         clearESP()
         notify("ESP", "Disabled")
         stopLoop("esp")
         return
     end
+    if not args[1] or args[1] == "" then notify("ESP", "Usage: esp <name|all|others|near>"); return end
+    local wanted = {}
+    for _, t in ipairs(getPlayers(args[1])) do wanted[t] = true end
+    local sel = args[1]:lower()
 
     local function createESP(p)
         if p == player then return end
@@ -2908,8 +2912,8 @@ addcmd("esp", {"playeresp"}, "Toggle player ESP boxes", function(args)
         table.insert(allConnections, conn)
     end
 
-    for _, p in ipairs(Players:GetPlayers()) do createESP(p) end
-    connect(Players.PlayerAdded, createESP)
+    for p in pairs(wanted) do createESP(p) end
+    if sel == "all" or sel == "others" then connect(Players.PlayerAdded, createESP) end
 
     startLoop("esp", 0.5, function()
         for _, p in ipairs(Players:GetPlayers()) do
@@ -5643,9 +5647,10 @@ addcmd("untpwalk", {}, "Disable TP walk", function(args)
     stopLoop("tpwalkspeed")
 end)
 
-addcmd("chams", {"highlight"}, "Highlight all players through walls", function(args)
+addcmd("chams", {"highlight"}, "Highlight players through walls: chams <name|all|others|near>", function(args)
+    if not args[1] or args[1] == "" then notify("Chams", "Usage: chams <name|all|others|near>"); return end
     if #espObjects > 0 then clearESP() end
-    for _, p in ipairs(Players:GetPlayers()) do
+    for _, p in ipairs(getPlayers(args[1])) do
         if p == player then continue end
         if p.Character then
             local h = Instance.new("Highlight")
@@ -9164,7 +9169,7 @@ addcmd("toggleesp", {}, "Toggle ESP", function(args)
     if #espObjects > 0 then
         execCmd("unesp")
     else
-        execCmd("esp")
+        execCmd("esp others")
     end
 end)
 
